@@ -1,0 +1,4111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>JSM HQ</title>
+    <style>
+      /* ------------------------------------------------------------------
+     Design tokens
+  ------------------------------------------------------------------ */
+      :root {
+        --bg: #070b1a;
+        --panel: rgba(10, 16, 36, 0.74);
+        --panel-solid: #0a1024;
+        --border: rgba(125, 211, 252, 0.14);
+        --border-strong: rgba(125, 211, 252, 0.28);
+        --text: #e2e8f0;
+        --muted: #8796b5;
+        --dim: #56627e;
+        --cyan: #22d3ee;
+        --red: #f43f5e;
+        --amber: #fbbf24;
+        --green: #34d399;
+        --gray: #64748b;
+        --violet: #a78bfa;
+        --sans:
+          "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+          sans-serif;
+        --mono:
+          ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+        --radius: 14px;
+        --gutter: 16px;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+        -webkit-font-smoothing: antialiased;
+      }
+      canvas#scene {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        outline: none;
+        touch-action: none;
+      }
+      button {
+        font: inherit;
+        color: inherit;
+      }
+
+      .glass {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        backdrop-filter: blur(14px) saturate(140%);
+        -webkit-backdrop-filter: blur(14px) saturate(140%);
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+      }
+
+      /* ------------------------------------------------------------------
+     Top bar
+  ------------------------------------------------------------------ */
+      #topbar {
+        position: fixed;
+        top: 12px;
+        left: var(--gutter);
+        right: var(--gutter);
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 0 14px;
+        z-index: 10;
+        pointer-events: none;
+      }
+      #topbar .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+        min-width: 0;
+      }
+      #topbar .brand .logo {
+        width: 26px;
+        height: 26px;
+        flex: none;
+      }
+      #topbar .brand .sep {
+        color: var(--dim);
+        font-weight: 400;
+      }
+      #topbar .brand .project {
+        color: var(--muted);
+        font-weight: 500;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #topbar .brand .project b {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .sandbox-pill {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: rgba(52, 211, 153, 0.08);
+        border: 1px solid rgba(52, 211, 153, 0.25);
+        font-size: 13px;
+        color: #bbf7d0;
+        white-space: nowrap;
+      }
+      .sandbox-pill svg {
+        width: 16px;
+        height: 16px;
+      }
+      .live-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--green);
+        box-shadow: 0 0 8px var(--green);
+        animation: pulse 1.6s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        50% {
+          opacity: 0.35;
+        }
+      }
+
+      /* ------------------------------------------------------------------
+     Team cards
+  ------------------------------------------------------------------ */
+      #team {
+        position: fixed;
+        top: 72px;
+        left: var(--gutter);
+        width: 272px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        z-index: 10;
+      }
+      .agent-card {
+        padding: 12px 14px;
+        cursor: pointer;
+        transition:
+          border-color 0.2s,
+          transform 0.2s;
+        text-align: left;
+        width: 100%;
+      }
+      .agent-card:hover {
+        border-color: var(--border-strong);
+        transform: translateX(2px);
+      }
+      .agent-card.focused {
+        border-color: var(--state-color, var(--cyan));
+      }
+      .ac-top {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 10px;
+        flex: none;
+        display: grid;
+        place-items: center;
+        font-weight: 700;
+        font-size: 14px;
+        color: #0b1020;
+        background: var(--c);
+        box-shadow:
+          0 0 0 2px rgba(255, 255, 255, 0.06),
+          0 0 14px color-mix(in srgb, var(--c) 45%, transparent);
+      }
+      .ac-name {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.2;
+        min-width: 0;
+        flex: 1;
+      }
+      .ac-name b {
+        font-size: 14px;
+      }
+      .ac-name span {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .badge {
+        font-size: 11px;
+        font-weight: 600;
+        padding: 3px 8px;
+        border-radius: 999px;
+        white-space: nowrap;
+        color: var(--state-color);
+        background: color-mix(in srgb, var(--state-color) 13%, transparent);
+        border: 1px solid
+          color-mix(in srgb, var(--state-color) 35%, transparent);
+      }
+      .badge[data-state="input"] {
+        animation: pulse 0.8s ease-in-out infinite;
+      }
+      .ac-task {
+        margin-top: 9px;
+        font-size: 12.5px;
+        color: var(--text);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .ac-task .tid {
+        font-family: var(--mono);
+        color: var(--muted);
+        font-size: 11.5px;
+        margin-right: 4px;
+      }
+      .ac-task.none {
+        color: var(--dim);
+      }
+      .ac-meta {
+        margin-top: 8px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        color: var(--dim);
+        font-family: var(--mono);
+      }
+      .ac-bar {
+        flex: 1;
+        height: 3px;
+        border-radius: 3px;
+        background: rgba(148, 163, 184, 0.12);
+        overflow: hidden;
+      }
+      .ac-bar i {
+        display: block;
+        height: 100%;
+        width: 40%;
+        border-radius: 3px;
+        background: var(--state-color);
+        opacity: 0.85;
+      }
+      .agent-card[data-state="working"] .ac-bar i {
+        animation: slide 1.4s ease-in-out infinite;
+      }
+      @keyframes slide {
+        from {
+          transform: translateX(-100%);
+        }
+        to {
+          transform: translateX(250%);
+        }
+      }
+
+      /* ------------------------------------------------------------------
+     Activity feed
+  ------------------------------------------------------------------ */
+      #feed {
+        position: fixed;
+        left: var(--gutter);
+        bottom: var(--gutter);
+        width: 360px;
+        padding: 12px 14px 8px;
+        z-index: 10;
+        pointer-events: none;
+      }
+      .panel-title {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--muted);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      #feed ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      #feed li {
+        display: flex;
+        gap: 10px;
+        align-items: baseline;
+        font-size: 12.5px;
+        padding: 4px 0;
+        border-top: 1px solid rgba(148, 163, 184, 0.06);
+        animation: feedIn 0.45s ease-out;
+      }
+      #feed li:first-child {
+        border-top: 0;
+      }
+      #feed li time {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--dim);
+        flex: none;
+      }
+      #feed li span {
+        color: #c7d2e6;
+      }
+      #feed li > span::before {
+        content: "";
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--c);
+        margin-right: 7px;
+        vertical-align: 1px;
+        box-shadow: 0 0 6px var(--c);
+      }
+      #feed b {
+        color: var(--text);
+        font-weight: 600;
+      }
+      #feed .pr {
+        font-family: var(--mono);
+        color: var(--violet);
+      }
+      @keyframes feedIn {
+        from {
+          opacity: 0;
+          transform: translateY(-6px);
+          background: rgba(34, 211, 238, 0.08);
+        }
+      }
+
+      #hint {
+        position: fixed;
+        right: var(--gutter);
+        bottom: var(--gutter);
+        font-size: 12px;
+        color: var(--muted);
+        padding: 8px 12px;
+        z-index: 5;
+        pointer-events: none;
+      }
+      #hint kbd {
+        font-family: var(--mono);
+        font-size: 11px;
+        padding: 1px 5px;
+        border: 1px solid var(--border-strong);
+        border-radius: 4px;
+        color: var(--text);
+      }
+
+      #tooltip {
+        position: fixed;
+        z-index: 30;
+        pointer-events: none;
+        padding: 5px 9px;
+        font-size: 12px;
+        border-radius: 8px;
+        background: rgba(8, 12, 28, 0.92);
+        border: 1px solid var(--border-strong);
+        color: var(--text);
+        transform: translate(14px, 14px);
+        opacity: 0;
+        transition: opacity 0.12s;
+      }
+      #tooltip.show {
+        opacity: 1;
+      }
+
+      /* ------------------------------------------------------------------
+     Terminal panel (opens when a pod is clicked)
+  ------------------------------------------------------------------ */
+      #terminal {
+        position: fixed;
+        top: 72px;
+        right: var(--gutter);
+        bottom: var(--gutter);
+        width: min(560px, 44vw);
+        display: flex;
+        flex-direction: column;
+        z-index: 20;
+        overflow: hidden;
+        background: rgba(5, 9, 20, 0.94);
+        border-radius: var(--radius);
+        border: 1px solid var(--border-strong);
+        box-shadow:
+          0 20px 60px rgba(0, 0, 0, 0.55),
+          0 0 0 1px rgba(0, 0, 0, 0.4);
+        transform: translateX(calc(100% + 40px));
+        transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+        font-family: var(--mono);
+        font-size: 12.5px;
+      }
+      #terminal.open {
+        transform: none;
+      }
+      .term-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+        background: rgba(15, 23, 42, 0.6);
+      }
+      .term-dots {
+        display: flex;
+        gap: 6px;
+      }
+      .term-dots i {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        background: #334155;
+      }
+      .term-dots i:nth-child(1) {
+        background: #f87171;
+      }
+      .term-dots i:nth-child(2) {
+        background: #fbbf24;
+      }
+      .term-dots i:nth-child(3) {
+        background: #34d399;
+      }
+      .term-title {
+        flex: 1;
+        text-align: center;
+        color: var(--muted);
+        font-size: 12px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .icon-btn {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+        display: grid;
+        place-items: center;
+        font-size: 16px;
+        line-height: 1;
+      }
+      .icon-btn:hover {
+        color: var(--text);
+        border-color: var(--border-strong);
+        background: rgba(148, 163, 184, 0.08);
+      }
+      .term-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 12px 14px;
+        line-height: 1.55;
+        white-space: pre-wrap;
+        word-break: break-word;
+        scrollbar-width: thin;
+        scrollbar-color: #1e293b transparent;
+      }
+      .term-welcome {
+        border: 1px solid #c084fc66;
+        border-radius: 8px;
+        padding: 8px 12px;
+        margin-bottom: 12px;
+        color: #cbd5e1;
+      }
+      .term-welcome .star {
+        color: #e879f9;
+      }
+      .term-welcome div {
+        color: var(--dim);
+      }
+      .tl {
+        animation: reveal 0.35s steps(24, end);
+      }
+      @keyframes reveal {
+        from {
+          clip-path: inset(0 100% 0 0);
+        }
+        to {
+          clip-path: inset(0 0 0 0);
+        }
+      }
+      .k-prompt {
+        color: #f8fafc;
+        background: rgba(148, 163, 184, 0.08);
+        border-radius: 4px;
+        padding: 0 4px;
+        margin: 6px 0 2px;
+        display: inline-block;
+      }
+      .k-tool {
+        color: #e2e8f0;
+      }
+      .k-tool .dot {
+        color: #4ade80;
+      }
+      .k-out {
+        color: #7c8aa5;
+      }
+      .k-ok {
+        color: #4ade80;
+      }
+      .k-err {
+        color: #fb7185;
+      }
+      .k-warn {
+        color: #fbbf24;
+      }
+      .k-think {
+        color: #c4b5fd;
+        font-style: italic;
+      }
+      .k-say {
+        color: #e2e8f0;
+      }
+      .k-dim {
+        color: var(--dim);
+      }
+      .term-foot {
+        border-top: 1px solid var(--border);
+        padding: 10px 14px 12px;
+        background: rgba(15, 23, 42, 0.45);
+      }
+      .status-line {
+        color: #fda4af;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        min-height: 20px;
+      }
+      .status-line[data-state="working"] {
+        color: #67e8f9;
+      }
+      .status-line[data-state="waiting"] {
+        color: #fcd34d;
+      }
+      .status-line[data-state="passed"] {
+        color: #6ee7b7;
+      }
+      .status-line[data-state="idle"] {
+        color: var(--dim);
+      }
+      .prompt-line {
+        margin-top: 8px;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        padding: 7px 10px;
+        color: var(--muted);
+      }
+      .cursor {
+        display: inline-block;
+        width: 8px;
+        height: 15px;
+        background: #e2e8f0;
+        vertical-align: -3px;
+        margin-left: 2px;
+        animation: blink 1s steps(1) infinite;
+      }
+      @keyframes blink {
+        50% {
+          opacity: 0;
+        }
+      }
+      .ask {
+        border: 1px solid #f43f5e88;
+        border-radius: 8px;
+        padding: 10px 12px;
+        background: rgba(244, 63, 94, 0.06);
+      }
+      .ask .q {
+        color: #fecdd3;
+        margin-bottom: 8px;
+      }
+      .ask .q b {
+        color: #fb7185;
+      }
+      .ask .opts {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .ask button {
+        font-family: var(--mono);
+        font-size: 12px;
+        padding: 6px 10px;
+        border-radius: 6px;
+        border: 1px solid #475569;
+        background: #0f172a;
+        color: var(--text);
+        cursor: pointer;
+      }
+      .ask button:hover {
+        border-color: var(--cyan);
+        color: #a5f3fc;
+      }
+
+      /* ------------------------------------------------------------------
+     Board modal (plan wall / PR board as 2D panels)
+  ------------------------------------------------------------------ */
+      #modal {
+        position: fixed;
+        inset: 0;
+        z-index: 40;
+        display: grid;
+        place-items: center;
+        padding: var(--gutter);
+        background: rgba(3, 6, 16, 0.55);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.25s;
+      }
+      #modal.open {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .modal-card {
+        width: min(1120px, 100%);
+        max-height: 100%;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        background: rgba(8, 13, 30, 0.96);
+        transform: translateY(12px) scale(0.98);
+        transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+      #modal.open .modal-card {
+        transform: none;
+      }
+      .modal-head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 18px;
+        border-bottom: 1px solid var(--border);
+      }
+      .modal-head h2 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 700;
+        flex: 1;
+      }
+      .modal-head h2 small {
+        color: var(--muted);
+        font-weight: 500;
+        margin-left: 8px;
+        font-size: 13px;
+      }
+      .modal-body {
+        padding: 16px 18px 18px;
+        overflow: auto;
+      }
+
+      .kanban {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(200px, 1fr));
+        gap: 12px;
+      }
+      .kcol {
+        background: rgba(15, 23, 42, 0.55);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 10px;
+        min-height: 260px;
+      }
+      .kcol h3 {
+        margin: 2px 4px 10px;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        color: var(--muted);
+        display: flex;
+        justify-content: space-between;
+      }
+      .kcol h3 span {
+        color: var(--text);
+        background: rgba(148, 163, 184, 0.12);
+        border-radius: 999px;
+        padding: 0 7px;
+      }
+      .kcard {
+        background: #0f1830;
+        border: 1px solid rgba(148, 163, 184, 0.12);
+        border-left: 3px solid var(--c);
+        border-radius: 8px;
+        padding: 8px 10px;
+        margin-bottom: 8px;
+        animation: feedIn 0.4s ease-out;
+      }
+      .kcard .id {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--c);
+      }
+      .kcard .t {
+        font-size: 13px;
+        margin: 2px 0 6px;
+      }
+      .kcard .o {
+        font-size: 11px;
+        color: var(--muted);
+        display: flex;
+        justify-content: space-between;
+      }
+      .kcard .o em {
+        font-style: normal;
+        font-family: var(--mono);
+        color: var(--amber);
+      }
+
+      .prlist {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      .prlist th {
+        text-align: left;
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        color: var(--muted);
+        font-weight: 600;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--border);
+        text-transform: uppercase;
+      }
+      .prlist td {
+        padding: 10px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.07);
+      }
+      .prlist .num {
+        font-family: var(--mono);
+        color: var(--violet);
+        font-weight: 600;
+      }
+      .prlist .who {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .prlist .who i {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--c);
+      }
+      .pill {
+        font-size: 11px;
+        font-weight: 600;
+        padding: 3px 9px;
+        border-radius: 999px;
+        white-space: nowrap;
+        color: var(--c);
+        background: color-mix(in srgb, var(--c) 13%, transparent);
+        border: 1px solid color-mix(in srgb, var(--c) 35%, transparent);
+      }
+      .empty {
+        color: var(--muted);
+        padding: 28px;
+        text-align: center;
+      }
+      .gate-summary {
+        display: flex;
+        gap: 18px;
+        flex-wrap: wrap;
+        margin-bottom: 14px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .gate-summary b {
+        color: var(--text);
+      }
+
+      /* ------------------------------------------------------------------
+     Small screens
+  ------------------------------------------------------------------ */
+      @media (max-width: 760px) {
+        :root {
+          --gutter: 12px;
+        }
+        #topbar {
+          height: 44px;
+          top: 8px;
+          padding: 0 10px;
+        }
+        #topbar .brand {
+          font-size: 14px;
+          gap: 8px;
+        }
+        #topbar .brand .sep,
+        .sandbox-pill .label-long {
+          display: none;
+        }
+        .sandbox-pill {
+          padding: 5px 9px;
+          font-size: 12px;
+        }
+        #team {
+          top: 60px;
+          left: 0;
+          right: 0;
+          width: auto;
+          flex-direction: row;
+          overflow-x: auto;
+          padding: 0 var(--gutter) 6px;
+          scrollbar-width: none;
+        }
+        #team::-webkit-scrollbar {
+          display: none;
+        }
+        .agent-card {
+          min-width: 200px;
+          padding: 10px 12px;
+        }
+        .ac-meta {
+          display: none;
+        }
+        #feed {
+          left: var(--gutter);
+          right: var(--gutter);
+          width: auto;
+        }
+        #feed li:nth-child(n + 4) {
+          display: none;
+        }
+        #hint {
+          display: none;
+        }
+        #terminal {
+          top: auto;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          width: auto;
+          height: 58vh;
+          border-radius: 16px 16px 0 0;
+          transform: translateY(calc(100% + 40px));
+        }
+        .kanban {
+          grid-template-columns: repeat(4, 78vw);
+          overflow-x: auto;
+        }
+        .prlist .hide-sm {
+          display: none;
+        }
+      }
+      @media (max-width: 1100px) and (min-width: 761px) {
+        #feed {
+          width: 300px;
+        }
+      }
+    </style>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <canvas id="scene" tabindex="0" aria-label="3D view of JSM HQ"></canvas>
+
+    <!-- ============================ UI OVERLAY ============================ -->
+    <header id="topbar" class="glass">
+      <div class="brand">
+        <svg class="logo" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <path
+            d="M16 3 28 10v12L16 29 4 22V10L16 3Z"
+            stroke="#22d3ee"
+            stroke-width="2" />
+          <path
+            d="M16 3v26M4 10l12 7 12-7"
+            stroke="#a78bfa"
+            stroke-width="1.6"
+            opacity=".8" />
+        </svg>
+        <span>JSM HQ</span><span class="sep">—</span
+        ><span class="project">Project: <b>Askwell</b></span>
+      </div>
+      <div
+        class="sandbox-pill"
+        title="Each agent runs in its own isolated sandbox">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          aria-hidden="true">
+          <path d="M12 2 21 7v10l-9 5-9-5V7l9-5Z" />
+          <path d="M3 7l9 5 9-5M12 12v10" />
+        </svg>
+        <span
+          ><b id="sandboxCount">3</b> sandboxes<span class="label-long">
+            running</span
+          ></span
+        >
+        <i class="live-dot"></i>
+      </div>
+    </header>
+
+    <section id="team" aria-label="Team"></section>
+
+    <section
+      id="feed"
+      class="glass"
+      aria-label="Activity feed"
+      aria-live="polite">
+      <div class="panel-title"><i class="live-dot"></i>Activity</div>
+      <ul id="feedList"></ul>
+    </section>
+
+    <div id="hint" class="glass">
+      Drag to orbit · scroll to zoom · click a pod, the plan wall or the PR
+      board · <kbd>Esc</kbd> to go back
+    </div>
+    <div id="tooltip"></div>
+
+    <aside id="terminal" aria-label="Agent terminal">
+      <div class="term-head">
+        <div class="term-dots"><i></i><i></i><i></i></div>
+        <div class="term-title" id="termTitle">claude</div>
+        <button class="icon-btn" id="termClose" aria-label="Close terminal">
+          ×
+        </button>
+      </div>
+      <div class="term-body" id="termBody"></div>
+      <div class="term-foot" id="termFoot"></div>
+    </aside>
+
+    <div id="modal" role="dialog" aria-modal="true">
+      <div class="modal-card glass">
+        <div class="modal-head">
+          <h2 id="modalTitle"></h2>
+          <button class="icon-btn" id="modalClose" aria-label="Close">×</button>
+        </div>
+        <div class="modal-body" id="modalBody"></div>
+      </div>
+    </div>
+
+    <script type="module">
+      import * as THREE from "three";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+      import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+      import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+      import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+      import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+      import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+
+      /* =====================================================================
+   0. CONFIG & SMALL UTILITIES
+===================================================================== */
+      const SANS =
+        '"Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+      const MONO =
+        'ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace';
+
+      // Agent states drive pod edge colour, badges, pipes and screens.
+      const STATE = {
+        working: { label: "Working", css: "#22d3ee" },
+        input: { label: "Needs input", css: "#f43f5e" },
+        waiting: { label: "Waiting for review", css: "#fbbf24" },
+        passed: { label: "Review passed", css: "#34d399" },
+        idle: { label: "Idle", css: "#64748b" },
+      };
+      for (const k in STATE) STATE[k].color = new THREE.Color(STATE[k].css);
+
+      // The team. `size` is the pod footprint [width, height, depth].
+      const AGENTS = [
+        {
+          id: "john",
+          name: "John",
+          role: "Lead",
+          color: "#a78bfa",
+          pos: [-4.5, 0, -3.4],
+          size: [4.6, 3.4, 3.6],
+        },
+        {
+          id: "bob",
+          name: "Bob",
+          role: "Developer",
+          color: "#60a5fa",
+          pos: [-7.5, 0, 3.2],
+          size: [3.6, 3.0, 3.0],
+        },
+        {
+          id: "alice",
+          name: "Alice",
+          role: "Developer",
+          color: "#f472b6",
+          pos: [-1.5, 0, 3.2],
+          size: [3.6, 3.0, 3.0],
+        },
+      ];
+      const agentById = Object.fromEntries(AGENTS.map((a) => [a.id, a]));
+      const john = agentById.john;
+      const devs = [agentById.bob, agentById.alice];
+
+      // Key locations in the office.
+      const GATE_POS = new THREE.Vector3(5, 0, 0.6);
+      const GATE_DIR = new THREE.Vector3(0.85, 0, -0.53).normalize(); // direction tokens travel through the gate
+      const GATE_CENTER = GATE_POS.clone().setY(1.3);
+      const RACKS = [
+        { id: "main", label: "main", x: 10.6, color: "#a78bfa" },
+        { id: "bob", label: "bob", x: 13.0, color: "#60a5fa" },
+        { id: "alice", label: "alice", x: 15.4, color: "#f472b6" },
+      ];
+      const RACK_Z = -4.3;
+      const MAIN_INLET = new THREE.Vector3(10.6, 1.7, -3.4);
+
+      const rand = (a, b) => a + Math.random() * (b - a);
+      const randi = (a, b) => Math.floor(rand(a, b + 1));
+      const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+      const chance = (p) => Math.random() < p;
+      const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+      const damp = (k, dt) => 1 - Math.exp(-k * dt);
+      const easeInOut = (t) =>
+        t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      const hdr = (css, k) => new THREE.Color(css).multiplyScalar(k);
+      const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+
+      /* Simulation clock + scheduler. Uses simulated time so everything pauses
+   cleanly when the tab is hidden (frame delta is clamped). */
+      let simTime = 0;
+      const timers = [];
+      function after(sec, fn) {
+        timers.push({ at: simTime + sec, fn });
+      }
+      function runTimers() {
+        for (let i = timers.length - 1; i >= 0; i--) {
+          if (timers[i].at <= simTime) {
+            const { fn } = timers[i];
+            timers.splice(i, 1);
+            fn();
+          }
+        }
+      }
+
+      // Dirty flags let canvases and HTML panels redraw only when data changes.
+      const dirty = { plan: true, prs: true, team: true };
+      const markDirty = (...keys) => keys.forEach((k) => (dirty[k] = true));
+
+      /* =====================================================================
+   1. RENDERER, SCENE, CAMERA, POST-PROCESSING
+===================================================================== */
+      const canvas = document.getElementById("scene");
+      const renderer = new THREE.WebGLRenderer({
+        canvas,
+        antialias: false,
+        powerPreference: "high-performance",
+      });
+      const pixelRatio = () => Math.min(window.devicePixelRatio || 1, 1.75);
+      renderer.setPixelRatio(pixelRatio());
+      renderer.setSize(innerWidth, innerHeight, false);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.NoToneMapping; // keeps canvas text and neon colours crisp
+      const MAX_ANISO = renderer.capabilities.getMaxAnisotropy();
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x070b1a);
+      scene.fog = new THREE.FogExp2(0x070b1a, 0.011);
+
+      const camera = new THREE.PerspectiveCamera(
+        42,
+        innerWidth / innerHeight,
+        0.1,
+        400,
+      );
+
+      const controls = new OrbitControls(camera, canvas);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.08;
+      controls.maxPolarAngle = 1.42;
+      controls.minDistance = 3;
+      controls.maxDistance = 140;
+
+      // Bloom gives the neon its glow. HalfFloat + MSAA render target keeps edges smooth.
+      const composerTarget = new THREE.WebGLRenderTarget(1, 1, {
+        type: THREE.HalfFloatType,
+        samples: 4,
+      });
+      const composer = new EffectComposer(renderer, composerTarget);
+      composer.setPixelRatio(pixelRatio());
+      composer.setSize(innerWidth, innerHeight);
+      composer.addPass(new RenderPass(scene, camera));
+      const bloom = new UnrealBloomPass(
+        new THREE.Vector2(innerWidth, innerHeight),
+        0.85,
+        0.55,
+        0.82,
+      );
+      composer.addPass(bloom);
+      composer.addPass(new OutputPass());
+
+      // Lighting: cool sky fill + a soft key light. Neon comes from emissive materials.
+      scene.add(new THREE.HemisphereLight(0x8fb4ff, 0x0b1022, 0.9));
+      const key = new THREE.DirectionalLight(0xc7d8ff, 1.1);
+      key.position.set(8, 20, 14);
+      scene.add(key);
+
+      /* =====================================================================
+   2. SHARED HELPERS (textures, shapes, materials)
+===================================================================== */
+
+      // Soft radial sprite used for glows, particles and dust.
+      const glowTex = (() => {
+        const c = document.createElement("canvas");
+        c.width = c.height = 128;
+        const g = c.getContext("2d");
+        const grd = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+        grd.addColorStop(0, "rgba(255,255,255,1)");
+        grd.addColorStop(0.22, "rgba(255,255,255,0.7)");
+        grd.addColorStop(0.55, "rgba(255,255,255,0.15)");
+        grd.addColorStop(1, "rgba(255,255,255,0)");
+        g.fillStyle = grd;
+        g.fillRect(0, 0, 128, 128);
+        const t = new THREE.CanvasTexture(c);
+        t.colorSpace = THREE.SRGBColorSpace;
+        return t;
+      })();
+
+      /** Creates a canvas + texture pair. Live textures skip mipmaps for cheap uploads. */
+      function canvasTexture(w, h, live = false) {
+        const c = document.createElement("canvas");
+        c.width = w;
+        c.height = h;
+        const ctx = c.getContext("2d");
+        const tex = new THREE.CanvasTexture(c);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.anisotropy = MAX_ANISO;
+        if (live) {
+          tex.generateMipmaps = false;
+          tex.minFilter = THREE.LinearFilter;
+        }
+        return { c, ctx, tex };
+      }
+
+      function roundRect(ctx, x, y, w, h, r) {
+        r = Math.min(r, w / 2, h / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+      }
+
+      /** Truncates text to fit a pixel width (with ellipsis). */
+      function fitText(ctx, text, maxW) {
+        if (ctx.measureText(text).width <= maxW) return text;
+        let lo = 0,
+          hi = text.length;
+        while (lo < hi) {
+          const mid = (lo + hi + 1) >> 1;
+          ctx.measureText(text.slice(0, mid) + "…").width <= maxW
+            ? (lo = mid)
+            : (hi = mid - 1);
+        }
+        return text.slice(0, lo) + "…";
+      }
+
+      /** 2D rounded rectangle shape centred on the origin. */
+      function roundedRectShape(w, h, r) {
+        const s = new THREE.Shape(),
+          x = -w / 2,
+          y = -h / 2;
+        s.moveTo(x + r, y);
+        s.lineTo(x + w - r, y);
+        s.absarc(x + w - r, y + r, r, -Math.PI / 2, 0, false);
+        s.lineTo(x + w, y + h - r);
+        s.absarc(x + w - r, y + h - r, r, 0, Math.PI / 2, false);
+        s.lineTo(x + r, y + h);
+        s.absarc(x + r, y + h - r, r, Math.PI / 2, Math.PI, false);
+        s.lineTo(x, y + r);
+        s.absarc(x + r, y + r, r, Math.PI, Math.PI * 1.5, false);
+        return s;
+      }
+
+      /** Glowing closed tube following a 2D outline. `map` turns a Vector2 into a world-space Vector3. */
+      function neonLoop(shape, map, radius, material, samples = 160) {
+        const pts = shape.getSpacedPoints(samples).map(map);
+        if (pts[0].distanceTo(pts[pts.length - 1]) < 1e-3) pts.pop();
+        const curve = new THREE.CatmullRomCurve3(pts, true, "centripetal");
+        return new THREE.Mesh(
+          new THREE.TubeGeometry(curve, samples * 2, radius, 6, true),
+          material,
+        );
+      }
+
+      /** Polyline with rounded corners, as a CurvePath (used for pipes). */
+      function roundedPath(points, r) {
+        const path = new THREE.CurvePath();
+        let prev = points[0].clone();
+        for (let i = 1; i < points.length - 1; i++) {
+          const p = points[i];
+          const d1 = points[i - 1].clone().sub(p);
+          const l1 = d1.length();
+          d1.normalize();
+          const d2 = points[i + 1].clone().sub(p);
+          const l2 = d2.length();
+          d2.normalize();
+          const rr = Math.min(r, l1 / 2, l2 / 2);
+          const s = p.clone().addScaledVector(d1, rr),
+            e = p.clone().addScaledVector(d2, rr);
+          path.add(new THREE.LineCurve3(prev, s));
+          path.add(new THREE.QuadraticBezierCurve3(s, p.clone(), e));
+          prev = e;
+        }
+        path.add(new THREE.LineCurve3(prev, points[points.length - 1].clone()));
+        return path;
+      }
+
+      /** Additive glow disc lying on the floor. */
+      function floorGlow(w, d, color, opacity) {
+        const m = new THREE.Mesh(
+          new THREE.PlaneGeometry(w, d),
+          new THREE.MeshBasicMaterial({
+            map: glowTex,
+            color,
+            transparent: true,
+            opacity,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+          }),
+        );
+        m.rotation.x = -Math.PI / 2;
+        return m;
+      }
+
+      /** Billboard text label. `draw(ctx, w, h)` paints it. */
+      function textSprite(w, h, worldW, draw) {
+        const t = canvasTexture(w, h);
+        const sprite = new THREE.Sprite(
+          new THREE.SpriteMaterial({
+            map: t.tex,
+            transparent: true,
+            depthWrite: false,
+          }),
+        );
+        sprite.scale.set(worldW, (worldW * h) / w, 1);
+        const redraw = () => {
+          t.ctx.clearRect(0, 0, w, h);
+          draw(t.ctx, w, h);
+          t.tex.needsUpdate = true;
+        };
+        redraw();
+        return { sprite, redraw, ...t };
+      }
+
+      /** Simple pill-shaped label, e.g. rack names. */
+      function pillLabel(text, color, worldW = 1.6) {
+        return textSprite(256, 80, worldW, (ctx) => {
+          roundRect(ctx, 6, 8, 244, 64, 32);
+          ctx.fillStyle = "rgba(8,13,30,0.85)";
+          ctx.fill();
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = color;
+          ctx.stroke();
+          ctx.fillStyle = "#e2e8f0";
+          ctx.font = `700 30px ${MONO}`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(text, 128, 41);
+        });
+      }
+
+      // Shared materials
+      const M = {
+        plate: new THREE.MeshStandardMaterial({
+          color: 0x111a33,
+          roughness: 0.55,
+          metalness: 0.5,
+        }),
+        dark: new THREE.MeshStandardMaterial({
+          color: 0x0c1328,
+          roughness: 0.45,
+          metalness: 0.6,
+        }),
+        desk: new THREE.MeshStandardMaterial({
+          color: 0x1b2647,
+          roughness: 0.4,
+          metalness: 0.4,
+        }),
+        chair: new THREE.MeshStandardMaterial({
+          color: 0x232f52,
+          roughness: 0.6,
+          metalness: 0.2,
+        }),
+        bezel: new THREE.MeshStandardMaterial({
+          color: 0x060a16,
+          roughness: 0.3,
+          metalness: 0.7,
+        }),
+        head: new THREE.MeshStandardMaterial({
+          color: 0xdfe7ff,
+          roughness: 0.35,
+          metalness: 0.15,
+        }),
+        glass: new THREE.MeshStandardMaterial({
+          color: 0x9fd4ff,
+          roughness: 0.08,
+          metalness: 0.2,
+          transparent: true,
+          opacity: 0.12,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        }),
+      };
+
+      const pickables = []; // meshes that respond to clicks
+
+      /* =====================================================================
+   3. ENVIRONMENT (floor, zones, server room shell, dust)
+===================================================================== */
+      function buildEnvironment() {
+        const floor = new THREE.Mesh(
+          new THREE.PlaneGeometry(220, 220),
+          new THREE.MeshStandardMaterial({
+            color: 0x0a1024,
+            roughness: 0.9,
+            metalness: 0.1,
+          }),
+        );
+        floor.rotation.x = -Math.PI / 2;
+        scene.add(floor);
+
+        const grid = new THREE.GridHelper(140, 140, 0x1f2f66, 0x121c40);
+        grid.material.transparent = true;
+        grid.material.opacity = 0.5;
+        grid.position.y = 0.002;
+        scene.add(grid);
+
+        // Office zone: slightly lighter rug with a soft cyan border
+        const officeShape = roundedRectShape(18.6, 15.6, 0.9);
+        const rug = new THREE.Mesh(
+          new THREE.ShapeGeometry(officeShape, 12),
+          new THREE.MeshStandardMaterial({
+            color: 0x0d1631,
+            roughness: 0.85,
+            metalness: 0.1,
+            transparent: true,
+            opacity: 0.85,
+          }),
+        );
+        rug.rotation.x = -Math.PI / 2;
+        rug.position.set(-1.4, 0.004, -1.3);
+        scene.add(rug);
+        scene.add(
+          neonLoop(
+            officeShape,
+            (p) => V3(p.x - 1.4, 0.02, -p.y - 1.3),
+            0.025,
+            new THREE.MeshBasicMaterial({ color: hdr("#22d3ee", 0.55) }),
+            220,
+          ),
+        );
+
+        // Server room: raised platform + glass walls + sign
+        const sx = 13,
+          sz = -3.6,
+          sw = 9,
+          sd = 6.2;
+        const platform = new THREE.Mesh(
+          new RoundedBoxGeometry(sw, 0.16, sd, 2, 0.06),
+          new THREE.MeshStandardMaterial({
+            color: 0x090e20,
+            roughness: 0.5,
+            metalness: 0.6,
+          }),
+        );
+        platform.position.set(sx, 0.08, sz);
+        scene.add(platform);
+        const roomGrid = new THREE.GridHelper(8.6, 14, 0x3b2a7a, 0x231a4d);
+        roomGrid.position.set(sx, 0.165, sz);
+        roomGrid.scale.z = sd / sw;
+        roomGrid.material.transparent = true;
+        roomGrid.material.opacity = 0.6;
+        scene.add(roomGrid);
+        scene.add(
+          neonLoop(
+            roundedRectShape(sw, sd, 0.1),
+            (p) => V3(sx + p.x, 0.17, sz - p.y),
+            0.03,
+            new THREE.MeshBasicMaterial({ color: hdr("#a78bfa", 1.1) }),
+            160,
+          ),
+        );
+
+        const wallH = 4.2;
+        const back = new THREE.Mesh(
+          new THREE.PlaneGeometry(sw, wallH),
+          M.glass,
+        );
+        back.position.set(sx, wallH / 2 + 0.16, sz - sd / 2);
+        scene.add(back);
+        const side = new THREE.Mesh(
+          new THREE.PlaneGeometry(sd, wallH),
+          M.glass,
+        );
+        side.rotation.y = -Math.PI / 2;
+        side.position.set(sx + sw / 2, wallH / 2 + 0.16, sz);
+        scene.add(side);
+        const trimMat = new THREE.MeshBasicMaterial({
+          color: hdr("#a78bfa", 1.2),
+        });
+        const trim1 = new THREE.Mesh(
+          new THREE.BoxGeometry(sw, 0.04, 0.04),
+          trimMat,
+        );
+        trim1.position.set(sx, wallH + 0.16, sz - sd / 2);
+        scene.add(trim1);
+        const trim2 = new THREE.Mesh(
+          new THREE.BoxGeometry(0.04, 0.04, sd),
+          trimMat,
+        );
+        trim2.position.set(sx + sw / 2, wallH + 0.16, sz);
+        scene.add(trim2);
+
+        const sign = canvasTexture(1024, 128);
+        sign.ctx.font = `700 64px ${SANS}`;
+        sign.ctx.textAlign = "center";
+        sign.ctx.textBaseline = "middle";
+        sign.ctx.fillStyle = "#c4b5fd";
+        sign.ctx.fillText("S E R V E R   R O O M", 512, 66);
+        const signMesh = new THREE.Mesh(
+          new THREE.PlaneGeometry(5.2, 0.65),
+          new THREE.MeshBasicMaterial({
+            map: sign.tex,
+            transparent: true,
+            depthWrite: false,
+          }),
+        );
+        signMesh.position.set(sx, 3.75, sz - sd / 2 + 0.02);
+        scene.add(signMesh);
+
+        // Floating dust motes for atmosphere
+        const N = 260,
+          pos = new Float32Array(N * 3),
+          speed = new Float32Array(N);
+        for (let i = 0; i < N; i++) {
+          pos[i * 3] = rand(-14, 22);
+          pos[i * 3 + 1] = rand(0, 9);
+          pos[i * 3 + 2] = rand(-11, 9);
+          speed[i] = rand(0.05, 0.25);
+        }
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+        const dust = new THREE.Points(
+          geo,
+          new THREE.PointsMaterial({
+            size: 0.09,
+            map: glowTex,
+            color: 0x7dd3fc,
+            transparent: true,
+            opacity: 0.55,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+          }),
+        );
+        scene.add(dust);
+        return { dust, speed };
+      }
+
+      /* =====================================================================
+   4. AGENT PODS
+===================================================================== */
+      const SCREEN_W = 512,
+        SCREEN_H = 232,
+        LINE_H = 19;
+
+      function createPod(a) {
+        const [w, h, d] = a.size;
+        const ac = new THREE.Color(a.color);
+        const group = new THREE.Group();
+        group.position.set(...a.pos);
+        scene.add(group);
+
+        // Base plate
+        const base = new THREE.Mesh(
+          new RoundedBoxGeometry(w + 0.4, 0.12, d + 0.4, 2, 0.06),
+          M.plate,
+        );
+        base.position.y = 0.06;
+        group.add(base);
+
+        // Glass shell: rounded-rect footprint extruded upward
+        const shape = roundedRectShape(w, d, 0.35);
+        const shellGeo = new THREE.ExtrudeGeometry(shape, {
+          depth: h,
+          bevelEnabled: false,
+          curveSegments: 10,
+        });
+        shellGeo.rotateX(-Math.PI / 2);
+        const glass = new THREE.Mesh(shellGeo, M.glass);
+        glass.position.y = 0.12;
+        glass.userData.pick = { type: "pod", agent: a };
+        group.add(glass);
+        pickables.push(glass);
+
+        // Glowing edge frame (colour = agent state)
+        const edgeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        group.add(neonLoop(shape, (p) => V3(p.x, 0.13, -p.y), 0.035, edgeMat));
+        group.add(
+          neonLoop(shape, (p) => V3(p.x, h + 0.12, -p.y), 0.035, edgeMat),
+        );
+        const postGeo = new THREE.CylinderGeometry(0.03, 0.03, h, 6);
+        for (const sx of [-1, 1])
+          for (const sz of [-1, 1]) {
+            const post = new THREE.Mesh(postGeo, edgeMat);
+            post.position.set(
+              sx * (w / 2 - 0.1),
+              0.12 + h / 2,
+              sz * (d / 2 - 0.1),
+            );
+            group.add(post);
+          }
+
+        // Interior: desk, keyboard glow, chair
+        const desk = new THREE.Mesh(
+          new THREE.BoxGeometry(w * 0.62, 0.07, 0.75),
+          M.desk,
+        );
+        desk.position.set(0, 0.86, d / 2 - 0.75);
+        group.add(desk);
+        for (const sx of [-1, 1]) {
+          const leg = new THREE.Mesh(
+            new THREE.BoxGeometry(0.06, 0.74, 0.6),
+            M.desk,
+          );
+          leg.position.set(sx * w * 0.28, 0.49, d / 2 - 0.75);
+          group.add(leg);
+        }
+        const kb = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.8, 0.22),
+          new THREE.MeshBasicMaterial({
+            color: ac.clone().multiplyScalar(1.3),
+          }),
+        );
+        kb.rotation.x = -Math.PI / 2;
+        kb.position.set(0, 0.9, d / 2 - 0.9);
+        group.add(kb);
+        const seat = new THREE.Mesh(
+          new THREE.BoxGeometry(0.62, 0.08, 0.55),
+          M.chair,
+        );
+        seat.position.set(0, 0.55, d / 2 - 1.6);
+        group.add(seat);
+        const back = new THREE.Mesh(
+          new THREE.BoxGeometry(0.62, 0.75, 0.08),
+          M.chair,
+        );
+        back.position.set(0, 0.95, d / 2 - 1.9);
+        group.add(back);
+        const stem = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.04, 0.04, 0.42, 8),
+          M.chair,
+        );
+        stem.position.set(0, 0.32, d / 2 - 1.6);
+        group.add(stem);
+
+        // Avatar: capsule body, round head, glowing visor (faces the screen)
+        const avatar = new THREE.Group();
+        avatar.position.set(0, 0, d / 2 - 1.55);
+        const body = new THREE.Mesh(
+          new THREE.CapsuleGeometry(0.26, 0.45, 4, 14),
+          new THREE.MeshStandardMaterial({
+            color: ac.clone().multiplyScalar(0.35),
+            emissive: ac,
+            emissiveIntensity: 0.25,
+            roughness: 0.4,
+            metalness: 0.3,
+          }),
+        );
+        body.position.y = 1.05;
+        const head = new THREE.Mesh(
+          new THREE.SphereGeometry(0.24, 24, 16),
+          M.head,
+        );
+        head.position.y = 1.72;
+        const visor = new THREE.Mesh(
+          new THREE.BoxGeometry(0.34, 0.09, 0.08),
+          new THREE.MeshBasicMaterial({ color: ac.clone().multiplyScalar(2) }),
+        );
+        visor.position.set(0, 1.74, 0.2);
+        avatar.add(body, head, visor);
+        if (a.id === "john") {
+          // the lead gets a halo
+          const halo = new THREE.Mesh(
+            new THREE.TorusGeometry(0.26, 0.022, 8, 40),
+            new THREE.MeshBasicMaterial({
+              color: ac.clone().multiplyScalar(2.2),
+            }),
+          );
+          halo.rotation.x = Math.PI / 2;
+          halo.position.y = 2.08;
+          avatar.add(halo);
+        }
+        group.add(avatar);
+
+        // Front screen: scrolling terminal (live canvas texture)
+        const sw = w * 0.72,
+          sh = (sw * SCREEN_H) / SCREEN_W;
+        const sy = 0.12 + h * 0.78;
+        const bezel = new THREE.Mesh(
+          new RoundedBoxGeometry(sw + 0.14, sh + 0.14, 0.07, 2, 0.03),
+          M.bezel,
+        );
+        bezel.position.set(0, sy, d / 2 + 0.035);
+        group.add(bezel);
+        const screen = canvasTexture(SCREEN_W, SCREEN_H, true);
+        const screenMesh = new THREE.Mesh(
+          new THREE.PlaneGeometry(sw, sh),
+          new THREE.MeshBasicMaterial({ map: screen.tex }),
+        );
+        screenMesh.position.set(0, sy, d / 2 + 0.075);
+        screenMesh.userData.pick = { type: "pod", agent: a };
+        group.add(screenMesh);
+        pickables.push(screenMesh);
+
+        // State glow on the floor + a point light inside
+        const glow = floorGlow(w + 3, d + 3, 0xffffff, 0.5);
+        glow.position.y = 0.01;
+        group.add(glow);
+        const light = new THREE.PointLight(0xffffff, 6, 7, 2);
+        light.position.set(0, h * 0.75, 0);
+        group.add(light);
+
+        // Name label
+        const label = textSprite(
+          512,
+          128,
+          a.id === "john" ? 3.3 : 2.9,
+          (ctx, W, H) => drawAgentLabel(ctx, W, H, a),
+        );
+        label.sprite.position.set(0, h + 0.95, 0);
+        group.add(label.sprite);
+
+        return {
+          group,
+          glass,
+          screenMesh,
+          screen,
+          edgeMat,
+          glow,
+          light,
+          avatar,
+          head,
+          label,
+          color: new THREE.Color(STATE.idle.css),
+          scroll: 0,
+          dirty: true,
+          lastDraw: 0,
+        };
+      }
+
+      function drawAgentLabel(ctx, W, H, a) {
+        const st = STATE[a.state || "idle"];
+        roundRect(ctx, 6, 14, W - 12, H - 28, (H - 28) / 2);
+        ctx.fillStyle = "rgba(8,13,30,0.86)";
+        ctx.fill();
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = st.css;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(52, H / 2, 12, 0, Math.PI * 2);
+        ctx.fillStyle = st.css;
+        ctx.fill();
+        ctx.textBaseline = "middle";
+        ctx.textAlign = "left";
+        ctx.font = `700 42px ${SANS}`;
+        ctx.fillStyle = "#f1f5f9";
+        ctx.fillText(a.name, 80, H / 2 + 2);
+        const nw = ctx.measureText(a.name).width;
+        ctx.font = `500 34px ${SANS}`;
+        ctx.fillStyle = "#94a3b8";
+        ctx.fillText(` · ${a.role}`, 80 + nw, H / 2 + 2);
+      }
+
+      const TERM_COLORS = {
+        prompt: "#f8fafc",
+        tool: "#e2e8f0",
+        out: "#7c8aa5",
+        ok: "#4ade80",
+        err: "#fb7185",
+        warn: "#fbbf24",
+        think: "#c4b5fd",
+        say: "#cbd5e1",
+        dim: "#56627e",
+      };
+      const SPINNER = ["✻", "✢", "✳", "✶", "✳", "✢"];
+
+      /** Paints the scrolling terminal on a pod's front screen. */
+      function drawScreen(a) {
+        const { ctx } = a.pod.screen,
+          W = SCREEN_W,
+          H = SCREEN_H;
+        const st = STATE[a.state];
+        ctx.fillStyle = "#040915";
+        ctx.fillRect(0, 0, W, H);
+
+        // Body lines, bottom-up, offset by the smooth scroll amount
+        const top = 34,
+          bottom = H - 30;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, top, W, bottom - top + 4);
+        ctx.clip();
+        ctx.font = `15px ${MONO}`;
+        ctx.textBaseline = "alphabetic";
+        ctx.textAlign = "left";
+        const lines = a.term.lines;
+        let y = bottom + a.pod.scroll;
+        for (let i = lines.length - 1; i >= 0 && y > top; i--, y -= LINE_H) {
+          const ln = lines[i];
+          ctx.fillStyle = TERM_COLORS[ln.kind] || "#cbd5e1";
+          let text = ln.text;
+          if (ln.kind === "tool") {
+            ctx.fillStyle = "#4ade80";
+            ctx.fillText("⏺", 12, y);
+            ctx.fillStyle = TERM_COLORS.tool;
+            text = text.replace(/^⏺ /, "");
+            ctx.fillText(fitText(ctx, text, W - 50), 32, y);
+            continue;
+          }
+          ctx.fillText(fitText(ctx, text, W - 24), 12, y);
+        }
+        ctx.restore();
+
+        // Header bar
+        ctx.fillStyle = "#0b1530";
+        ctx.fillRect(0, 0, W, 28);
+        ["#f87171", "#fbbf24", "#34d399"].forEach((c, i) => {
+          ctx.beginPath();
+          ctx.arc(14 + i * 15, 14, 4.5, 0, Math.PI * 2);
+          ctx.fillStyle = c;
+          ctx.fill();
+        });
+        ctx.font = `600 13px ${MONO}`;
+        ctx.fillStyle = "#8796b5";
+        ctx.textBaseline = "middle";
+        ctx.fillText(`${a.id}@sandbox-${a.id}: ~/askwell`, 62, 15);
+        ctx.font = `700 12px ${SANS}`;
+        const tag = st.label.toUpperCase(),
+          tw = ctx.measureText(tag).width + 18;
+        roundRect(ctx, W - tw - 8, 6, tw, 17, 8.5);
+        ctx.fillStyle = st.css + "33";
+        ctx.fill();
+        ctx.fillStyle = st.css;
+        ctx.textAlign = "center";
+        ctx.fillText(tag, W - tw / 2 - 8, 15.5);
+        ctx.textAlign = "left";
+
+        // Footer status / prompt with blinking cursor
+        ctx.fillStyle = "#0a1226";
+        ctx.fillRect(0, H - 24, W, 24);
+        ctx.font = `14px ${MONO}`;
+        ctx.textBaseline = "middle";
+        const blink = Math.floor(simTime * 2) % 2 === 0;
+        if (a.state === "working") {
+          ctx.fillStyle = "#67e8f9";
+          ctx.fillText(
+            `${SPINNER[Math.floor(simTime * 8) % SPINNER.length]} ${a.activity || "Working"}…`,
+            12,
+            H - 12,
+          );
+        } else if (a.state === "input") {
+          ctx.fillStyle = blink ? "#fb7185" : "#9f1239";
+          ctx.fillText("⚠ Needs your input — click to answer", 12, H - 12);
+        } else if (a.state === "waiting") {
+          ctx.fillStyle = "#fcd34d";
+          ctx.fillText("◷ Waiting for CodeRabbit review…", 12, H - 12);
+        } else {
+          ctx.fillStyle = a.state === "passed" ? "#6ee7b7" : "#8796b5";
+          ctx.fillText(
+            a.state === "passed" ? "✓ Review passed" : ">",
+            12,
+            H - 12,
+          );
+          if (blink && a.state !== "passed") {
+            ctx.fillStyle = "#e2e8f0";
+            ctx.fillRect(28, H - 19, 8, 14);
+          }
+        }
+        a.pod.screen.tex.needsUpdate = true;
+      }
+
+      /** Per-frame pod visuals: edge colour/pulse, light, glow, avatar idle motion, screen redraw. */
+      function updatePod(a, dt, t) {
+        const pod = a.pod,
+          target = STATE[a.state].color;
+        pod.color.lerp(target, damp(8, dt));
+        pod.label.sprite.visible = focused !== a; // the close-up doesn't need a floating name tag
+
+        let k; // edge brightness by state
+        switch (a.state) {
+          case "working":
+            k = 1.5 + Math.sin(t * 4 + a.pos[0]) * 0.75;
+            break;
+          case "input":
+            k = Math.sin(t * 10) > 0 ? 3.2 : 1.0;
+            break;
+          case "waiting":
+            k = 1.7 + Math.sin(t * 2) * 0.35;
+            break;
+          case "passed":
+            k = 2.6;
+            break;
+          default:
+            k = 0.45;
+        }
+        pod.edgeMat.color.copy(pod.color).multiplyScalar(k);
+        pod.light.color.copy(pod.color);
+        pod.light.intensity = 2 + k * 2.2;
+        pod.glow.material.color.copy(pod.color);
+        pod.glow.material.opacity = 0.15 + k * 0.13;
+
+        // Avatar body language
+        const av = pod.avatar;
+        if (a.state === "working") {
+          av.position.y = Math.abs(Math.sin(t * 9)) * 0.025;
+          pod.head.rotation.y = Math.sin(t * 1.3) * 0.15;
+        } else if (a.state === "input") {
+          av.position.y = 0;
+          pod.head.rotation.y = Math.sin(t * 3) * 0.5;
+        } else if (a.state === "passed") {
+          av.position.y = Math.abs(Math.sin(t * 6)) * 0.12;
+        } else {
+          av.position.y = Math.sin(t * 1.5) * 0.02;
+          pod.head.rotation.y *= 0.95;
+        }
+
+        // Smooth terminal scroll + throttled canvas redraw (~24fps while animating, else on ticks)
+        pod.scroll = Math.max(0, pod.scroll - dt * 60);
+        const tick = Math.floor(t * 8);
+        const needs = pod.dirty || pod.scroll > 0 || tick !== pod.lastTick;
+        if (needs && t - pod.lastDraw > 1 / 24) {
+          drawScreen(a);
+          pod.dirty = false;
+          pod.lastDraw = t;
+          pod.lastTick = tick;
+        }
+      }
+
+      /* =====================================================================
+   5. PLAN WALL (kanban board on a canvas texture)
+===================================================================== */
+      const PLAN_W = 1280,
+        PLAN_H = 720;
+      const COLS = ["todo", "progress", "review", "done"];
+      const COL_TITLES = {
+        todo: "TODO",
+        progress: "IN PROGRESS",
+        review: "IN REVIEW",
+        done: "DONE",
+      };
+      const COL_COLORS = {
+        todo: "#8796b5",
+        progress: "#22d3ee",
+        review: "#fbbf24",
+        done: "#34d399",
+      };
+
+      function createPlanWall() {
+        const W = 8.4,
+          H = (W * PLAN_H) / PLAN_W,
+          bottom = 2.4,
+          cy = bottom + H / 2;
+        const group = new THREE.Group();
+        group.position.set(-4.5, 0, -7.6);
+        scene.add(group);
+
+        const backing = new THREE.Mesh(
+          new RoundedBoxGeometry(W + 0.35, H + 0.35, 0.14, 2, 0.06),
+          M.dark,
+        );
+        backing.position.set(0, cy, -0.09);
+        group.add(backing);
+        const tex = canvasTexture(PLAN_W, PLAN_H, true);
+        const board = new THREE.Mesh(
+          new THREE.PlaneGeometry(W, H),
+          new THREE.MeshBasicMaterial({ map: tex.tex }),
+        );
+        board.position.y = cy;
+        board.userData.pick = { type: "plan" };
+        group.add(board);
+        pickables.push(board);
+        group.add(
+          neonLoop(
+            roundedRectShape(W + 0.35, H + 0.35, 0.12),
+            (p) => V3(p.x, cy + p.y, 0.0),
+            0.03,
+            new THREE.MeshBasicMaterial({ color: hdr("#a78bfa", 1.6) }),
+          ),
+        );
+        for (const sx of [-1, 1]) {
+          const leg = new THREE.Mesh(
+            new THREE.BoxGeometry(0.14, bottom, 0.14),
+            M.dark,
+          );
+          leg.position.set(sx * W * 0.36, bottom / 2, -0.1);
+          group.add(leg);
+        }
+        const glow = floorGlow(W + 2, 3, new THREE.Color("#a78bfa"), 0.35);
+        glow.position.set(0, 0.01, 0.4);
+        group.add(glow);
+        return { ...tex, lastDraw: 0 };
+      }
+
+      /** Target pixel position for each card, based on column + order. */
+      function layoutPlan() {
+        const colW = (PLAN_W - 48 - 3 * 16) / 4;
+        for (const col of COLS) {
+          const list = tasks
+            .filter((t) => t.col === col)
+            .sort((a, b) =>
+              col === "done"
+                ? b.enteredAt - a.enteredAt
+                : a.enteredAt - b.enteredAt,
+            );
+          list.forEach((t, i) => {
+            t.tx = 24 + COLS.indexOf(col) * (colW + 16) + 10;
+            t.ty = 150 + i * 84;
+            t.ta = i < 6 ? 1 : 0;
+            if (t.dx === undefined) {
+              t.dx = t.tx;
+              t.dy = t.ty;
+              t.da = 0;
+            }
+          });
+        }
+        return colW;
+      }
+
+      function drawPlan(ctx, colW) {
+        ctx.fillStyle = "#070d1d";
+        ctx.fillRect(0, 0, PLAN_W, PLAN_H);
+        const g = ctx.createLinearGradient(0, 0, PLAN_W, PLAN_H);
+        g.addColorStop(0, "rgba(167,139,250,0.08)");
+        g.addColorStop(1, "rgba(34,211,238,0.05)");
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, PLAN_W, PLAN_H);
+
+        ctx.textBaseline = "alphabetic";
+        ctx.textAlign = "left";
+        ctx.font = `700 16px ${SANS}`;
+        ctx.fillStyle = "#a78bfa";
+        ctx.fillText("P L A N   W A L L", 26, 40);
+        ctx.font = `700 32px ${SANS}`;
+        ctx.fillStyle = "#f1f5f9";
+        ctx.fillText("Askwell · Phase 3", 26, 78);
+        const done = tasks.filter((t) => t.col === "done").length;
+        ctx.font = `500 18px ${MONO}`;
+        ctx.fillStyle = "#8796b5";
+        ctx.textAlign = "right";
+        ctx.fillText(
+          `${tasks.length} tasks · ${done} done · PRs merged ${mergedCount}`,
+          PLAN_W - 26,
+          78,
+        );
+        ctx.textAlign = "left";
+
+        COLS.forEach((col, i) => {
+          const x = 24 + i * (colW + 16);
+          roundRect(ctx, x, 100, colW, PLAN_H - 120, 14);
+          ctx.fillStyle = "rgba(15,23,42,0.75)";
+          ctx.fill();
+          ctx.strokeStyle = "rgba(125,211,252,0.12)";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.fillStyle = COL_COLORS[col];
+          ctx.fillRect(x + 14, 122, 10, 10);
+          ctx.font = `700 15px ${SANS}`;
+          ctx.fillStyle = "#cbd5e1";
+          ctx.fillText(COL_TITLES[col], x + 32, 133);
+          const n = tasks.filter((t) => t.col === col).length;
+          ctx.font = `600 15px ${MONO}`;
+          ctx.fillStyle = "#8796b5";
+          ctx.textAlign = "right";
+          ctx.fillText(String(n), x + colW - 14, 133);
+          ctx.textAlign = "left";
+        });
+
+        // Moving cards are painted last so they float above the rest
+        const order = [...tasks].sort(
+          (a, b) =>
+            Math.abs(a.dx - a.tx) +
+            Math.abs(a.dy - a.ty) -
+            (Math.abs(b.dx - b.tx) + Math.abs(b.dy - b.ty)),
+        );
+        for (const t of order) {
+          if (t.da < 0.02) continue;
+          const owner = agentById[t.owner],
+            x = t.dx,
+            y = t.dy,
+            w = colW - 20,
+            h = 72;
+          const moving = Math.abs(t.dx - t.tx) + Math.abs(t.dy - t.ty) > 2;
+          ctx.globalAlpha = t.da;
+          ctx.save();
+          if (moving) {
+            ctx.shadowColor = owner.color;
+            ctx.shadowBlur = 26;
+          }
+          roundRect(ctx, x, y, w, h, 10);
+          ctx.fillStyle = "#101a35";
+          ctx.fill();
+          ctx.restore();
+          ctx.globalAlpha = t.da;
+          ctx.strokeStyle =
+            t.col === "review"
+              ? "rgba(251,191,36,0.55)"
+              : t.col === "progress"
+                ? "rgba(34,211,238,0.35)"
+                : "rgba(148,163,184,0.16)";
+          ctx.lineWidth = 2;
+          roundRect(ctx, x, y, w, h, 10);
+          ctx.stroke();
+          ctx.fillStyle = owner.color;
+          roundRect(ctx, x, y, 5, h, 3);
+          ctx.fill();
+
+          ctx.font = `700 15px ${MONO}`;
+          ctx.fillStyle = owner.color;
+          ctx.fillText((t.col === "done" ? "✓ " : "") + t.id, x + 16, y + 25);
+          if (t.pr && t.col === "review") {
+            ctx.font = `600 14px ${MONO}`;
+            ctx.fillStyle = "#fbbf24";
+            ctx.textAlign = "right";
+            ctx.fillText(`PR #${t.pr}`, x + w - 12, y + 25);
+            ctx.textAlign = "left";
+          }
+          ctx.font = `600 19px ${SANS}`;
+          ctx.fillStyle = t.col === "done" ? "#94a3b8" : "#f1f5f9";
+          ctx.fillText(fitText(ctx, t.title, w - 110), x + 16, y + 55);
+          ctx.font = `500 14px ${SANS}`;
+          ctx.fillStyle = "#8796b5";
+          ctx.textAlign = "right";
+          ctx.fillText(owner.name, x + w - 12, y + 55);
+          ctx.textAlign = "left";
+          ctx.beginPath();
+          ctx.arc(
+            x + w - 20 - ctx.measureText(owner.name).width,
+            y + 50,
+            4,
+            0,
+            Math.PI * 2,
+          );
+          ctx.fillStyle = owner.color;
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+      }
+
+      /** Animates cards toward their targets and redraws the texture when needed (≤30fps). */
+      function updatePlanWall(dt, t) {
+        const colW = layoutPlan();
+        let moving = false;
+        const k = damp(5, dt);
+        for (const c of tasks) {
+          c.dx += (c.tx - c.dx) * k;
+          c.dy += (c.ty - c.dy) * k;
+          c.da += (c.ta - c.da) * damp(4, dt);
+          if (
+            Math.abs(c.dx - c.tx) > 0.5 ||
+            Math.abs(c.dy - c.ty) > 0.5 ||
+            Math.abs(c.da - c.ta) > 0.01
+          )
+            moving = true;
+        }
+        if ((dirty.planWall || moving) && t - planWall.lastDraw > 1 / 30) {
+          drawPlan(planWall.ctx, colW);
+          planWall.tex.needsUpdate = true;
+          planWall.lastDraw = t;
+          dirty.planWall = moving;
+        }
+      }
+
+      /* =====================================================================
+   6. REVIEW GATE + CODERABBIT
+===================================================================== */
+      const GATE_COLORS = {
+        idle: new THREE.Color("#7c8cff"),
+        reviewing: new THREE.Color("#fbbf24"),
+        passed: new THREE.Color("#34d399"),
+        changes: new THREE.Color("#f43f5e"),
+      };
+
+      function createGate() {
+        const group = new THREE.Group();
+        group.position.copy(GATE_POS);
+        group.rotation.y = Math.atan2(GATE_DIR.x, GATE_DIR.z); // local +z = travel direction
+        scene.add(group);
+
+        const R_OUT = 2.3,
+          R_IN = 1.75,
+          PILLAR = 2.0;
+        // Solid arch frame (outer arch with an inner hole), extruded along local z
+        const outer = new THREE.Shape();
+        outer.moveTo(-R_OUT, 0);
+        outer.lineTo(-R_OUT, PILLAR);
+        outer.absarc(0, PILLAR, R_OUT, Math.PI, 0, true);
+        outer.lineTo(R_OUT, 0);
+        outer.lineTo(-R_OUT, 0);
+        const inner = new THREE.Path();
+        inner.moveTo(-R_IN, 0.14);
+        inner.lineTo(-R_IN, PILLAR);
+        inner.absarc(0, PILLAR, R_IN, Math.PI, 0, true);
+        inner.lineTo(R_IN, 0.14);
+        inner.lineTo(-R_IN, 0.14);
+        outer.holes.push(inner);
+        const frameGeo = new THREE.ExtrudeGeometry(outer, {
+          depth: 0.5,
+          bevelEnabled: true,
+          bevelThickness: 0.04,
+          bevelSize: 0.04,
+          bevelSegments: 2,
+          curveSegments: 40,
+        });
+        frameGeo.translate(0, 0, -0.25);
+        group.add(new THREE.Mesh(frameGeo, M.dark));
+
+        // Neon outlines on both faces (inner + outer edge)
+        const neonMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const outline = (r, y0) => {
+          const p = new THREE.Path();
+          p.moveTo(-r, y0);
+          p.lineTo(-r, PILLAR);
+          p.absarc(0, PILLAR, r, Math.PI, 0, true);
+          p.lineTo(r, y0);
+          return p.getSpacedPoints(140);
+        };
+        for (const [r, y0] of [
+          [R_IN, 0.14],
+          [R_OUT + 0.04, 0],
+        ]) {
+          const pts2 = outline(r, y0);
+          for (const z of [-0.3, 0.3]) {
+            const curve = new THREE.CatmullRomCurve3(
+              pts2.map((p) => V3(p.x, p.y, z)),
+              false,
+              "centripetal",
+            );
+            group.add(
+              new THREE.Mesh(
+                new THREE.TubeGeometry(curve, 220, 0.035, 6, false),
+                neonMat,
+              ),
+            );
+          }
+        }
+
+        // Translucent portal fill + scan line shown while reviewing
+        const portalShape = new THREE.Shape(inner.getPoints(40));
+        const portalMat = new THREE.MeshBasicMaterial({
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0.08,
+          side: THREE.DoubleSide,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        });
+        group.add(
+          new THREE.Mesh(new THREE.ShapeGeometry(portalShape), portalMat),
+        );
+        const scan = new THREE.Mesh(
+          new THREE.BoxGeometry(2 * R_IN, 0.035, 0.04),
+          new THREE.MeshBasicMaterial({ color: hdr("#fbbf24", 3) }),
+        );
+        group.add(scan);
+
+        const glow = floorGlow(6, 4, 0xffffff, 0.4);
+        glow.position.y = 0.012;
+        group.add(glow);
+        const light = new THREE.PointLight(0xffffff, 8, 9, 2);
+        light.position.set(0, 2.2, 0);
+        group.add(light);
+
+        // Low-poly rabbit (CodeRabbit) on top of the arch
+        const rabbit = createRabbit();
+        rabbit.position.set(0, PILLAR + R_OUT + 0.02, 0);
+        rabbit.rotation.y = -0.35 - group.rotation.y; // face the camera/dev side in world space
+        group.add(rabbit);
+
+        const label = pillLabel("REVIEW GATE", "#fbbf24", 2.1);
+        label.sprite.position.set(0, PILLAR + R_OUT + 1.45, 0);
+        group.add(label.sprite);
+
+        return {
+          group,
+          neonMat,
+          portalMat,
+          scan,
+          glow,
+          light,
+          rabbit,
+          mode: "idle",
+          modeAt: 0,
+          color: GATE_COLORS.idle.clone(),
+          queue: [],
+          busy: null,
+          cooldownUntil: 0,
+          R_IN,
+          PILLAR,
+        };
+      }
+
+      function createRabbit() {
+        const g = new THREE.Group();
+        const fur = new THREE.MeshStandardMaterial({
+          color: 0xff8a3d,
+          roughness: 0.55,
+          flatShading: true,
+          emissive: 0xff6a00,
+          emissiveIntensity: 0.15,
+        });
+        const white = new THREE.MeshStandardMaterial({
+          color: 0xfff4ea,
+          roughness: 0.6,
+          flatShading: true,
+        });
+        const black = new THREE.MeshBasicMaterial({ color: 0x0b0b12 });
+        const ico = new THREE.IcosahedronGeometry(1, 1);
+        const part = (mat, s, p, r = [0, 0, 0]) => {
+          const m = new THREE.Mesh(ico, mat);
+          m.scale.set(...s);
+          m.position.set(...p);
+          m.rotation.set(...r);
+          g.add(m);
+          return m;
+        };
+        part(fur, [0.34, 0.3, 0.42], [0, 0.3, 0]); // body
+        const head = part(fur, [0.23, 0.22, 0.24], [0, 0.62, 0.27]); // head
+        part(white, [0.14, 0.11, 0.12], [0, 0.55, 0.42]); // muzzle
+        const earL = part(
+          fur,
+          [0.065, 0.3, 0.04],
+          [-0.09, 0.98, 0.22],
+          [-0.2, 0, 0.18],
+        );
+        const earR = part(
+          fur,
+          [0.065, 0.3, 0.04],
+          [0.09, 0.98, 0.22],
+          [-0.2, 0, -0.18],
+        );
+        part(white, [0.1, 0.1, 0.1], [0, 0.35, -0.42]); // tail
+        part(black, [0.035, 0.035, 0.035], [-0.09, 0.67, 0.47]); // eyes
+        part(black, [0.035, 0.035, 0.035], [0.09, 0.67, 0.47]);
+        part(fur, [0.09, 0.07, 0.14], [-0.17, 0.08, 0.18]); // feet
+        part(fur, [0.09, 0.07, 0.14], [0.17, 0.08, 0.18]);
+        g.userData = { head, earL, earR, fur };
+        return g;
+      }
+
+      function setGateMode(mode) {
+        gate.mode = mode;
+        gate.modeAt = simTime;
+        markDirty("prs");
+      }
+
+      function updateGate(dt, t) {
+        const since = t - gate.modeAt;
+        if ((gate.mode === "passed" || gate.mode === "changes") && since > 1.8)
+          setGateMode("idle");
+
+        gate.color.lerp(GATE_COLORS[gate.mode], damp(10, dt));
+        let k = 1.0 + Math.sin(t * 1.5) * 0.15,
+          portal = 0.06;
+        if (gate.mode === "reviewing") {
+          k = 1.7 + Math.sin(t * 7) * 0.7;
+          portal = 0.13 + Math.sin(t * 7) * 0.05;
+        }
+        if (gate.mode === "passed" || gate.mode === "changes") {
+          const f = Math.exp(-since * 1.8);
+          k = 1.4 + 3.5 * f;
+          portal = 0.08 + 0.35 * f;
+        }
+        gate.neonMat.color.copy(gate.color).multiplyScalar(k);
+        gate.portalMat.color.copy(gate.color);
+        gate.portalMat.opacity = portal;
+        gate.glow.material.color.copy(gate.color);
+        gate.glow.material.opacity = 0.25 + k * 0.12;
+        gate.light.color.copy(gate.color);
+        gate.light.intensity = 4 + k * 4;
+
+        // Scanner sweeps up and down inside the arch while reviewing
+        gate.scan.visible = gate.mode === "reviewing";
+        if (gate.scan.visible) {
+          const y =
+            0.2 +
+            (Math.sin(t * 3) * 0.5 + 0.5) * (gate.PILLAR + gate.R_IN - 0.35);
+          const half =
+            y > gate.PILLAR
+              ? Math.sqrt(
+                  Math.max(0.01, gate.R_IN ** 2 - (y - gate.PILLAR) ** 2),
+                )
+              : gate.R_IN;
+          gate.scan.position.y = y;
+          gate.scan.scale.x = half / gate.R_IN;
+        }
+
+        // Rabbit animation: hop while reviewing, celebratory spin on pass, ear twitch otherwise
+        const r = gate.rabbit,
+          u = r.userData;
+        u.fur.emissive.copy(gate.color);
+        u.fur.emissiveIntensity =
+          gate.mode === "idle" ? 0.12 : 0.25 + (0.4 * Math.max(0, k - 1.4)) / 3;
+        const baseY = gate.PILLAR + 2.3 + 0.02;
+        if (gate.mode === "reviewing") {
+          r.position.y = baseY + Math.abs(Math.sin(t * 6)) * 0.18;
+          u.head.rotation.y = Math.sin(t * 2) * 0.4;
+        } else if (gate.mode === "passed") {
+          r.position.y =
+            baseY + Math.sin((Math.min(since, 0.6) / 0.6) * Math.PI) * 0.55;
+          u.head.rotation.y = 0;
+          r.rotation.z = 0;
+        } else {
+          r.position.y += (baseY - r.position.y) * damp(10, dt);
+        }
+        const twitch = Math.sin(t * 0.9) > 0.97 ? Math.sin(t * 40) * 0.15 : 0;
+        u.earL.rotation.z = 0.18 + twitch;
+        u.earR.rotation.z = -0.18 - twitch;
+        // spin once on pass
+        const spin =
+          gate.mode === "passed"
+            ? easeInOut(clamp(since / 0.8, 0, 1)) * Math.PI * 2
+            : 0;
+        r.rotation.y = -0.35 - gate.group.rotation.y + spin;
+      }
+
+      /* =====================================================================
+   7. PR BOARD
+===================================================================== */
+      const PR_W = 1024,
+        PR_H = 640;
+      const PR_STATUS = {
+        queued: { label: "Queued", css: "#94a3b8" },
+        reviewing: { label: "Reviewing", css: "#fbbf24" },
+        changes: { label: "Changes requested", css: "#f43f5e" },
+        approved: { label: "Approved", css: "#34d399" },
+        merged: { label: "Merged", css: "#a78bfa" },
+      };
+
+      function createPRBoard() {
+        const W = 4.6,
+          H = (W * PR_H) / PR_W,
+          bottom = 1.6,
+          cy = bottom + H / 2;
+        const group = new THREE.Group();
+        group.position.set(2.0, 0, -4.9);
+        group.rotation.y = -0.18;
+        scene.add(group);
+        const backing = new THREE.Mesh(
+          new RoundedBoxGeometry(W + 0.3, H + 0.3, 0.12, 2, 0.05),
+          M.dark,
+        );
+        backing.position.set(0, cy, -0.08);
+        group.add(backing);
+        const tex = canvasTexture(PR_W, PR_H, true);
+        const board = new THREE.Mesh(
+          new THREE.PlaneGeometry(W, H),
+          new THREE.MeshBasicMaterial({ map: tex.tex }),
+        );
+        board.position.y = cy;
+        board.userData.pick = { type: "prs" };
+        group.add(board);
+        pickables.push(board);
+        const neonMat = new THREE.MeshBasicMaterial({
+          color: hdr("#fbbf24", 1.2),
+        });
+        group.add(
+          neonLoop(
+            roundedRectShape(W + 0.3, H + 0.3, 0.1),
+            (p) => V3(p.x, cy + p.y, 0.0),
+            0.025,
+            neonMat,
+          ),
+        );
+        const post = new THREE.Mesh(
+          new THREE.BoxGeometry(0.16, bottom, 0.16),
+          M.dark,
+        );
+        post.position.set(0, bottom / 2, -0.1);
+        group.add(post);
+        const foot = new THREE.Mesh(
+          new RoundedBoxGeometry(1.6, 0.08, 0.8, 2, 0.03),
+          M.dark,
+        );
+        foot.position.set(0, 0.04, -0.1);
+        group.add(foot);
+        return { ...tex, neonMat };
+      }
+
+      function drawPRBoard() {
+        const ctx = prBoard.ctx;
+        ctx.fillStyle = "#070d1d";
+        ctx.fillRect(0, 0, PR_W, PR_H);
+        ctx.textBaseline = "alphabetic";
+        ctx.textAlign = "left";
+        ctx.font = `700 15px ${SANS}`;
+        ctx.fillStyle = "#fbbf24";
+        ctx.fillText("P U L L   R E Q U E S T S", 30, 42);
+        ctx.font = `700 30px ${SANS}`;
+        ctx.fillStyle = "#f1f5f9";
+        ctx.fillText("Open PRs", 30, 80);
+        // Gate status chip
+        const gs = {
+          idle: ["CodeRabbit idle", "#7c8cff"],
+          reviewing: ["CodeRabbit reviewing", "#fbbf24"],
+          passed: ["CodeRabbit approved", "#34d399"],
+          changes: ["Changes requested", "#f43f5e"],
+        }[gate.mode];
+        ctx.font = `600 16px ${SANS}`;
+        const cw = ctx.measureText(gs[0]).width + 44;
+        roundRect(ctx, PR_W - cw - 30, 52, cw, 36, 18);
+        ctx.fillStyle = gs[1] + "22";
+        ctx.fill();
+        ctx.strokeStyle = gs[1] + "88";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(PR_W - cw - 10, 70, 6, 0, Math.PI * 2);
+        ctx.fillStyle = gs[1];
+        ctx.fill();
+        ctx.fillStyle = gs[1];
+        ctx.fillText(gs[0], PR_W - cw + 4, 76);
+
+        const list = prs.slice(-6);
+        if (!list.length) {
+          ctx.font = `500 22px ${SANS}`;
+          ctx.fillStyle = "#56627e";
+          ctx.textAlign = "center";
+          ctx.fillText(
+            "No open PRs — everything is merged ✓",
+            PR_W / 2,
+            PR_H / 2 + 30,
+          );
+          ctx.textAlign = "left";
+        }
+        list.forEach((pr, i) => {
+          const y = 112 + i * 84,
+            st = PR_STATUS[pr.status],
+            a = pr.agent;
+          roundRect(ctx, 24, y, PR_W - 48, 72, 12);
+          ctx.fillStyle =
+            pr.status === "merged"
+              ? "rgba(15,23,42,0.45)"
+              : "rgba(15,23,42,0.9)";
+          ctx.fill();
+          ctx.strokeStyle =
+            pr.status === "reviewing"
+              ? "rgba(251,191,36,0.6)"
+              : "rgba(148,163,184,0.14)";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.font = `700 24px ${MONO}`;
+          ctx.fillStyle = "#c4b5fd";
+          ctx.fillText(`#${pr.num}`, 44, y + 45);
+          ctx.font = `600 21px ${SANS}`;
+          ctx.fillStyle = pr.status === "merged" ? "#8796b5" : "#f1f5f9";
+          ctx.fillText(fitText(ctx, pr.title, 420), 128, y + 34);
+          ctx.font = `500 16px ${SANS}`;
+          ctx.fillStyle = "#8796b5";
+          ctx.beginPath();
+          ctx.arc(134, y + 52, 5, 0, Math.PI * 2);
+          ctx.fillStyle = a.color;
+          ctx.fill();
+          ctx.fillStyle = "#8796b5";
+          ctx.fillText(
+            `${a.name} · ${pr.task.id}${pr.rounds ? ` · round ${pr.rounds + 1}` : ""}`,
+            146,
+            y + 58,
+          );
+          ctx.font = `700 16px ${SANS}`;
+          const pw = ctx.measureText(st.label).width + 28;
+          roundRect(ctx, PR_W - 48 - pw, y + 20, pw, 32, 16);
+          ctx.fillStyle = st.css + "22";
+          ctx.fill();
+          ctx.strokeStyle = st.css + "99";
+          ctx.stroke();
+          ctx.fillStyle = st.css;
+          ctx.textAlign = "center";
+          ctx.fillText(st.label, PR_W - 48 - pw / 2, y + 42);
+          ctx.textAlign = "left";
+        });
+        prBoard.tex.needsUpdate = true;
+      }
+
+      /* =====================================================================
+   8. SERVER ROOM RACKS
+===================================================================== */
+      function createRack(def) {
+        const W = 1.7,
+          H = 3.4,
+          D = 1.3;
+        const group = new THREE.Group();
+        group.position.set(def.x, 0.16, RACK_Z);
+        scene.add(group);
+        const c = new THREE.Color(def.color);
+        const body = new THREE.Mesh(
+          new RoundedBoxGeometry(W, H, D, 2, 0.05),
+          new THREE.MeshStandardMaterial({
+            color: 0x0d1428,
+            roughness: 0.35,
+            metalness: 0.7,
+          }),
+        );
+        body.position.y = H / 2;
+        group.add(body);
+
+        // Server units (slots) + LED grid as one InstancedMesh
+        const UNITS = 10,
+          PER = 4;
+        const unitGeo = new THREE.BoxGeometry(W - 0.24, 0.24, 0.04);
+        const unitMat = new THREE.MeshStandardMaterial({
+          color: 0x141f3d,
+          roughness: 0.5,
+          metalness: 0.6,
+        });
+        const leds = new THREE.InstancedMesh(
+          new THREE.BoxGeometry(0.09, 0.05, 0.03),
+          new THREE.MeshBasicMaterial({ color: 0xffffff }),
+          UNITS * PER,
+        );
+        const m4 = new THREE.Matrix4();
+        for (let u = 0; u < UNITS; u++) {
+          const y = 0.35 + u * 0.29;
+          const unit = new THREE.Mesh(unitGeo, unitMat);
+          unit.position.set(0, y, D / 2 + 0.01);
+          group.add(unit);
+          for (let i = 0; i < PER; i++) {
+            m4.makeTranslation(0.25 + i * 0.13, y, D / 2 + 0.04);
+            leds.setMatrixAt(u * PER + i, m4);
+            leds.setColorAt(u * PER + i, new THREE.Color(0, 0, 0));
+          }
+        }
+        group.add(leds);
+
+        // Neon edge strips in the rack colour
+        const stripMat = new THREE.MeshBasicMaterial({
+          color: c.clone().multiplyScalar(1.5),
+        });
+        for (const sx of [-1, 1]) {
+          const s = new THREE.Mesh(
+            new THREE.BoxGeometry(0.04, H - 0.1, 0.04),
+            stripMat,
+          );
+          s.position.set(sx * (W / 2 - 0.02), H / 2, D / 2 + 0.02);
+          group.add(s);
+        }
+        const topStrip = new THREE.Mesh(
+          new THREE.BoxGeometry(W - 0.1, 0.04, 0.04),
+          stripMat,
+        );
+        topStrip.position.set(0, H - 0.05, D / 2 + 0.02);
+        group.add(topStrip);
+
+        const glow = floorGlow(3, 3, c, 0.4);
+        glow.position.y = 0.01;
+        glow.position.z = 0.5;
+        group.add(glow);
+        const label = pillLabel(def.label, def.color, 1.4);
+        label.sprite.position.set(0, H + 0.4, D / 2 + 0.25);
+        group.add(label.sprite); // in front of the pipe inlet
+
+        // Expanding ring used for the "merged into main" pulse
+        const ring = new THREE.Mesh(
+          new THREE.RingGeometry(0.9, 1.05, 64),
+          new THREE.MeshBasicMaterial({
+            color: hdr("#34d399", 2),
+            transparent: true,
+            opacity: 0,
+            side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+          }),
+        );
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.set(0, 0.03, 0.2);
+        group.add(ring);
+
+        return {
+          def,
+          group,
+          leds,
+          stripMat,
+          glow,
+          ring,
+          base: c,
+          pulse: 0,
+          nextBlink: 0,
+          ledColor: new THREE.Color(),
+        };
+      }
+
+      const LED_PALETTE = [
+        new THREE.Color("#34d399"),
+        new THREE.Color("#22d3ee"),
+        new THREE.Color("#34d399"),
+        new THREE.Color("#fbbf24"),
+      ];
+      const GREEN = new THREE.Color("#34d399");
+
+      function updateRacks(dt, t) {
+        for (const r of racks) {
+          r.pulse = Math.max(0, r.pulse - dt * 0.7);
+          // Activity: bob/alice racks follow their agent; main follows overall work
+          const owner = agentById[r.def.id];
+          const activity = owner
+            ? {
+                working: 0.75,
+                waiting: 0.45,
+                passed: 0.6,
+                input: 0.15,
+                idle: 0.12,
+              }[owner.state]
+            : 0.35 + r.pulse;
+          if (t > r.nextBlink) {
+            r.nextBlink = t + 0.09;
+            for (let i = 0; i < r.leds.count; i++) {
+              if (r.pulse > 0.3)
+                r.ledColor.copy(GREEN).multiplyScalar(2.5 * r.pulse);
+              else if (Math.random() < activity)
+                r.ledColor
+                  .copy(
+                    LED_PALETTE[(i * 7 + (Math.random() < 0.08 ? 3 : 0)) % 4],
+                  )
+                  .multiplyScalar(rand(1.2, 2.4));
+              else r.ledColor.setRGB(0.02, 0.03, 0.06);
+              r.leds.setColorAt(i, r.ledColor);
+            }
+            r.leds.instanceColor.needsUpdate = true;
+          }
+          const k =
+            1.2 +
+            r.pulse * 3 +
+            (owner && owner.state === "working" ? Math.sin(t * 5) * 0.3 : 0);
+          r.stripMat.color
+            .copy(
+              r.pulse > 0.05
+                ? r.ledColor.copy(r.base).lerp(GREEN, r.pulse)
+                : r.base,
+            )
+            .multiplyScalar(k);
+          r.glow.material.opacity = 0.25 + r.pulse * 0.6;
+          // ring expands outward as the pulse decays
+          const p = 1 - r.pulse;
+          r.ring.scale.setScalar(1 + p * 2.6);
+          r.ring.material.opacity = r.pulse > 0 ? r.pulse * 0.9 : 0;
+        }
+      }
+
+      /* =====================================================================
+   9. PIPES (pod → personal rack) with flowing light particles
+===================================================================== */
+      function createPipe(agent, points, color) {
+        const path = roundedPath(points, 0.6);
+        const len = path.getLength();
+        const tube = new THREE.Mesh(
+          new THREE.TubeGeometry(path, 320, 0.11, 10, false),
+          new THREE.MeshStandardMaterial({
+            color: new THREE.Color(color).multiplyScalar(0.25),
+            emissive: color,
+            emissiveIntensity: 0.22,
+            transparent: true,
+            opacity: 0.6,
+            roughness: 0.25,
+            metalness: 0.3,
+            depthWrite: false,
+          }),
+        );
+        scene.add(tube);
+        // End caps where the pipe meets pod and rack
+        for (const p of [points[0], points[points.length - 1]]) {
+          const cap = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.2, 0.2, 0.12, 16),
+            M.dark,
+          );
+          cap.position.copy(p);
+          scene.add(cap);
+        }
+        // Pre-sample the path so particles don't evaluate curves every frame
+        const samples = path.getSpacedPoints(600);
+        const N = 36,
+          pos = new Float32Array(N * 3);
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+        const mat = new THREE.PointsMaterial({
+          size: 0.42,
+          map: glowTex,
+          color: new THREE.Color(color).multiplyScalar(2.2),
+          transparent: true,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+        });
+        const points3 = new THREE.Points(geo, mat);
+        points3.frustumCulled = false;
+        scene.add(points3);
+        return {
+          agent,
+          samples,
+          len,
+          N,
+          pos,
+          geo,
+          mat,
+          phase: 0,
+          speed: 1,
+          base: new THREE.Color(color),
+        };
+      }
+
+      function updatePipes(dt) {
+        for (const p of pipes) {
+          const target = {
+            working: 4.2,
+            waiting: 1.6,
+            passed: 3,
+            input: 0.35,
+            idle: 0.5,
+          }[p.agent.state];
+          p.speed += (target - p.speed) * damp(2, dt);
+          p.phase = (p.phase + (p.speed * dt) / p.len) % 1;
+          const S = p.samples.length - 1;
+          for (let i = 0; i < p.N; i++) {
+            const u = (p.phase + i / p.N) % 1,
+              f = u * S,
+              i0 = Math.floor(f),
+              fr = f - i0;
+            const a = p.samples[i0],
+              b = p.samples[Math.min(S, i0 + 1)];
+            p.pos[i * 3] = a.x + (b.x - a.x) * fr;
+            p.pos[i * 3 + 1] = a.y + (b.y - a.y) * fr;
+            p.pos[i * 3 + 2] = a.z + (b.z - a.z) * fr;
+          }
+          p.geo.attributes.position.needsUpdate = true;
+          const tint = p.agent.state === "input" ? STATE.input.color : p.base;
+          p.mat.color
+            .copy(tint)
+            .multiplyScalar(p.agent.state === "idle" ? 0.9 : 2.2);
+        }
+      }
+
+      /* =====================================================================
+   10. PR TOKENS (glowing orbs that travel pod → gate → main)
+===================================================================== */
+      const tokenGeo = new THREE.IcosahedronGeometry(0.22, 1);
+      const ringGeo = new THREE.TorusGeometry(0.36, 0.022, 6, 40);
+      const tokens = [];
+      const TOKEN_COLORS = {
+        queued: new THREE.Color("#fbbf24"),
+        entering: new THREE.Color("#fbbf24"),
+        review: new THREE.Color("#fbbf24"),
+        toMain: new THREE.Color("#34d399"),
+        absorb: new THREE.Color("#34d399"),
+        back: new THREE.Color("#f43f5e"),
+      };
+
+      // Pre-built travel curves for each developer
+      function podFront(a) {
+        return V3(a.pos[0], 1.3, a.pos[2] + a.size[2] / 2 + 0.45);
+      }
+      const queueSlot = (i) =>
+        GATE_CENTER.clone().addScaledVector(GATE_DIR, -(1.9 + i * 1.0));
+      const CURVES = {
+        bob: new THREE.CubicBezierCurve3(
+          podFront(agentById.bob),
+          V3(-6, 3.6, 7.6),
+          V3(1, 3.2, 6.6),
+          queueSlot(0),
+        ),
+        alice: new THREE.CubicBezierCurve3(
+          podFront(agentById.alice),
+          V3(-0.5, 3.0, 6.8),
+          V3(2.5, 2.6, 4.0),
+          queueSlot(0),
+        ),
+        toMain: new THREE.CubicBezierCurve3(
+          GATE_CENTER.clone(),
+          V3(6.9, 2.7, -0.5),
+          V3(9.6, 2.9, -1.8),
+          MAIN_INLET.clone(),
+        ),
+      };
+
+      class Token {
+        constructor(pr) {
+          this.pr = pr;
+          this.agent = pr.agent;
+          this.phase = "toQueue";
+          this.t = 0;
+          this.pos = podFront(this.agent);
+          this.color = new THREE.Color(this.agent.color);
+          this.agentColor = new THREE.Color(this.agent.color);
+          this.group = new THREE.Group();
+          scene.add(this.group);
+          this.core = new THREE.Mesh(
+            tokenGeo,
+            new THREE.MeshBasicMaterial({ color: 0xffffff }),
+          );
+          this.ring = new THREE.Mesh(
+            ringGeo,
+            new THREE.MeshBasicMaterial({ color: 0xffffff }),
+          );
+          this.halo = new THREE.Sprite(
+            new THREE.SpriteMaterial({
+              map: glowTex,
+              color: 0xffffff,
+              transparent: true,
+              blending: THREE.AdditiveBlending,
+              depthWrite: false,
+            }),
+          );
+          this.halo.scale.setScalar(1.6);
+          this.tag = pillLabel(`#${pr.num}`, this.agent.color, 0.9);
+          this.tag.sprite.position.y = 0.6;
+          this.group.add(this.core, this.ring, this.halo, this.tag.sprite);
+          // Trail: ring buffer of recent positions with fading vertex colours
+          this.trailN = 22;
+          this.trailPos = new Float32Array(this.trailN * 3);
+          this.trailCol = new Float32Array(this.trailN * 3);
+          for (let i = 0; i < this.trailN; i++)
+            this.trailPos.set([this.pos.x, this.pos.y, this.pos.z], i * 3);
+          const tg = new THREE.BufferGeometry();
+          tg.setAttribute(
+            "position",
+            new THREE.BufferAttribute(this.trailPos, 3),
+          );
+          tg.setAttribute("color", new THREE.BufferAttribute(this.trailCol, 3));
+          this.trail = new THREE.Points(
+            tg,
+            new THREE.PointsMaterial({
+              size: 0.3,
+              map: glowTex,
+              vertexColors: true,
+              transparent: true,
+              depthWrite: false,
+              blending: THREE.AdditiveBlending,
+            }),
+          );
+          this.trail.frustumCulled = false;
+          scene.add(this.trail);
+          this.scale = 0;
+          this.dead = false;
+          tokens.push(this);
+        }
+
+        /** Switch to a travel phase along a curve. */
+        go(phase, onArrive) {
+          this.phase = phase;
+          this.t = 0;
+          this.onArrive = onArrive;
+          if (phase === "back") {
+            const f = podFront(this.agent);
+            this.curve = new THREE.CubicBezierCurve3(
+              this.pos.clone(),
+              V3(3.2, 4, 2.8),
+              f.clone().add(V3(1.5, 2.6, 2)),
+              f,
+            );
+          }
+        }
+
+        update(dt, t) {
+          const target =
+            this.phase === "toQueue"
+              ? this.agentColor
+              : TOKEN_COLORS[this.phase];
+          this.color.lerp(target, damp(6, dt));
+
+          switch (this.phase) {
+            case "toQueue":
+              this.t += dt / 2.6;
+              CURVES[this.agent.id].getPoint(
+                easeInOut(Math.min(1, this.t)),
+                this.pos,
+              );
+              if (this.t >= 1) {
+                this.phase = "queued";
+                gate.queue.push(this);
+              }
+              break;
+            case "queued": {
+              const slot = queueSlot(gate.queue.indexOf(this));
+              slot.y += Math.sin(t * 3 + this.pr.num) * 0.08;
+              this.pos.lerp(slot, damp(4, dt));
+              break;
+            }
+            case "entering":
+              this.t += dt / 0.8;
+              this.pos.lerpVectors(
+                this.from,
+                GATE_CENTER,
+                easeInOut(Math.min(1, this.t)),
+              );
+              if (this.t >= 1) {
+                this.phase = "review";
+                startReview(this);
+              }
+              break;
+            case "review":
+              this.pos.copy(GATE_CENTER);
+              this.pos.y += Math.sin(t * 4) * 0.12;
+              break;
+            case "toMain":
+              this.t += dt / 1.9;
+              CURVES.toMain.getPoint(easeInOut(Math.min(1, this.t)), this.pos);
+              if (this.t >= 1) {
+                this.phase = "absorb";
+                this.t = 0;
+                this.onArrive?.();
+              }
+              break;
+            case "back":
+              this.t += dt / 2.4;
+              this.curve.getPoint(easeInOut(Math.min(1, this.t)), this.pos);
+              if (this.t >= 1) {
+                this.phase = "absorb";
+                this.t = 0;
+              }
+              break;
+            case "absorb":
+              this.t += dt / 0.5;
+              if (this.t >= 1) this.dead = true;
+              break;
+          }
+
+          // Visuals
+          const targetScale =
+            this.phase === "absorb"
+              ? Math.max(0, 1 - this.t)
+              : this.phase === "review"
+                ? 1.25
+                : 1;
+          this.scale += (targetScale - this.scale) * damp(10, dt);
+          this.group.position.copy(this.pos);
+          this.group.scale.setScalar(this.scale);
+          const pulse =
+            this.phase === "review" ? 2.2 + Math.sin(t * 10) * 0.8 : 2.4;
+          this.core.material.color.copy(this.color).multiplyScalar(pulse);
+          this.ring.material.color.copy(this.color).multiplyScalar(1.8);
+          this.halo.material.color.copy(this.color);
+          this.core.rotation.x += dt * 1.5;
+          this.core.rotation.y += dt * 2;
+          this.ring.rotation.x = t * 2.2;
+          this.ring.rotation.y = t * 1.3;
+
+          // Trail
+          this.trailPos.copyWithin(3, 0, (this.trailN - 1) * 3);
+          this.trailPos[0] = this.pos.x;
+          this.trailPos[1] = this.pos.y;
+          this.trailPos[2] = this.pos.z;
+          for (let i = 0; i < this.trailN; i++) {
+            const f = (1 - i / this.trailN) ** 2 * 1.6 * this.scale;
+            this.trailCol[i * 3] = this.color.r * f;
+            this.trailCol[i * 3 + 1] = this.color.g * f;
+            this.trailCol[i * 3 + 2] = this.color.b * f;
+          }
+          this.trail.geometry.attributes.position.needsUpdate = true;
+          this.trail.geometry.attributes.color.needsUpdate = true;
+        }
+
+        dispose() {
+          scene.remove(this.group, this.trail);
+          this.core.material.dispose();
+          this.ring.material.dispose();
+          this.halo.material.dispose();
+          this.tag.tex.dispose();
+          this.tag.sprite.material.dispose();
+          this.trail.geometry.dispose();
+          this.trail.material.dispose();
+        }
+      }
+
+      /** Lets the next queued token into the gate once it is free. */
+      function updateGateQueue() {
+        if (gate.busy || simTime < gate.cooldownUntil || !gate.queue.length)
+          return;
+        const tk = gate.queue[0];
+        if (tk.pos.distanceTo(queueSlot(0)) > 0.35) return;
+        gate.queue.shift();
+        gate.busy = tk;
+        tk.phase = "entering";
+        tk.t = 0;
+        tk.from = tk.pos.clone();
+      }
+
+      /* =====================================================================
+   11. SIMULATION DATA + AGENT BEHAVIOUR
+===================================================================== */
+      let nextTaskNum = 7,
+        nextPR = 12,
+        mergedCount = 11,
+        inputSeq = 0;
+      const prs = [];
+      const tasks = [
+        ["P2-T09", "Auth + workspaces", "bob", "done"],
+        ["P2-T10", "Onboarding flow", "alice", "done"],
+        ["P2-T11", "Billing stub", "bob", "done"],
+        ["P3-T01", "Knowledge upload", "alice", "todo"],
+        ["P3-T02", "Chunk + embed pipeline", "bob", "todo"],
+        ["P3-T03", "Ask endpoint (RAG)", "bob", "todo"],
+        ["P3-T04", "Citations UI", "alice", "todo"],
+        ["P3-T05", "Streaming answers", "alice", "todo"],
+        ["P3-T06", "Rate limiter", "bob", "todo"],
+      ].map(([id, title, owner, col], i) => ({
+        id,
+        title,
+        owner,
+        col,
+        enteredAt: -100 + i,
+      }));
+
+      const TASK_POOL = [
+        "Answer feedback 👍/👎",
+        "Workspace invites",
+        "Usage dashboard",
+        "Retry failed embeds",
+        "Search filters",
+        "Answer caching",
+        "Audit log",
+        "Source previews",
+        "Slack integration",
+        "Webhook events",
+        "Export chat to PDF",
+        "Prompt templates",
+        "Admin roles",
+        "Multi-file upload",
+        "Embeddings backfill",
+        "Health checks",
+      ];
+      let poolIdx = 0;
+
+      const DEV_QUESTIONS = [
+        {
+          q: "Use pgvector or a hosted vector DB for embeddings?",
+          opts: ["pgvector (Postgres)", "Hosted vector DB"],
+        },
+        {
+          q: "OK to add a new dependency: pdf-parse?",
+          opts: ["Yes, add it", "No, find another way"],
+        },
+        {
+          q: "Reject uploads over 20 MB, or chunk them?",
+          opts: ["Reject with 413", "Chunk them"],
+        },
+        {
+          q: "Run the migration on the shared DB branch?",
+          opts: ["Yes, run it", "Use a fresh branch"],
+        },
+        {
+          q: "Overwrite the existing fixtures in tests/?",
+          opts: ["Overwrite", "Keep them, add new ones"],
+        },
+        {
+          q: "Stream tokens over SSE or WebSockets?",
+          opts: ["SSE", "WebSockets"],
+        },
+      ];
+      const JOHN_QUESTIONS = [
+        {
+          q: "Approve the Phase 3 scope change (+2 tasks)?",
+          opts: ["Approve", "Hold for now"],
+        },
+        {
+          q: "Ship the next merge to staging tonight?",
+          opts: ["Ship it", "Wait until morning"],
+        },
+        {
+          q: "Bump the per-sandbox budget to 2 vCPU?",
+          opts: ["Yes", "Keep at 1 vCPU"],
+        },
+      ];
+      const REVIEW_COMMENTS = [
+        "Missing error handling for empty uploads",
+        "Add a test for the 413 path",
+        "Avoid the N+1 query in loadChunks()",
+        "Validate the request body with zod",
+        "Unused import in route.ts",
+        "Handle the abort signal when streaming",
+      ];
+      const ACTIVITIES = [
+        "Thinking",
+        "Editing",
+        "Running tests",
+        "Reading files",
+        "Refactoring",
+        "Type-checking",
+      ];
+
+      // Runtime fields on each agent
+      for (const a of AGENTS)
+        Object.assign(a, {
+          state: "idle",
+          task: null,
+          stateSince: 0,
+          term: { lines: [], seq: 0 },
+          pendingInput: null,
+          nextStep: 0,
+          activity: "Working",
+        });
+
+      /** Append a line to an agent's terminal (shared by pod screen + 2D panel). */
+      function say(a, text, kind = "say") {
+        a.term.lines.push({ seq: ++a.term.seq, text, kind });
+        if (a.term.lines.length > 200) a.term.lines.shift();
+        if (a.pod) {
+          a.pod.scroll = Math.min(a.pod.scroll + LINE_H, LINE_H * 3);
+          a.pod.dirty = true;
+        }
+      }
+
+      function setState(a, s) {
+        a.state = s;
+        a.stateSince = simTime;
+        if (a.pod) {
+          a.pod.label.redraw();
+          a.pod.dirty = true;
+        }
+        markDirty("team");
+      }
+
+      function moveTask(task, col) {
+        task.col = col;
+        task.enteredAt = simTime;
+        markDirty("plan");
+      }
+
+      const slugify = (s) =>
+        s
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "");
+      const pascal = (s) =>
+        s
+          .replace(/[^a-zA-Z0-9]+/g, " ")
+          .trim()
+          .split(" ")
+          .map((w) => w[0].toUpperCase() + w.slice(1))
+          .join("");
+
+      /** Fake Claude Code tool calls for a developer working on a task. */
+      function devStep(a) {
+        const t = a.task,
+          slug = slugify(t.title),
+          dir = `src/features/${slug}`;
+        const file = pick([
+          `${dir}/index.ts`,
+          `${dir}/${slug}.service.ts`,
+          `app/api/${slug}/route.ts`,
+          `components/${pascal(t.title)}.tsx`,
+        ]);
+        const steps = [
+          () => {
+            a.activity = "Reading files";
+            return [
+              ["tool", `⏺ Read(${file})`],
+              ["out", `  ⎿  Read ${randi(40, 240)} lines`],
+            ];
+          },
+          () => {
+            a.activity = "Searching";
+            return [
+              [
+                "tool",
+                `⏺ Search(pattern: "${pick(["useUpload", "embed", "askQuestion", "workspaceId", "rateLimit", "citations"])}", path: "src")`,
+              ],
+              ["out", `  ⎿  Found ${randi(2, 11)} files`],
+            ];
+          },
+          () => {
+            a.activity = "Editing";
+            return [
+              ["tool", `⏺ Update(${file})`],
+              [
+                "out",
+                `  ⎿  Updated with ${randi(3, 48)} additions and ${randi(0, 14)} removals`,
+              ],
+            ];
+          },
+          () => {
+            a.activity = "Writing tests";
+            return [
+              ["tool", `⏺ Write(${dir}/${slug}.test.ts)`],
+              ["out", `  ⎿  Wrote ${randi(30, 140)} lines`],
+            ];
+          },
+          () => {
+            a.activity = "Running tests";
+            return chance(0.2)
+              ? [
+                  ["tool", `⏺ Bash(pnpm test ${slug})`],
+                  [
+                    "err",
+                    `  ⎿  ✗ 1 failed — expected 200, received ${pick([413, 500, 422])}`,
+                  ],
+                ]
+              : [
+                  ["tool", `⏺ Bash(pnpm test ${slug})`],
+                  [
+                    "ok",
+                    `  ⎿  ✓ ${randi(6, 32)} passed (${rand(0.8, 3.6).toFixed(1)}s)`,
+                  ],
+                ];
+          },
+          () => {
+            a.activity = "Type-checking";
+            return [
+              ["tool", "⏺ Bash(pnpm typecheck)"],
+              ["ok", "  ⎿  Found 0 errors"],
+            ];
+          },
+          () => {
+            a.activity = "Thinking";
+            return [
+              [
+                "think",
+                `✻ ${pick(["Considering edge cases for", "Planning the shape of", "Checking existing patterns in"])} ${t.title.toLowerCase()}…`,
+              ],
+            ];
+          },
+          () => {
+            a.activity = "Working";
+            return [
+              [
+                "say",
+                `⏺ ${pick(["Now I'll wire up", "Next, adding", "I'll refactor"])} ${pick(["the API route", "the UI state", "the service layer", "input validation", "the empty state"])}.`,
+              ],
+            ];
+          },
+        ];
+        return pick(steps)();
+      }
+
+      /** Lead-specific tool calls. */
+      function johnStep(a) {
+        a.activity = pick(["Planning", "Reviewing", "Coordinating"]);
+        return pick([
+          () => [
+            ["tool", "⏺ Read(docs/plan/phase-3.md)"],
+            ["out", `  ⎿  Read ${randi(120, 180)} lines`],
+          ],
+          () => [
+            ["tool", '⏺ TaskList(status: "in_progress")'],
+            [
+              "out",
+              `  ⎿  ${tasks.filter((t) => t.col === "progress").length} tasks in progress`,
+            ],
+          ],
+          () => [
+            ["tool", "⏺ SandboxStatus(bob, alice)"],
+            ["ok", "  ⎿  2 sandboxes healthy · cpu 38% · mem 1.2 GB"],
+          ],
+          () => [
+            ["tool", `⏺ Read(PR #${Math.max(12, nextPR - 1)} summary)`],
+            ["out", "  ⎿  CodeRabbit: 0 blocking issues"],
+          ],
+          () => [
+            [
+              "think",
+              "✻ Sequencing the next tasks so Bob and Alice don't collide…",
+            ],
+          ],
+          () => [
+            [
+              "say",
+              "⏺ Plan is on track. Next milestone: Ask endpoint + citations.",
+            ],
+          ],
+        ])();
+      }
+
+      /** Asks for human input; John (or the owner) answers automatically after a few seconds unless the user clicks first. */
+      function askInput(a, question, answerer, onResolved) {
+        const id = ++inputSeq;
+        a.pendingInput = { id, ...question, onResolved };
+        setState(a, "input");
+        say(a, "⏺ I need input before continuing:", "warn");
+        say(a, `  ? ${question.q}`, "warn");
+        question.opts.forEach((o, i) => say(a, `    ${i + 1}. ${o}`, "dim"));
+        log(`${a.name} needs input`, STATE.input.css);
+        after(rand(4, 6), () => resolveInput(a, id, answerer, 0));
+      }
+
+      function resolveInput(a, id, by, idx) {
+        const p = a.pendingInput;
+        if (!p || p.id !== id) return; // already answered
+        a.pendingInput = null;
+        say(a, `> ${by}: ${p.opts[idx]}`, "prompt");
+        log(`${by} answered ${a.name}: “${p.opts[idx]}”`, "#a78bfa");
+        if (by === "John")
+          say(john, `⏺ Answered ${a.name}: ${p.opts[idx]}`, "say");
+        p.onResolved();
+      }
+
+      /** Work for `dur` seconds, optionally pausing once for input, then call `then`. */
+      function work(a, dur, allowInput, then) {
+        setState(a, "working");
+        a.nextStep = simTime + 0.4;
+        if (allowInput && chance(0.4)) {
+          const first = dur * rand(0.35, 0.6);
+          after(first, () =>
+            askInput(a, pick(DEV_QUESTIONS), "John", () => {
+              setState(a, "working");
+              after(dur - first, then);
+            }),
+          );
+        } else after(dur, then);
+      }
+
+      function startNext(a) {
+        const task = tasks
+          .filter((t) => t.owner === a.id && t.col === "todo")
+          .sort((x, y) => x.enteredAt - y.enteredAt)[0];
+        if (!task) {
+          a.task = null;
+          setState(a, "idle");
+          after(2, () => startNext(a));
+          return;
+        }
+        a.task = task;
+        moveTask(task, "progress");
+        say(a, `> Implement ${task.id}: ${task.title}`, "prompt");
+        log(`${a.name} started ${task.id} · ${task.title}`, STATE.working.css);
+        work(a, rand(7, 11), true, () => openPR(a));
+      }
+
+      function openPR(a) {
+        const task = a.task;
+        const pr = {
+          num: nextPR++,
+          title: task.title,
+          agent: a,
+          task,
+          status: "queued",
+          rounds: 0,
+        };
+        prs.push(pr);
+        task.pr = pr.num;
+        moveTask(task, "review");
+        setState(a, "waiting");
+        say(
+          a,
+          `⏺ Bash(gh pr create --title "${task.id}: ${task.title}")`,
+          "tool",
+        );
+        say(a, `  ⎿  https://github.com/jsm/askwell/pull/${pr.num}`, "out");
+        say(a, `◷ Waiting for CodeRabbit to review #${pr.num}…`, "dim");
+        log(`${a.name} opened PR #${pr.num}`, STATE.waiting.css);
+        markDirty("prs");
+        new Token(pr);
+      }
+
+      function startReview(tk) {
+        const pr = tk.pr;
+        pr.status = "reviewing";
+        markDirty("prs");
+        setGateMode("reviewing");
+        log(`CodeRabbit is reviewing #${pr.num}`, STATE.waiting.css);
+        after(rand(3, 4.5), () => verdict(tk));
+      }
+
+      function verdict(tk) {
+        const pr = tk.pr,
+          a = pr.agent;
+        gate.busy = null;
+        gate.cooldownUntil = simTime + 1.3;
+        const pass = pr.rounds > 0 || chance(0.72);
+        if (pass) {
+          pr.status = "approved";
+          markDirty("prs");
+          setGateMode("passed");
+          setState(a, "passed");
+          say(a, `✓ CodeRabbit approved PR #${pr.num}`, "ok");
+          log(`CodeRabbit approved #${pr.num}`, STATE.passed.css);
+          tk.go("toMain", () => merge(pr));
+          after(3.4, () => {
+            a.task = null;
+            setState(a, "idle");
+            say(a, "✻ Idle — waiting for the next task", "dim");
+            after(rand(1.2, 2.4), () => startNext(a));
+          });
+        } else {
+          const c = pick(REVIEW_COMMENTS);
+          pr.status = "changes";
+          pr.rounds++;
+          markDirty("prs");
+          setGateMode("changes");
+          say(a, `✗ CodeRabbit requested changes on #${pr.num}: ${c}`, "err");
+          log(`CodeRabbit requested changes on #${pr.num}`, STATE.input.css);
+          tk.go("back");
+          say(a, `> Address the review feedback on #${pr.num}`, "prompt");
+          work(a, rand(4, 6), false, () => {
+            pr.status = "queued";
+            markDirty("prs");
+            setState(a, "waiting");
+            say(a, "⏺ Bash(git push)", "tool");
+            say(a, `  ⎿  Pushed fixes to #${pr.num}`, "out");
+            log(`${a.name} pushed fixes to #${pr.num}`, STATE.waiting.css);
+            new Token(pr);
+          });
+        }
+      }
+
+      function merge(pr) {
+        pr.status = "merged";
+        mergedCount++;
+        moveTask(pr.task, "done");
+        racks[0].pulse = 1;
+        say(pr.agent, `⏺ Merged #${pr.num} into main`, "ok");
+        log(`#${pr.num} merged into main`, "#a78bfa");
+        markDirty("prs", "plan");
+        // Keep the DONE column short
+        const done = tasks
+          .filter((t) => t.col === "done")
+          .sort((x, y) => y.enteredAt - x.enteredAt);
+        for (const t of done.slice(6)) tasks.splice(tasks.indexOf(t), 1);
+        after(6, () => {
+          prs.splice(prs.indexOf(pr), 1);
+          markDirty("prs");
+        });
+      }
+
+      function addTask(owner) {
+        const title = TASK_POOL[poolIdx++ % TASK_POOL.length];
+        const t = {
+          id: `P3-T${String(nextTaskNum++).padStart(2, "0")}`,
+          title,
+          owner: owner.id,
+          col: "todo",
+          enteredAt: simTime,
+        };
+        tasks.push(t);
+        markDirty("plan");
+        return t;
+      }
+
+      /** The lead keeps the backlog full, answers questions, and occasionally needs a human. */
+      function johnNext() {
+        const needy = devs.find(
+          (d) =>
+            tasks.filter((t) => t.owner === d.id && t.col === "todo").length <
+            2,
+        );
+        if (needy) {
+          john.task = { id: null, title: `Planning work for ${needy.name}` };
+          say(john, `> Plan the next task for ${needy.name}`, "prompt");
+          work(john, rand(3, 4.5), false, () => {
+            const t = addTask(needy);
+            say(
+              john,
+              `⏺ TaskCreate(${t.id}: "${t.title}", owner: ${needy.id})`,
+              "tool",
+            );
+            say(john, "  ⎿  Added to TODO", "ok");
+            log(
+              `John planned ${t.id} · ${t.title} for ${needy.name}`,
+              "#a78bfa",
+            );
+            johnNext();
+          });
+          return;
+        }
+        const r = Math.random();
+        const reviewing = prs.find(
+          (p) => p.status === "reviewing" || p.status === "queued",
+        );
+        if (r < 0.14) {
+          john.task = { id: null, title: "Scope check with the owner" };
+          askInput(john, pick(JOHN_QUESTIONS), "Owner", () => {
+            setState(john, "working");
+            after(1.5, johnNext);
+          });
+        } else if (r < 0.3 && reviewing) {
+          john.task = {
+            id: null,
+            title: `Waiting on review of #${reviewing.num}`,
+          };
+          setState(john, "waiting");
+          say(john, `◷ Waiting for CodeRabbit on #${reviewing.num}…`, "dim");
+          after(rand(3, 5), johnNext);
+        } else if (r < 0.72) {
+          john.task = {
+            id: null,
+            title: pick([
+              "Reviewing the Phase 3 plan",
+              "Checking sandbox health",
+              "Reading PR summaries",
+              "Updating the roadmap",
+            ]),
+          };
+          say(john, `> ${john.task.title}`, "prompt");
+          work(john, rand(4, 7), false, johnNext);
+        } else {
+          john.task = null;
+          setState(john, "idle");
+          after(rand(2.5, 4), johnNext);
+        }
+      }
+
+      /** Emits fake tool output while an agent is working. */
+      function updateAgentTerminals() {
+        for (const a of AGENTS) {
+          if (a.state !== "working" || simTime < a.nextStep || !a.task)
+            continue;
+          const [first, second] = a.id === "john" ? johnStep(a) : devStep(a);
+          say(a, first[1], first[0]);
+          if (second)
+            after(rand(0.25, 0.55), () => {
+              if (a.state === "working") say(a, second[1], second[0]);
+            });
+          a.nextStep = simTime + rand(0.9, 1.7);
+        }
+      }
+
+      /* =====================================================================
+   12. UI OVERLAY (team cards, feed, terminal panel, board modal)
+===================================================================== */
+      const $ = (id) => document.getElementById(id);
+      const esc = (s) =>
+        String(s).replace(
+          /[&<>"]/g,
+          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+        );
+
+      // Team cards
+      const teamEl = $("team");
+      for (const a of AGENTS) {
+        const el = document.createElement("button");
+        el.className = "agent-card glass";
+        el.type = "button";
+        el.innerHTML = `
+    <div class="ac-top">
+      <div class="avatar" style="--c:${a.color}">${a.name[0]}</div>
+      <div class="ac-name"><b>${a.name}</b><span>${a.role}</span></div>
+      <span class="badge"></span>
+    </div>
+    <div class="ac-task"></div>
+    <div class="ac-meta"><span>sandbox-${a.id}</span><div class="ac-bar"><i></i></div><span class="since"></span></div>`;
+        el.addEventListener("click", () => focusPod(a));
+        teamEl.appendChild(el);
+        a.card = {
+          el,
+          badge: el.querySelector(".badge"),
+          task: el.querySelector(".ac-task"),
+          since: el.querySelector(".since"),
+        };
+      }
+
+      function renderTeam() {
+        for (const a of AGENTS) {
+          const st = STATE[a.state],
+            c = a.card;
+          c.el.dataset.state = a.state;
+          c.el.style.setProperty("--state-color", st.css);
+          c.badge.dataset.state = a.state;
+          c.badge.textContent = st.label;
+          if (a.task) {
+            c.task.className = "ac-task";
+            c.task.innerHTML = a.task.id
+              ? `<span class="tid">${esc(a.task.id)}</span>${esc(a.task.title)}`
+              : esc(a.task.title);
+          } else {
+            c.task.className = "ac-task none";
+            c.task.textContent = "No active task";
+          }
+          c.el.classList.toggle("focused", focused === a);
+        }
+      }
+
+      function updateSince() {
+        for (const a of AGENTS)
+          a.card.since.textContent = `${Math.floor(simTime - a.stateSince)}s`;
+      }
+
+      // Activity feed
+      const feedList = $("feedList");
+      function log(text, color = "#94a3b8") {
+        const li = document.createElement("li");
+        const now = new Date();
+        const time = [now.getHours(), now.getMinutes(), now.getSeconds()]
+          .map((n) => String(n).padStart(2, "0"))
+          .join(":");
+        const html = esc(text)
+          .replace(/\b(John|Bob|Alice|CodeRabbit|Owner|You)\b/g, "<b>$1</b>")
+          .replace(/#(\d+)/g, '<span class="pr">#$1</span>');
+        li.style.setProperty("--c", color);
+        li.innerHTML = `<time>${time}</time><span>${html}</span>`;
+        feedList.prepend(li);
+        while (feedList.children.length > 7) feedList.lastChild.remove();
+      }
+
+      // Terminal panel
+      const termEl = $("terminal"),
+        termBody = $("termBody"),
+        termFoot = $("termFoot"),
+        termTitle = $("termTitle");
+      let termAgent = null,
+        termSeq = 0,
+        footSig = "";
+
+      function lineHTML(ln) {
+        const t = esc(ln.text);
+        if (ln.kind === "tool")
+          return `<div class="tl k-tool"><span class="dot">⏺</span>${t.replace(/^⏺/, "")}</div>`;
+        if (ln.kind === "prompt")
+          return `<div class="tl"><span class="k-prompt">${t}</span></div>`;
+        return `<div class="tl k-${ln.kind}">${t}</div>`;
+      }
+
+      function openTerminal(a) {
+        termAgent = a;
+        termTitle.textContent = `${a.id}@sandbox-${a.id} — claude — ~/askwell`;
+        termBody.innerHTML =
+          `<div class="term-welcome"><span class="star">✻</span> Welcome to <b>Claude Code</b>!<div>/help for help · /status for your current setup</div><div>cwd: /workspace/askwell · agent: ${a.name} (${a.role})</div></div>` +
+          a.term.lines.map(lineHTML).join("");
+        termBody
+          .querySelectorAll(".tl")
+          .forEach((n) => n.classList.remove("tl")); // no reveal animation for history
+        termSeq = a.term.seq;
+        footSig = "";
+        termEl.classList.add("open");
+        syncTerminal(true);
+        termBody.scrollTop = termBody.scrollHeight;
+      }
+
+      function closeTerminalPanel() {
+        termEl.classList.remove("open");
+        termAgent = null;
+      }
+
+      /** Appends new lines and refreshes the footer (status / input question). */
+      function syncTerminal() {
+        const a = termAgent;
+        if (!a) return;
+        if (a.term.seq > termSeq) {
+          const atBottom =
+            termBody.scrollHeight - termBody.scrollTop - termBody.clientHeight <
+            60;
+          const fresh = a.term.lines.filter((l) => l.seq > termSeq);
+          termBody.insertAdjacentHTML(
+            "beforeend",
+            fresh.map(lineHTML).join(""),
+          );
+          termSeq = a.term.seq;
+          while (termBody.children.length > 260) termBody.children[1].remove();
+          if (atBottom) termBody.scrollTop = termBody.scrollHeight;
+        }
+        // Footer: only rebuild the DOM when the state/question changes
+        const sig = `${a.state}|${a.pendingInput?.id || ""}`;
+        if (sig !== footSig) {
+          footSig = sig;
+          if (a.pendingInput) {
+            const p = a.pendingInput;
+            termFoot.innerHTML = `<div class="ask"><div class="q"><b>? ${esc(a.name)} needs your input</b><br>${esc(p.q)}</div><div class="opts">${p.opts.map((o, i) => `<button data-i="${i}">${i + 1}. ${esc(o)}</button>`).join("")}</div></div>`;
+            termFoot
+              .querySelectorAll("button")
+              .forEach((b) =>
+                b.addEventListener("click", () =>
+                  resolveInput(a, p.id, "You", +b.dataset.i),
+                ),
+              );
+          } else {
+            termFoot.innerHTML = `<div class="status-line" data-state="${a.state}"><span class="spin"></span><span class="status-text"></span></div><div class="prompt-line">&gt; <span class="cursor"></span></div>`;
+          }
+        }
+        const spin = termFoot.querySelector(".spin"),
+          text = termFoot.querySelector(".status-text");
+        if (spin && text) {
+          const map = {
+            working: `${a.activity}… (esc to close)`,
+            waiting: "Waiting for CodeRabbit review…",
+            passed: "Review passed — merging",
+            idle: "Idle · waiting for the next task",
+          };
+          spin.textContent =
+            a.state === "working"
+              ? SPINNER[Math.floor(simTime * 8) % SPINNER.length]
+              : a.state === "passed"
+                ? "✓"
+                : a.state === "waiting"
+                  ? "◷"
+                  : "·";
+          text.textContent = map[a.state] || "";
+        }
+      }
+
+      // Board modal (plan wall / PR board as flat panels)
+      const modalEl = $("modal"),
+        modalBody = $("modalBody"),
+        modalTitle = $("modalTitle");
+      let modalKind = null;
+
+      function openModal(kind) {
+        modalKind = kind;
+        modalEl.classList.add("open");
+        renderModal();
+      }
+      function closeModal() {
+        modalEl.classList.remove("open");
+        modalKind = null;
+      }
+
+      function renderModal() {
+        if (modalKind === "plan") {
+          modalTitle.innerHTML = `Plan wall <small>Askwell · Phase 3 · ${tasks.length} tasks</small>`;
+          modalBody.innerHTML = `<div class="kanban">${COLS.map((col) => {
+            const list = tasks
+              .filter((t) => t.col === col)
+              .sort((a, b) =>
+                col === "done"
+                  ? b.enteredAt - a.enteredAt
+                  : a.enteredAt - b.enteredAt,
+              );
+            return `<div class="kcol"><h3>${COL_TITLES[col]}<span>${list.length}</span></h3>${list
+              .map((t) => {
+                const o = agentById[t.owner];
+                return `<div class="kcard" style="--c:${o.color}"><div class="id">${t.col === "done" ? "✓ " : ""}${t.id}</div><div class="t">${esc(t.title)}</div><div class="o"><span>${o.name}</span>${t.pr && t.col === "review" ? `<em>PR #${t.pr}</em>` : ""}</div></div>`;
+              })
+              .join("")}</div>`;
+          }).join("")}</div>`;
+        } else if (modalKind === "prs") {
+          const gateText = {
+            idle: "Idle",
+            reviewing: "Reviewing",
+            passed: "Approved a PR",
+            changes: "Requested changes",
+          }[gate.mode];
+          modalTitle.innerHTML = `Pull requests <small>reviewed by CodeRabbit</small>`;
+          modalBody.innerHTML =
+            `<div class="gate-summary"><span>Review gate: <b>${gateText}</b></span><span>Queue: <b>${gate.queue.length}</b></span><span>Merged into main: <b>${mergedCount}</b></span></div>` +
+            (prs.length
+              ? `<table class="prlist"><thead><tr><th>#</th><th>Title</th><th>Author</th><th class="hide-sm">Task</th><th>Review</th></tr></thead><tbody>${prs
+                  .map((pr) => {
+                    const st = PR_STATUS[pr.status];
+                    return `<tr><td class="num">#${pr.num}</td><td>${esc(pr.title)}</td><td><span class="who" style="--c:${pr.agent.color}"><i></i>${pr.agent.name}</span></td><td class="hide-sm" style="font-family:var(--mono);color:var(--muted)">${pr.task.id}</td><td><span class="pill" style="--c:${st.css}">${st.label}</span></td></tr>`;
+                  })
+                  .join("")}</tbody></table>`
+              : `<div class="empty">No open PRs — everything is merged ✓</div>`);
+        }
+      }
+
+      $("termClose").addEventListener("click", () => unfocus());
+      $("modalClose").addEventListener("click", closeModal);
+      modalEl.addEventListener("click", (e) => {
+        if (e.target === modalEl) closeModal();
+      });
+      addEventListener("keydown", (e) => {
+        if (e.key !== "Escape") return;
+        if (modalKind) closeModal();
+        else if (focused) unfocus();
+      });
+
+      /* =====================================================================
+   13. CAMERA: overview framing, pod focus, smooth tweens, view offset
+===================================================================== */
+      let focused = null;
+      const tween = {
+        active: false,
+        t: 0,
+        dur: 1.2,
+        p0: new THREE.Vector3(),
+        p1: new THREE.Vector3(),
+        q0: new THREE.Vector3(),
+        q1: new THREE.Vector3(),
+        lift: 0,
+      };
+      const viewShift = { x: 0, y: 0 };
+      const isNarrow = () => innerWidth <= 760;
+      const termWidth = () => Math.min(560, innerWidth * 0.44) + 16;
+
+      /** Screen region (px) not covered by overlay panels; the camera centres content in it. */
+      function freeRegion() {
+        const W = innerWidth,
+          H = innerHeight;
+        if (isNarrow())
+          return focused
+            ? { x0: 0, x1: W, y0: 150, y1: H * 0.42 }
+            : { x0: 0, x1: W, y0: 150, y1: H - 150 };
+        const left = 300;
+        if (focused) {
+          const right = W - termWidth() - 16;
+          return {
+            x0: right - left > 360 ? left : 0,
+            x1: right,
+            y0: 70,
+            y1: H,
+          };
+        }
+        return { x0: left, x1: W, y0: 70, y1: H };
+      }
+
+      /** Distance needed so an object of world size (w,h) fills `fill` of the free region. */
+      function fitDistance(w, h, fill) {
+        const W = innerWidth,
+          H = innerHeight,
+          r = freeRegion();
+        const tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+        const dw =
+          ((w / fill) * W) / ((r.x1 - r.x0) * 2 * tanV * camera.aspect);
+        const dh = ((h / fill) * H) / ((r.y1 - r.y0) * 2 * tanV);
+        return Math.max(dw, dh);
+      }
+
+      function overviewPose() {
+        const target = V3(4.0, 0.4, -1.2);
+        const dir = V3(-0.04, 0.58, 0.82).normalize();
+        const D = clamp(fitDistance(isNarrow() ? 25 : 31, 15, 1), 22, 110); // crop a little on phones
+        return { pos: target.clone().addScaledVector(dir, D), target };
+      }
+
+      function podPose(a) {
+        const [w, h, d] = a.size;
+        const target = V3(a.pos[0], h * 0.55, a.pos[2] + d / 2);
+        const dir = V3(0.16, 0.3, 1).normalize();
+        const D = Math.max(4.5, fitDistance(w, h, 0.72));
+        return { pos: target.clone().addScaledVector(dir, D), target };
+      }
+
+      function flyTo(pose, dur = 1.2, lift = 1.2) {
+        tween.active = true;
+        tween.t = 0;
+        tween.dur = dur;
+        tween.lift = lift;
+        tween.p0.copy(camera.position);
+        tween.p1.copy(pose.pos);
+        tween.q0.copy(controls.target);
+        tween.q1.copy(pose.target);
+        controls.enabled = false;
+      }
+
+      function focusPod(a) {
+        if (modalKind) closeModal();
+        focused = a;
+        flyTo(podPose(a));
+        setTimeout(() => {
+          if (focused === a) openTerminal(a);
+        }, 450);
+        markDirty("team");
+      }
+
+      function unfocus() {
+        if (!focused) return;
+        focused = null;
+        closeTerminalPanel();
+        flyTo(overviewPose());
+        markDirty("team");
+      }
+
+      function updateCamera(dt) {
+        if (tween.active) {
+          tween.t = Math.min(1, tween.t + dt / tween.dur);
+          const e = easeInOut(tween.t);
+          camera.position.lerpVectors(tween.p0, tween.p1, e);
+          camera.position.y += Math.sin(e * Math.PI) * tween.lift;
+          controls.target.lerpVectors(tween.q0, tween.q1, e);
+          if (tween.t >= 1) {
+            tween.active = false;
+            controls.enabled = true;
+          }
+        }
+        // Shift the projection so content centres in the area not covered by UI panels
+        const r = freeRegion();
+        const tx = innerWidth / 2 - (r.x0 + r.x1) / 2,
+          ty = innerHeight / 2 - (r.y0 + r.y1) / 2;
+        viewShift.x += (tx - viewShift.x) * damp(5, dt);
+        viewShift.y += (ty - viewShift.y) * damp(5, dt);
+        camera.setViewOffset(
+          innerWidth,
+          innerHeight,
+          viewShift.x,
+          viewShift.y,
+          innerWidth,
+          innerHeight,
+        );
+      }
+
+      /* =====================================================================
+   14. INTERACTION: picking, hover tooltip, resize
+===================================================================== */
+      const raycaster = new THREE.Raycaster();
+      const ndc = new THREE.Vector2();
+      const tooltip = $("tooltip");
+      let downAt = null,
+        hoverPending = null;
+
+      function pickAt(x, y) {
+        ndc.set((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1);
+        raycaster.setFromCamera(ndc, camera);
+        const hit = raycaster.intersectObjects(pickables, false)[0];
+        return hit ? hit.object.userData.pick : null;
+      }
+
+      function describe(p) {
+        if (!p) return "";
+        if (p.type === "pod") return `Open ${p.agent.name}'s terminal`;
+        return p.type === "plan" ? "Open the plan wall" : "Open the PR board";
+      }
+
+      // A click only counts if the pointer barely moved (otherwise it was an orbit drag)
+      canvas.addEventListener("pointerdown", (e) => {
+        downAt = { x: e.clientX, y: e.clientY };
+      });
+      canvas.addEventListener("pointerup", () => {
+        setTimeout(() => (downAt = null), 0);
+      });
+      canvas.addEventListener("click", (e) => {
+        const moved = downAt
+          ? Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y)
+          : 0;
+        if (moved > 6) return;
+        const p = pickAt(e.clientX, e.clientY);
+        if (!p) return;
+        if (p.type === "pod") focusPod(p.agent);
+        else openModal(p.type);
+      });
+      canvas.addEventListener("pointermove", (e) => {
+        if (e.pointerType === "mouse")
+          hoverPending = { x: e.clientX, y: e.clientY };
+      });
+      canvas.addEventListener("pointerleave", () => {
+        hoverPending = null;
+        tooltip.classList.remove("show");
+        canvas.style.cursor = "";
+      });
+
+      /** Hover raycast at most once per frame. */
+      function updateHover() {
+        if (!hoverPending) return;
+        const { x, y } = hoverPending;
+        hoverPending = null;
+        if (downAt) return;
+        const p = pickAt(x, y);
+        canvas.style.cursor = p ? "pointer" : "";
+        if (p) {
+          tooltip.textContent = describe(p);
+          tooltip.style.left = x + "px";
+          tooltip.style.top = y + "px";
+          tooltip.classList.add("show");
+        } else tooltip.classList.remove("show");
+      }
+
+      function onResize() {
+        const W = innerWidth,
+          H = innerHeight;
+        camera.aspect = W / H;
+        camera.updateProjectionMatrix();
+        renderer.setPixelRatio(pixelRatio());
+        renderer.setSize(W, H, false);
+        composer.setPixelRatio(pixelRatio());
+        composer.setSize(W, H);
+        bloom.resolution.set(W, H);
+        viewShift.x = viewShift.y = 0;
+        // Re-frame whatever we're looking at so it fits the new size
+        const pose = focused ? podPose(focused) : overviewPose();
+        if (!tween.active) {
+          camera.position.copy(pose.pos);
+          controls.target.copy(pose.target);
+        }
+      }
+      addEventListener("resize", onResize);
+
+      /* =====================================================================
+   15. BUILD THE WORLD + START
+===================================================================== */
+      const env = buildEnvironment();
+      for (const a of AGENTS) a.pod = createPod(a);
+      const planWall = createPlanWall();
+      const gate = createGate();
+      const prBoard = createPRBoard();
+      const racks = RACKS.map(createRack);
+      const pipes = [
+        createPipe(
+          agentById.bob,
+          [
+            V3(-7.5, 3.12, 2.2),
+            V3(-7.5, 6.3, 2.2),
+            V3(13, 6.3, 2.2),
+            V3(13, 6.3, RACK_Z),
+            V3(13, 3.62, RACK_Z),
+          ],
+          "#60a5fa",
+        ),
+        createPipe(
+          agentById.alice,
+          [
+            V3(-1.5, 3.12, 2.6),
+            V3(-1.5, 5.5, 2.6),
+            V3(15.4, 5.5, 2.6),
+            V3(15.4, 5.5, RACK_Z),
+            V3(15.4, 3.62, RACK_Z),
+          ],
+          "#f472b6",
+        ),
+      ];
+
+      // Seed terminals so the screens aren't empty at first
+      for (const a of AGENTS) {
+        say(a, `✻ Claude Code · sandbox-${a.id} ready`, "think");
+        say(a, "⏺ Bash(git pull origin main)", "tool");
+        say(a, "  ⎿  Already up to date.", "out");
+        say(a, "⏺ Read(CLAUDE.md)", "tool");
+        say(a, `  ⎿  Read ${randi(60, 120)} lines`, "out");
+      }
+      log("3 sandboxes started: john, bob, alice", STATE.passed.css);
+      log("John loaded the Phase 3 plan (6 tasks)", "#a78bfa");
+      for (const a of AGENTS) setState(a, "idle");
+
+      // Kick off the simulation
+      after(0.8, johnNext);
+      after(1.2, () => startNext(agentById.bob));
+      after(3.0, () => startNext(agentById.alice));
+
+      const start = overviewPose();
+      camera.position.copy(start.pos);
+      controls.target.copy(start.target);
+      // Gentle intro sweep
+      camera.position.add(V3(-6, 6, 8));
+      flyTo(start, 2.2, 0);
+
+      /* =====================================================================
+   16. MAIN LOOP
+===================================================================== */
+      const clock = new THREE.Clock();
+      const TIME_SCALE = clamp(
+        +new URLSearchParams(location.search).get("speed") || 1,
+        0.1,
+        30,
+      ); // e.g. index.html?speed=3
+      let uiTick = 0;
+
+      renderer.setAnimationLoop(() => {
+        const dt = Math.min(clock.getDelta(), 0.05) * TIME_SCALE; // clamp so hidden tabs don't jump the sim
+        simTime += dt;
+        const t = simTime;
+
+        runTimers();
+        updateAgentTerminals();
+        updateGateQueue();
+
+        for (const a of AGENTS) updatePod(a, dt, t);
+        updateGate(dt, t);
+        for (let i = tokens.length - 1; i >= 0; i--) {
+          tokens[i].update(dt, t);
+          if (tokens[i].dead) {
+            tokens[i].dispose();
+            tokens.splice(i, 1);
+          }
+        }
+        updateRacks(dt, t);
+        updatePipes(dt);
+
+        if (dirty.plan) {
+          dirty.planWall = true;
+        }
+        updatePlanWall(dt, t);
+        if (dirty.prs) drawPRBoard();
+        prBoard.neonMat.color.copy(gate.color).multiplyScalar(1.1);
+
+        // Dust drift
+        const dp = env.dust.geometry.attributes.position.array;
+        for (let i = 0; i < env.speed.length; i++) {
+          dp[i * 3 + 1] += env.speed[i] * dt;
+          if (dp[i * 3 + 1] > 9) dp[i * 3 + 1] = 0;
+        }
+        env.dust.geometry.attributes.position.needsUpdate = true;
+
+        // HTML overlay (cheap, throttled)
+        if (dirty.team) renderTeam();
+        if (modalKind && (dirty.plan || dirty.prs)) renderModal();
+        dirty.plan = dirty.prs = dirty.team = false;
+        if (t - uiTick > 0.1) {
+          uiTick = t;
+          syncTerminal();
+          updateSince();
+        }
+
+        updateCamera(dt);
+        controls.update();
+        updateHover();
+        composer.render(dt);
+      });
+    </script>
+  </body>
+</html>

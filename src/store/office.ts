@@ -1,0 +1,158 @@
+// The office store: the only place that talks to the data source.
+// Components and the PixiJS scene read from here.
+
+import { create } from "zustand";
+import { createMockSource } from "../data/mock/mockSource";
+import type { DataPreset, OfficeDataSource, OfficeEvent, SimSpeed } from "../data/source";
+import type { AgentConfig, AgentStatus, OfficeSnapshot } from "../data/types";
+import { appendTerminal, clearTerminals } from "./terminal";
+
+export interface LoggedEvent {
+  n: number;
+  at: number;
+  event: OfficeEvent;
+}
+
+interface OfficeState {
+  snap: OfficeSnapshot | null;
+  epoch: number; // bumps on every full snapshot (e.g. a preset reload)
+  events: LoggedEvent[]; // last 20, terminal output excluded
+  terminalChunks: number;
+  speed: SimSpeed;
+  presets: DataPreset[] | null;
+  source: OfficeDataSource;
+}
+
+// Swap this one line for a WebSocket source later.
+const source: OfficeDataSource = createMockSource();
+
+export const useOffice = create<OfficeState>(() => ({
+  snap: null,
+  epoch: 0,
+  events: [],
+  terminalChunks: 0,
+  speed: 1,
+  presets: source.dev?.presets ?? null,
+  source,
+}));
+
+let eventN = 0;
+
+function upsert<T>(list: T[], item: T, same: (a: T) => boolean): T[] {
+  const i = list.findIndex(same);
+  if (i === -1) return [...list, item];
+  const next = list.slice();
+  next[i] = item;
+  return next;
+}
+
+function reduce(snap: OfficeSnapshot, e: OfficeEvent): OfficeSnapshot {
+  switch (e.type) {
+    case "snapshot":
+      return e.snapshot;
+    case "config.updated":
+      return { ...snap, config: e.config };
+    case "agent.updated":
+      return { ...snap, agents: upsert(snap.agents, e.agent, (a) => a.agentId === e.agent.agentId) };
+    case "agent.removed":
+      return { ...snap, agents: snap.agents.filter((a) => a.agentId !== e.agentId) };
+    case "board.updated":
+      return { ...snap, boards: upsert(snap.boards, e.board, (b) => b.id === e.board.id) };
+    case "task.updated":
+      return { ...snap, tasks: upsert(snap.tasks, e.task, (t) => t.id === e.task.id) };
+    case "task.removed":
+      return { ...snap, tasks: snap.tasks.filter((t) => t.id !== e.taskId) };
+    case "pr.updated":
+      return { ...snap, pullRequests: upsert(snap.pullRequests, e.pr, (p) => p.number === e.pr.number) };
+    case "env.updated":
+      return { ...snap, environments: upsert(snap.environments, e.env, (x) => x.name === e.env.name) };
+    case "env.removed":
+      return { ...snap, environments: snap.environments.filter((x) => x.name !== e.name) };
+    case "message":
+      return { ...snap, messages: [e.message, ...snap.messages].slice(0, 100) };
+    case "activity":
+      return { ...snap, activity: [e.event, ...snap.activity].slice(0, 50) };
+    case "terminal.output":
+      return snap;
+  }
+}
+
+function handle(e: OfficeEvent) {
+  if (e.type === "terminal.output") {
+    appendTerminal(e.agentId, e.data);
+    useOffice.setState((s) => ({ terminalChunks: s.terminalChunks + 1 }));
+    return;
+  }
+  if (e.type === "snapshot") clearTerminals();
+  useOffice.setState((s) => {
+    const base = s.snap ?? (e.type === "snapshot" ? e.snapshot : null);
+    if (!base) return {};
+    eventN += 1;
+    return {
+      snap: reduce(base, e),
+      epoch: e.type === "snapshot" ? s.epoch + 1 : s.epoch,
+      events: [{ n: eventN, at: Date.now(), event: e }, ...s.events].slice(0, 20),
+    };
+  });
+}
+
+let disconnect: (() => void) | null = null;
+
+export function connectOffice() {
+  if (disconnect) return disconnect;
+  disconnect = source.connect(handle);
+  return () => {
+    disconnect?.();
+    disconnect = null;
+  };
+}
+
+// ---------------------------------------------------------------- actions
+
+export const officeActions = {
+  sendTerminalInput: (agentId: string, data: string) => source.sendTerminalInput(agentId, data),
+  assignTask: (taskId: string, agentId: string) => source.assignTask(taskId, agentId),
+  addAgent: source.addAgent.bind(source),
+  updateAgent: source.updateAgent.bind(source),
+  removeAgent: source.removeAgent.bind(source),
+  updateSandbox: source.updateSandbox.bind(source),
+  setSecret: source.setSecret.bind(source),
+  removeSecret: source.removeSecret.bind(source),
+  updateWorkflow: source.updateWorkflow.bind(source),
+  updateProject: source.updateProject.bind(source),
+  createBoard: source.createBoard.bind(source),
+  updateBoard: source.updateBoard.bind(source),
+  setSpeed(speed: SimSpeed) {
+    source.dev?.setSpeed(speed);
+    useOffice.setState({ speed });
+  },
+  loadPreset(id: string) {
+    source.dev?.loadPreset(id);
+  },
+};
+
+// ---------------------------------------------------------------- selectors
+
+export interface AgentView {
+  config: AgentConfig;
+  status: AgentStatus;
+}
+
+/** Team in config order, joined with live status. */
+export function selectTeam(snap: OfficeSnapshot | null): AgentView[] {
+  if (!snap) return [];
+  return snap.config.team.flatMap((config) => {
+    const status = snap.agents.find((a) => a.agentId === config.id);
+    return status ? [{ config, status }] : [];
+  });
+}
+
+export const reviewToolLabel = {
+  coderabbit: "CodeRabbit",
+  greptile: "Greptile",
+  copilot: "Copilot",
+  human: "Human review",
+  custom: "Custom check",
+} as const;
+
+export const deployToolLabel = { instacloud: "InstaCloud", vercel: "Vercel", custom: "Custom deploy" } as const;
