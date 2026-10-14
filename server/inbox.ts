@@ -8,7 +8,7 @@ import { log } from "./lib/log";
 export interface InboxItem {
   fromId: string; // agent id or "you"
   text: string;
-  kind: "message" | "assign";
+  kind: "message" | "assign" | "notice"; // notice = from HQ itself (e.g. review results)
 }
 
 export interface Keyboard {
@@ -128,7 +128,7 @@ export class Inbox {
 
   private format(items: InboxItem[]): string {
     const lines = items.map((i) =>
-      i.kind === "assign" ? `[HQ] ${i.text}` : `[HQ] Message from ${this.hub.name(i.fromId)}: ${i.text}`,
+      i.kind === "message" ? `[HQ] Message from ${this.hub.name(i.fromId)}: ${i.text}` : `[HQ] ${i.text}`,
     );
     const fromAgent = items.some((i) => i.kind === "message" && i.fromId !== "you");
     // Claude Code submits on newline, so everything goes on one line.

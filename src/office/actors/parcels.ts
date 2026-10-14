@@ -29,6 +29,8 @@ export class BeltPath {
   readonly len: number;
   readonly gateEntry: number | null;
   readonly gateCentre: number | null;
+  /** Where passed parcels wait: just past the gate housing, so they stay visible. */
+  readonly gateExit: number | null;
 
   constructor(private l: OfficeLayout) {
     const b = l.belt;
@@ -36,6 +38,7 @@ export class BeltPath {
     this.len = this.hLen + (b.topY !== null ? b.y - b.topY : 0);
     this.gateEntry = l.gate ? l.gate.x - 6 - b.x0 : null;
     this.gateCentre = l.gate ? l.gate.x + l.gate.w / 2 - b.x0 : null;
+    this.gateExit = l.gate ? l.gate.x + l.gate.w + 10 - b.x0 : null;
   }
 
   pos(s: number): Pt {
@@ -83,7 +86,7 @@ export function updateParcels(parcels: Parcel[], prs: Map<number, PullRequest>, 
       continue;
     }
     if (p.mode === "home") {
-      const s = pr.review === "passed" || pr.merged ? path.gateCentre !== null ? path.gateCentre + 24 : hooks.dropS(p.authorId) : hooks.dropS(p.authorId);
+      const s = pr.review === "passed" || pr.merged ? path.gateExit !== null ? path.gateExit : hooks.dropS(p.authorId) : hooks.dropS(p.authorId);
       p.fly = { from: desk ?? path.pos(s), to: path.pos(s), t: 0, then: "belt", s };
       p.mode = "fly";
     }
@@ -96,7 +99,7 @@ export function updateParcels(parcels: Parcel[], prs: Map<number, PullRequest>, 
     if (!pr || p.mode === "fly" || p.mode === "home") continue;
     let target: number;
     if (pr.merged) target = path.len;
-    else if (pr.review === "passed" || path.gateEntry === null) target = path.gateCentre !== null ? Math.max(p.s, path.gateCentre + 24) : path.len - 30;
+    else if (pr.review === "passed" || path.gateEntry === null) target = path.gateExit !== null ? Math.max(p.s, path.gateExit) : path.len - 30;
     else if (pr.review === "reviewing" && !scanning && path.gateCentre !== null && p.s >= path.gateEntry - 1) {
       target = path.gateCentre;
       p.mode = "scan";

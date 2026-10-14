@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { makeCommands } from "./commands";
 import { startHttp } from "./http";
 import { Hub } from "./hub";
+import { GitHubSync } from "./githubSync";
 import { Inbox } from "./inbox";
 import { Planner } from "./planner";
 import { run } from "./lib/exec";
@@ -66,6 +67,8 @@ async function main() {
     commands: makeCommands(hub, sessions, planner, inbox),
   });
   sessions.startPolling();
+  const github = new GitHubSync(hub, planner, repo.github);
+  github.start();
 
   const url = `${uiOrigin}/?token=${uiToken}`;
   log.info(`\n\n  JSM HQ is running → ${url}\n`);
@@ -78,6 +81,7 @@ async function main() {
   const quit = () => {
     log.info("stopping HQ — agent sessions keep running in tmux");
     sessions.shutdown();
+    github.stop();
     process.exit(0);
   };
   process.on("SIGINT", quit);

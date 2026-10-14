@@ -272,7 +272,8 @@ function MessagesTab({ snap, agent }: { snap: OfficeSnapshot; agent: AgentConfig
   const now = useNow(1000);
   const [draft, setDraft] = useState("");
   const list = snap.messages.filter((m) => m.fromId === agent.id || m.toId === agent.id);
-  const who = (id: string) => (id === HUMAN_ID ? { name: "You", color: "#ffec27" } : snap.config.team.find((a) => a.id === id));
+  const who = (id: string) =>
+    id === HUMAN_ID ? { name: "You", color: "#ffec27" } : id === "hq" ? { name: "HQ", color: "#3ee0d0" } : snap.config.team.find((a) => a.id === id);
   const running = snap.agents.find((a) => a.agentId === agent.id)?.session.state === "running";
   const send = () => {
     if (!draft.trim()) return;

@@ -40,7 +40,7 @@ function describe(hit: Hit): { title: string; sub?: string } {
     return { title: "Plan wall", sub: `${snap.boards.length} boards · ${active.length} active` };
   }
   if (hit.kind === "gate" || hit.kind === "prs") {
-    const open = snap.pullRequests.filter((p) => !p.merged);
+    const open = snap.pullRequests.filter((p) => !p.merged && !p.closed);
     const reviewing = open.filter((p) => p.review === "reviewing").length;
     const label = reviewToolLabel[snap.config.workflow.review.tool];
     return { title: hit.kind === "gate" ? `${label} review gate` : "Pull requests", sub: `${open.length} open · ${reviewing} reviewing` };

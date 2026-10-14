@@ -61,7 +61,8 @@ export function syncScene(s: OfficeScene, snap: OfficeSnapshot, epoch: number) {
   });
 
   // ---------------------------------------------------------- parcels
-  const prs = new Map(snap.pullRequests.map((p) => [p.number, p]));
+  // Closed-without-merge PRs leave the office.
+  const prs = new Map(snap.pullRequests.filter((p) => !p.closed).map((p) => [p.number, p]));
   s.prs = prs;
   s.parcels = s.parcels.filter((p) => prs.has(p.num) && p.mode !== "gone");
   for (const pr of snap.pullRequests) {
@@ -73,7 +74,7 @@ export function syncScene(s: OfficeScene, snap: OfficeSnapshot, epoch: number) {
       const desk = l.desks.find((d) => d.agentId === pr.authorId);
       if (fresh) {
         if (pr.review === "changes-requested") parcel.mode = "home";
-        else if (pr.review === "passed" && s.belt.gateCentre !== null) parcel.s = s.belt.gateCentre + 24;
+        else if (pr.review === "passed" && s.belt.gateExit !== null) parcel.s = s.belt.gateExit;
       } else if (bot && desk) {
         parcel.mode = "carry";
         bot.carry = pr.number;

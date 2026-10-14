@@ -113,7 +113,8 @@ export class Planner {
     this.hub.setStatus(agentId, { currentTaskId: task.id });
     this.hub.planChanged();
     this.hub.activity("task.assigned", byId === "you" ? null : byId, `${this.hub.name(byId)} assigned ${task.id} ${task.title} to ${agent.name}`);
-    const text = `${this.hub.name(byId)} assigned you ${task.id} (${task.title}). Pull main, start ${task.id}. Call the hq get_my_task tool for the details.`;
+    const by = byId === "you" ? "The user (your human)" : this.hub.name(byId);
+    const text = `${by} assigned you ${task.id} (${task.title}). Pull main, start ${task.id}. Call the hq get_my_task tool for the details.`;
     this.record(byId, agentId, `Start ${task.id}: ${task.title}`);
     this.inbox.push(agentId, { fromId: byId, kind: "assign", text });
     return task;
@@ -159,6 +160,13 @@ export class Planner {
     this.hub.activity("message", fromId === "you" ? null : fromId, `${this.hub.name(fromId)} → ${this.hub.name(toId)}: ${clean.slice(0, 80)}`);
     this.inbox.push(toId, { fromId, kind: "message", text: clean });
     return toId;
+  }
+
+  /** A notice from HQ itself (review results, merges) to one agent. */
+  notify(agentId: string, text: string) {
+    if (!this.hub.cfg(agentId)) return;
+    this.record("hq", agentId, text);
+    this.inbox.push(agentId, { fromId: "hq", kind: "notice", text });
   }
 
   private record(fromId: string, toId: string, text: string) {

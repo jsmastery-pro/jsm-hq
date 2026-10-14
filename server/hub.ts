@@ -57,6 +57,7 @@ export class Hub {
 
   name(id: string | null) {
     if (id === "you") return "You";
+    if (id === "hq") return "HQ";
     return (id && this.cfg(id)?.name) || "Someone";
   }
 

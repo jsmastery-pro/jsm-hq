@@ -117,6 +117,11 @@ export interface PullRequest {
   mergeable: boolean;
   merged: boolean;
   openedAt: string;
+  url?: string; // link to GitHub
+  branch?: string;
+  closed?: boolean; // closed without merging — hidden from the board
+  conflict?: boolean; // has merge conflicts with the base branch
+  reviewNote?: string | null; // e.g. "CodeRabbit: review rate limited"
 }
 
 export type EnvironmentStatus = "live" | "deploying" | "sleeping";

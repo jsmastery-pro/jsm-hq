@@ -34,7 +34,7 @@ export function TopBar() {
   const local = snap.config.team.filter((a) => a.mode === "local" && runningIds.has(a.id)).length;
   const boards = [...snap.boards].sort((a, b) => a.order - b.order);
   const active = boards.filter((b) => b.status === "active");
-  const openPrs = snap.pullRequests.filter((p) => !p.merged).length;
+  const openPrs = snap.pullRequests.filter((p) => !p.merged && !p.closed).length;
 
   return (
     <header className="panel fixed left-4 right-4 top-[10px] z-10 flex h-[50px] items-center gap-4 px-3">
