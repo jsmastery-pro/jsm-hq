@@ -3,7 +3,7 @@
 
 import { spawn as spawnPty, type IPty } from "node-pty";
 import type { SetupCheckId } from "../src/data/types";
-import { writeAgentFiles } from "./agentFiles";
+import { MCP_CONFIG, writeAgentFiles } from "./agentFiles";
 import type { Hub } from "./hub";
 import { run, shq } from "./lib/exec";
 import { log } from "./lib/log";
@@ -19,6 +19,10 @@ export class Sessions {
   private sizes = new Map<string, { cols: number; rows: number }>();
   private fixes = new Map<string, IPty>();
   private policyOk = false;
+  /** Called whenever an agent's Claude Code session goes away (stop, restart, crash). */
+  onSessionDown: (agentId: string) => void = () => {};
+  /** Called when HQ reattaches to a session that was already running (e.g. after an HQ restart). */
+  onSessionReattached: (agentId: string) => void = () => {};
   private polling: NodeJS.Timeout | null = null;
 
   constructor(private hub: Hub, private agentToken: string) {}
@@ -45,12 +49,17 @@ export class Sessions {
     if (agent.mode === "local" && !setup.localReady) return fail("Claude Code isn't installed. See the setup checklist.");
 
     const name = this.name(id);
+    this.onSessionDown(id);
     try {
       hub.setSession(id, { state: "starting", detail: "Preparing folder…", workspace: workspaceFor(agent, hub.slug) });
       const dir = await ensureWorkspace(agent, hub.slug, hub.repo);
       writeAgentFiles(dir, agent, hub.snap.config, this.agentToken);
       if (!(await tmux.hasSession(name))) {
-        let command = "claude";
+        const mcp = shq(`${dir}/${MCP_CONFIG}`);
+        // "Opus" / "Sonnet" / "Haiku" → Claude Code's model aliases.
+        const model = /^(opus|sonnet|haiku)$/i.test(agent.model) ? agent.model.toLowerCase() : null;
+        const claudeArgs = ["--mcp-config", mcp, ...(model ? ["--model", model] : [])];
+        let command = ["claude", ...claudeArgs].join(" ");
         if (agent.mode === "sandbox") {
           hub.setSession(id, { detail: "Allowing the sandbox to reach HQ…" });
           await this.ensurePolicy();
@@ -58,7 +67,7 @@ export class Sessions {
           // Size only applies when sbx creates the sandbox; an existing one keeps its size.
           const { cpus, memoryGb } = agent.sandbox.resources;
           const size = [cpus ? `--cpus ${cpus}` : "", memoryGb ? `--memory ${Math.round(memoryGb * 1024)}m` : ""];
-          command = ["sbx run --name", shq(name), ...size, "claude", shq(dir)].filter(Boolean).join(" ");
+          command = ["sbx run --name", shq(name), ...size, "claude", shq(dir), "--", ...claudeArgs].filter(Boolean).join(" ");
         }
         await tmux.newSession(name, dir, command);
       }
@@ -77,6 +86,7 @@ export class Sessions {
     const agent = hub.cfg(id);
     if (!agent) return;
     const name = this.name(id);
+    this.onSessionDown(id);
     this.ptys.get(id)?.kill();
     this.ptys.delete(id);
     await tmux.killSession(name);
@@ -153,6 +163,19 @@ export class Sessions {
     });
   }
 
+  /** Types a line into an agent's Claude Code prompt and submits it. */
+  async typeInto(agentId: string, text: string): Promise<boolean> {
+    const target = `=${this.name(agentId)}:`;
+    if (!(await tmux.hasSession(this.name(agentId)))) return false;
+    if (!(await run("tmux", ["send-keys", "-t", target, "-l", text], { timeoutMs: 5000 })).ok) return false;
+    await new Promise((r) => setTimeout(r, 200));
+    return (await run("tmux", ["send-keys", "-t", target, "Enter"], { timeoutMs: 5000 })).ok;
+  }
+
+  async pressEnter(agentId: string): Promise<boolean> {
+    return (await run("tmux", ["send-keys", "-t", `=${this.name(agentId)}:`, "Enter"], { timeoutMs: 5000 })).ok;
+  }
+
   input(id: string, data: string) {
     if (id.startsWith("setup:")) return this.fixes.get(id)?.write(data);
     this.ptys.get(id)?.write(data);
@@ -198,6 +221,7 @@ export class Sessions {
             const detail = (await tmux.tailText(name)) || `Exited with code ${pane.exitStatus}`;
             await tmux.killSession(name);
             this.ptys.delete(agent.id);
+            this.onSessionDown(agent.id);
             this.hub.setSession(agent.id, { state: "failed", detail });
             this.hub.setStatus(agent.id, { state: "idle", note: "Session ended" });
             this.hub.activity("session", agent.id, `${agent.name}'s session ended`);
@@ -207,9 +231,11 @@ export class Sessions {
           if (st.session.state !== "running") {
             this.hub.setSession(agent.id, { state: "running", detail: null, workspace: workspaceFor(agent, this.hub.slug) });
             this.hub.setStatus(agent.id, { note: "Reattached" });
+            this.onSessionReattached(agent.id);
           }
         } else if (st.session.state === "running") {
           this.ptys.delete(agent.id);
+          this.onSessionDown(agent.id);
           this.hub.setSession(agent.id, { state: "stopped", detail: null });
           this.hub.setStatus(agent.id, { state: "idle", note: "Stopped" });
         }

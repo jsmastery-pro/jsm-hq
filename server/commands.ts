@@ -3,6 +3,8 @@
 import type { AgentPatch, Board, NewAgentInput, ProjectConfig, SandboxSettings, SetupCheckId, WorkflowPatch } from "../src/data/types";
 import { agentPalette } from "../src/theme/tokens";
 import { Hub } from "./hub";
+import type { Inbox } from "./inbox";
+import type { Planner } from "./planner";
 import type { Sessions } from "./sessions";
 import { newAgent } from "./store";
 
@@ -10,7 +12,7 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(
 const str = (v: unknown, max = 2000) => (typeof v === "string" ? v.slice(0, max) : "");
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 
-export function makeCommands(hub: Hub, sessions: Sessions) {
+export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inbox: Inbox) {
   const team = () => hub.snap.config.team;
 
   const commands: Record<string, (...args: unknown[]) => unknown> = {
@@ -23,14 +25,9 @@ export function makeCommands(hub: Hub, sessions: Sessions) {
     recheckSetup: () => sessions.recheckSetup(),
     runSetupFix: (id) => sessions.runFix(str(id, 40) as SetupCheckId),
 
-    assignTask: (taskId, agentId) => {
-      // Phase B delivers the task to the agent; for now record the owner.
-      const task = hub.snap.tasks.find((t) => t.id === taskId);
-      if (!task || !hub.cfg(str(agentId))) return;
-      task.ownerId = str(agentId);
-      hub.emit({ type: "task.updated", task: { ...task } });
-      hub.planChanged();
-    },
+    // You → agent: same delivery path as the lead's assign_task / send_message.
+    assignTask: (taskId, agentId) => planner.assign(str(taskId, 40), str(agentId, 80), "you"),
+    sendMessage: (toId, text) => planner.message("you", str(toId, 80), str(text, 2000)),
 
     addAgent: (raw) => {
       const input = (raw ?? {}) as Partial<NewAgentInput>;
@@ -69,6 +66,7 @@ export function makeCommands(hub: Hub, sessions: Sessions) {
       await sessions.stop(agent.id);
       hub.snap.config.team = team().filter((a) => a.id !== agent.id);
       hub.snap.agents = hub.snap.agents.filter((a) => a.agentId !== agent.id);
+      inbox.forget(agent.id);
       hub.emit({ type: "agent.removed", agentId: agent.id });
       hub.configChanged();
       hub.activity("config", null, `Removed ${agent.name}. Their folder is kept.`);
@@ -118,26 +116,12 @@ export function makeCommands(hub: Hub, sessions: Sessions) {
       hub.configChanged();
     },
 
-    createBoard: (title) => {
-      const clean = str(title, 80).trim();
-      if (!clean) return;
-      const base = clean.split(/\s+/).map((w) => w[0]).join("").toUpperCase().slice(0, 3) || "B";
-      let id = base;
-      for (let i = 2; hub.snap.boards.some((b) => b.id === id); i++) id = `${base}${i}`;
-      const board: Board = { id, title: clean, status: "planned", order: hub.snap.boards.length };
-      hub.snap.boards.push(board);
-      hub.emit({ type: "board.updated", board: { ...board } });
-      hub.planChanged();
-    },
+    createBoard: (title) => planner.createBoard(str(title, 80)),
 
     updateBoard: (id, patch) => {
-      const board = hub.snap.boards.find((b) => b.id === id);
-      if (!board) return;
       const p = (patch ?? {}) as Partial<Board>;
-      if (typeof p.title === "string" && p.title.trim()) board.title = str(p.title, 80);
-      if (p.status === "active" || p.status === "planned" || p.status === "done") board.status = p.status;
-      hub.emit({ type: "board.updated", board: { ...board } });
-      hub.planChanged();
+      const status = p.status === "active" || p.status === "planned" || p.status === "done" ? p.status : undefined;
+      planner.updateBoard(str(id, 20), { title: typeof p.title === "string" ? p.title : undefined, status });
     },
   };
 

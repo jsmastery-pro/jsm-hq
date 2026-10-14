@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import type { AgentConfig, AgentStatus, OfficeSnapshot } from "../../data/types";
+import { HUMAN_ID, type AgentConfig, type AgentStatus, type OfficeSnapshot } from "../../data/types";
 import { officeActions, useOffice } from "../../store/office";
 import { ui, type AgentTab } from "../../store/ui";
 import { ago, Dot, Portrait, ReviewChip, SectionTitle, StateChip, Tabs, useNow } from "../kit";
@@ -174,7 +174,14 @@ function TaskTab({ snap, agent, taskId }: { snap: OfficeSnapshot; agent: AgentCo
         <div className="panel mb-4 px-3 py-2">
           <div className="font-term text-[18px] text-muted">{task.id} · {snap.boards.find((b) => b.id === task.boardId)?.title}</div>
           <b className="text-[17px]">{task.title}</b>
-          <div className="mt-1 text-[14px]">Status: {task.status}</div>
+          <div className="mt-1 text-[14px]">Status: {task.status}{task.note ? ` — ${task.note}` : ""}</div>
+          {task.description && <p className="mt-1 whitespace-pre-wrap text-[14px]">{task.description}</p>}
+          {!!task.files?.length && (
+            <div className="mt-1 text-[13px]">
+              Files: {task.files.map((f) => <code key={f} className="mr-1 bg-cream-2 px-1 font-term text-[15px]">{f}</code>)}
+            </div>
+          )}
+          {task.doneWhen && <div className="mt-1 text-[13px]"><b>Done when:</b> {task.doneWhen}</div>}
           {task.needs.length > 0 && (
             <div className="text-[14px]">
               Needs: {task.needs.map((n) => `${n} (${snap.tasks.find((t) => t.id === n)?.status ?? "?"})`).join(", ")}
@@ -263,29 +270,53 @@ function SandboxTab({ snap, agent }: { snap: OfficeSnapshot; agent: AgentConfig 
 
 function MessagesTab({ snap, agent }: { snap: OfficeSnapshot; agent: AgentConfig }) {
   const now = useNow(1000);
+  const [draft, setDraft] = useState("");
   const list = snap.messages.filter((m) => m.fromId === agent.id || m.toId === agent.id);
-  const name = (id: string) => snap.config.team.find((a) => a.id === id);
+  const who = (id: string) => (id === HUMAN_ID ? { name: "You", color: "#ffec27" } : snap.config.team.find((a) => a.id === id));
+  const running = snap.agents.find((a) => a.agentId === agent.id)?.session.state === "running";
+  const send = () => {
+    if (!draft.trim()) return;
+    officeActions.sendMessage(agent.id, draft.trim());
+    setDraft("");
+  };
   return (
-    <div className="scroll-thin h-full overflow-y-auto p-4">
-      <SectionTitle>Team MCP messages</SectionTitle>
-      <p className="mb-3 text-[13px] text-muted">Agents can't reach each other's sandboxes. Every message goes through HQ.</p>
-      {list.length === 0 && <p className="text-[15px] text-muted">No messages yet.</p>}
-      <ul className="flex flex-col gap-2">
-        {list.map((m) => {
-          const out = m.fromId === agent.id;
-          const other = name(out ? m.toId : m.fromId);
-          return (
-            <li key={m.id} className={`border-2 border-ink px-2.5 py-1.5 ${out ? "ml-8 bg-white" : "mr-8 bg-cream-2"}`}>
-              <div className="flex items-center gap-1.5 text-[13px] text-muted">
-                {other && <Dot color={other.color} size={8} />}
-                {out ? `To ${other?.name ?? "?"}` : `From ${other?.name ?? "?"}`}
-                <span className="ml-auto font-term text-[15px]">{ago(m.at, now)}</span>
-              </div>
-              <div className="text-[15px]">{m.text}</div>
-            </li>
-          );
-        })}
-      </ul>
+    <div className="flex h-full flex-col">
+      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto p-4">
+        <SectionTitle>Team MCP messages</SectionTitle>
+        <p className="mb-3 text-[13px] text-muted">Agents can't reach each other's sandboxes. Every message goes through HQ.</p>
+        {list.length === 0 && <p className="text-[15px] text-muted">No messages yet.</p>}
+        <ul className="flex flex-col gap-2">
+          {list.map((m) => {
+            const out = m.fromId === agent.id;
+            const other = who(out ? m.toId : m.fromId);
+            return (
+              <li key={m.id} className={`border-2 border-ink px-2.5 py-1.5 ${out ? "ml-8 bg-white" : "mr-8 bg-cream-2"}`}>
+                <div className="flex items-center gap-1.5 text-[13px] text-muted">
+                  {other && <Dot color={other.color} size={8} />}
+                  {out ? `To ${other?.name ?? "?"}` : `From ${other?.name ?? "?"}`}
+                  <span className="ml-auto font-term text-[15px]">{ago(m.at, now)}</span>
+                </div>
+                <div className="text-[15px]">{m.text}</div>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+      <form
+        className="flex gap-2 border-t-[3px] border-ink bg-cream p-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          send();
+        }}
+      >
+        <input className="field" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={`Message ${agent.name}…`} aria-label={`Message ${agent.name}`} />
+        <button className="btn" type="submit" disabled={!draft.trim()}>
+          Send
+        </button>
+      </form>
+      <p className="bg-cream px-2 pb-1.5 text-[11px] text-muted">
+        {running ? "Delivered now if idle, otherwise when the current turn ends." : `${agent.name} isn't running; it's delivered after Start.`}
+      </p>
     </div>
   );
 }

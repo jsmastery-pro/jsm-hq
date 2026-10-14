@@ -5,7 +5,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentConfig, HqConfig } from "../src/data/types";
 
-export const HQ_FILES = ["ROLE.md", ".claude/settings.local.json"];
+/** Team MCP config, passed with `claude --mcp-config` (so the project's own .mcp.json is untouched). */
+export const MCP_CONFIG = ".claude/hq-mcp.json";
+export const HQ_FILES = ["ROLE.md", ".claude/settings.local.json", MCP_CONFIG];
 const MARK = "# jsmhq-hook";
 
 const HOOK_EVENTS = ["SessionStart", "UserPromptSubmit", "PreToolUse", "Notification", "Stop", "SessionEnd"] as const;
@@ -20,16 +22,21 @@ export function roleMd(agent: AgentConfig, cfg: HqConfig): string {
   const rules = agent.isLead
     ? [
         "You plan the work and assign it to the team. You never write app code.",
-        "Keep tasks small: one task = one branch = one PR.",
+        "Keep tasks small: one task = one branch = one PR. Give each task the files it may edit and a clear done-when.",
+        "Assign only to agents that are running and free (check list_workers).",
         "Decide merge order and resolve conflicts between PRs.",
       ]
     : [
         "Work only on the task you were given. One task = one branch = one PR.",
-        "Start each task from an up-to-date main: `git pull origin main`, then a new branch.",
-        "Title PRs `[TASK-ID] Short title` and open them with `gh pr create`.",
-        "When review comments arrive, fix them on the same branch.",
-        "If you are blocked or need a decision, ask clearly and wait.",
+        "When HQ tells you to start a task, call get_my_task first, then `git pull origin main` and create a branch.",
+        "Edit only the files the task lists. Need another file? Ask the lead with send_message.",
+        "Title PRs `[TASK-ID] Short title` and open them with `gh pr create`, then call set_my_status in-review with the PR number.",
+        "set_my_status tells the lead automatically. Don't also send_message the same news.",
+        "If you are blocked or need a decision, call set_my_status blocked with the reason.",
       ];
+  const tools = agent.isLead
+    ? "list_workers, get_status, list_tasks, create_board, create_task, update_task, assign_task, send_message"
+    : "get_my_task, set_my_status, list_workers, get_status, list_tasks, send_message";
   return [
     `# ${agent.name} — ${agent.role}`,
     "",
@@ -41,16 +48,23 @@ export function roleMd(agent: AgentConfig, cfg: HqConfig): string {
     "## Rules",
     ...rules.map((r) => `- ${r}`),
     "",
+    "## Team MCP (server `hq`)",
+    `Your tools: ${tools}.`,
+    "Messages that start with `[HQ]` come from JSM HQ: assignments from the lead, or messages from teammates. Act on them.",
+    "Teammates work in their own sandboxes and cannot see your files or terminal. Talk to them only with send_message.",
+    "",
     `Project: ${cfg.project.name} (${cfg.project.repo}). You are managed by JSM HQ.`,
     "",
   ].join("\n");
 }
 
 type HookEntry = { matcher?: string; hooks: { type: "command"; command: string; timeout?: number }[] };
-type Settings = { hooks?: Record<string, HookEntry[]>; [k: string]: unknown };
+type Settings = { hooks?: Record<string, HookEntry[]>; permissions?: { allow?: string[]; [k: string]: unknown }; [k: string]: unknown };
 
 function hookCommand(url: string, token: string, agentId: string, event: string): string {
-  return `curl -s -m 3 -X POST -H 'Authorization: Bearer ${token}' -H 'Content-Type: application/json' --data-binary @- '${url}/hook/${agentId}/${event}' >/dev/null 2>&1 || true ${MARK}`;
+  // Stop prints HQ's reply: {"decision":"block","reason":…} hands over queued messages.
+  const out = event === "Stop" ? "2>/dev/null" : ">/dev/null 2>&1";
+  return `curl -sf -m 4 -X POST -H 'Authorization: Bearer ${token}' -H 'Content-Type: application/json' --data-binary @- '${url}/hook/${agentId}/${event}' ${out} || true ${MARK}`;
 }
 
 /**
@@ -78,12 +92,26 @@ export function writeSettings(dir: string, agent: AgentConfig, port: number, tok
     if (event === "SessionStart") ours.unshift({ type: "command", command: `cat "$CLAUDE_PROJECT_DIR/ROLE.md" 2>/dev/null || true ${MARK}` });
     hooks[event] = [...kept, event === "PreToolUse" ? { matcher: "*", hooks: ours } : { hooks: ours }];
   }
-  writeFileSync(file, JSON.stringify({ ...settings, hooks }, null, 2) + "\n");
+  // Let the agent use the Team MCP without a permission prompt for every call.
+  const allow = new Set([...(settings.permissions?.allow ?? []), "mcp__hq"]);
+  writeFileSync(file, JSON.stringify({ ...settings, hooks, permissions: { ...(settings.permissions ?? {}), allow: [...allow] } }, null, 2) + "\n");
+}
+
+/** Team MCP config: HQ's URL plus this agent's identity and token. */
+export function writeMcpConfig(dir: string, agent: AgentConfig, port: number, token: string) {
+  const config = {
+    mcpServers: {
+      hq: { type: "http", url: `${hqUrl(agent, port)}/mcp`, headers: { Authorization: `Bearer ${token}`, "X-HQ-Agent": agent.id } },
+    },
+  };
+  mkdirSync(join(dir, ".claude"), { recursive: true });
+  writeFileSync(join(dir, MCP_CONFIG), JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
 }
 
 export function writeAgentFiles(dir: string, agent: AgentConfig, cfg: HqConfig, token: string) {
   writeFileSync(join(dir, "ROLE.md"), roleMd(agent, cfg));
   writeSettings(dir, agent, cfg.project.hqPort, token);
+  writeMcpConfig(dir, agent, cfg.project.hqPort, token);
   excludeFromGit(dir, HQ_FILES);
 }
 

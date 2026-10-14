@@ -10,6 +10,8 @@ import { fileURLToPath } from "node:url";
 import { makeCommands } from "./commands";
 import { startHttp } from "./http";
 import { Hub } from "./hub";
+import { Inbox } from "./inbox";
+import { Planner } from "./planner";
 import { run } from "./lib/exec";
 import { log } from "./lib/log";
 import { agentToken, browserToken, slugify } from "./paths";
@@ -41,6 +43,10 @@ async function main() {
 
   const hub = new Hub(repo, slug, config, loadPlan(repo.root), setup);
   const sessions = new Sessions(hub, token);
+  const inbox = new Inbox(hub, { type: (id, text) => sessions.typeInto(id, text), enter: (id) => sessions.pressEnter(id) });
+  sessions.onSessionDown = (id) => inbox.sessionDown(id);
+  sessions.onSessionReattached = (id) => inbox.sessionReattached(id);
+  const planner = new Planner(hub, inbox);
 
   const root = dirname(dirname(fileURLToPath(import.meta.url)));
   const distDir = join(root, "dist");
@@ -50,12 +56,14 @@ async function main() {
 
   await startHttp({
     hub,
+    inbox,
+    planner,
     port,
     browserToken: uiToken,
     agentToken: token,
     distDir: dev ? null : distDir,
     allowedOrigins: [uiOrigin, `http://127.0.0.1:${uiPort}`, `http://localhost:${port}`, `http://127.0.0.1:${port}`],
-    commands: makeCommands(hub, sessions),
+    commands: makeCommands(hub, sessions, planner, inbox),
   });
   sessions.startPolling();
 

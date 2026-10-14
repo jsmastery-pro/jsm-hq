@@ -94,7 +94,13 @@ function TaskCard({ task }: { task: Task }) {
         {task.id}
         {task.prNumber && <span className="ml-1.5">#{task.prNumber}</span>}
       </div>
-      <div className={`text-[14px] font-semibold leading-tight ${task.status === "done" ? "line-through" : ""}`}>{task.title}</div>
+      <div
+        className={`text-[14px] font-semibold leading-tight ${task.status === "done" ? "line-through" : ""}`}
+        title={[task.description, task.files?.length ? `Files: ${task.files.join(", ")}` : "", task.doneWhen ? `Done when: ${task.doneWhen}` : ""].filter(Boolean).join("\n\n") || undefined}
+      >
+        {task.title}
+      </div>
+      {task.status === "blocked" && task.note && <div className="text-[12px] text-red">{task.note}</div>}
       <div className="mt-1 flex items-center gap-1.5 text-[12px]">
         {owner ? (
           <>

@@ -150,6 +150,7 @@ export const officeActions = {
   recheckSetup: () => source.recheckSetup(),
   runSetupFix: (id: SetupCheckId) => source.runSetupFix(id),
   assignTask: (taskId: string, agentId: string) => source.assignTask(taskId, agentId),
+  sendMessage: (toId: string, text: string) => source.sendMessage(toId, text),
   addAgent: source.addAgent.bind(source),
   updateAgent: source.updateAgent.bind(source),
   removeAgent: source.removeAgent.bind(source),

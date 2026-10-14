@@ -77,6 +77,9 @@ Sandboxes need macOS 14+ on Apple silicon, Windows 11, or Ubuntu 24.04+. On othe
    - Sandbox mode runs `sbx run`; Local mode runs `claude`.
    - Its live terminal appears in the agent's drawer.
 4. **Hooks report the agent's state** (working, needs you, finished) and the office updates.
+5. **The agent joins the Team MCP** (server `hq`). The lead creates boards and tasks and assigns them; anyone can `send_message`. HQ delivers each message right away if the agent is idle, or when its current turn ends if it's busy. You can message any agent from its **Messages** tab, or assign tasks from **Boards**.
+
+Try it: start John and Bob, then message John: *"Plan two tiny tasks for Bob and assign the first one."*
 
 You can also attach to an agent from any terminal: `tmux attach -t hq-<project>-<agent>`.
 
@@ -84,7 +87,9 @@ You can also attach to an agent from any terminal: `tmux attach -t hq-<project>-
 
 HQ saves the team and workflow in `<your repo>/.jsmhq/config.json` (safe to commit) and boards in `.jsmhq/plan.json`.
 
-**Coming next:** the Team MCP (the lead assigns work and agents message each other), the GitHub PR and review loop, and applying sandbox settings from the UI. See `context/plans/002-real-backend.md`.
+**Coming next:** the GitHub PR and review loop (Phase C) and applying sandbox network/secret settings from the UI (Phase D). See `context/plans/`.
+
+Debugging message delivery: start HQ with `HQ_DEBUG=1` to log why a queued message is waiting.
 
 ## Keyboard
 

@@ -66,6 +66,7 @@ export function createWsSource(token: string): OfficeDataSource {
     sendTerminalInput: (id, data) => send("sendTerminalInput", id, data),
     resizeTerminal: (id, cols, rows) => send("resizeTerminal", id, cols, rows),
     assignTask: (taskId, agentId) => send("assignTask", taskId, agentId),
+    sendMessage: (toId, text) => send("sendMessage", toId, text),
     startAgent: (id) => send("startAgent", id),
     stopAgent: (id) => send("stopAgent", id),
     openWorkspace: (id) => send("openWorkspace", id),

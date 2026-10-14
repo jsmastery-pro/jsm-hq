@@ -101,6 +101,12 @@ export function createMockSource(): OfficeDataSource {
       inputBuf.set(agentId, buf);
     },
 
+    sendMessage(toId, text) {
+      if (!world.cfg(toId) || !text.trim()) return;
+      world.message("you", toId, text.trim());
+      world.after(1.2, () => world.write(toId, T.cannedReply(!!world.cfg(toId)?.isLead, text.length)));
+    },
+
     resizeTerminal() {
       // The mock streams plain lines, so size doesn't matter.
     },

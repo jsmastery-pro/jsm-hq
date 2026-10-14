@@ -12,6 +12,9 @@ import { WebSocketServer, type WebSocket } from "ws";
 import type { OfficeEvent } from "../src/data/source";
 import { handleHook } from "./hooks";
 import type { Hub } from "./hub";
+import type { Inbox } from "./inbox";
+import { handleMcp } from "./mcp";
+import type { Planner } from "./planner";
 import { log } from "./lib/log";
 
 const MIME: Record<string, string> = {
@@ -41,6 +44,8 @@ function readBody(req: IncomingMessage, limit = 256 * 1024): Promise<string> {
 
 interface Options {
   hub: Hub;
+  inbox: Inbox;
+  planner: Planner;
   port: number;
   browserToken: string;
   agentToken: string;
@@ -64,10 +69,27 @@ export function startHttp(o: Options) {
       const [, , agentId, event] = url.pathname.split("/");
       try {
         const body = await readBody(req);
-        const ok = handleHook(o.hub, decodeURIComponent(agentId ?? ""), event ?? "", body ? JSON.parse(body) : {});
-        return send(res, ok ? 204 : 404, "");
+        const r = handleHook(o.hub, o.inbox, decodeURIComponent(agentId ?? ""), event ?? "", body ? JSON.parse(body) : {});
+        if (!r.ok) return send(res, 404, "");
+        if (r.response) return send(res, 200, JSON.stringify(r.response), "application/json");
+        res.writeHead(204);
+        return void res.end();
       } catch {
         return send(res, 400, "bad request");
+      }
+    }
+
+    // Team MCP: agent token + the agent's id (written into its MCP config by HQ).
+    if (url.pathname === "/mcp") {
+      const auth = req.headers.authorization ?? "";
+      const agentId = String(req.headers["x-hq-agent"] ?? "");
+      if (!safeEqual(auth, `Bearer ${o.agentToken}`) || !o.hub.cfg(agentId)) return send(res, 401, "unauthorized");
+      if (req.method === "GET" || req.method === "DELETE") return send(res, 405, "stateless server");
+      try {
+        const raw = await readBody(req, 1024 * 1024);
+        return await handleMcp(o.hub, o.planner, agentId, req, res, raw ? JSON.parse(raw) : undefined);
+      } catch {
+        return res.headersSent ? void res.end() : send(res, 400, "bad request");
       }
     }
 

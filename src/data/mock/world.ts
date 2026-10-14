@@ -161,6 +161,7 @@ export class World {
   }
 
   name(id: string | null): string {
+    if (id === "you") return "You";
     return (id && this.cfg(id)?.name) || "Someone";
   }
 
@@ -284,8 +285,8 @@ export class World {
     const msg = { id: this.id("m"), at: now(), fromId, toId, text };
     this.snap.messages = [msg, ...this.snap.messages].slice(0, 100);
     this.emit({ type: "message", message: msg });
-    this.activity("message", fromId, `${this.name(fromId)} → ${this.name(toId)}: ${text}`);
-    this.write(fromId, messageLines(this.name(fromId), this.name(toId), text, false));
+    this.activity("message", fromId === "you" ? null : fromId, `${this.name(fromId)} → ${this.name(toId)}: ${text}`);
+    if (fromId !== "you") this.write(fromId, messageLines(this.name(fromId), this.name(toId), text, false));
     this.write(toId, messageLines(this.name(fromId), this.name(toId), text, true));
   }
 

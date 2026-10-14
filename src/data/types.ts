@@ -99,6 +99,10 @@ export interface Task {
   status: TaskStatus;
   needs: string[]; // task IDs
   prNumber: number | null;
+  description?: string; // what to build
+  files?: string[]; // the only files this task may edit
+  doneWhen?: string; // acceptance criteria
+  note?: string | null; // e.g. why it's blocked
 }
 
 export type ReviewState = "pending" | "reviewing" | "changes-requested" | "passed";
@@ -125,13 +129,17 @@ export interface Environment {
   lastDeployAt: string;
 }
 
-/** One message carried by the Team MCP between two agents. */
+/** The human at the keyboard, as a message sender. */
+export const HUMAN_ID = "you";
+
+/** One message carried by the Team MCP between two agents (or from you). */
 export interface AgentMessage {
   id: string;
   at: string;
-  fromId: string;
+  fromId: string; // agent id, or HUMAN_ID
   toId: string;
   text: string;
+  delivered?: "typed" | "on-stop" | "queued"; // how HQ handed it over
 }
 
 export type ActivityType =

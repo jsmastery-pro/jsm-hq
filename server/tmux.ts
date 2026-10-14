@@ -18,6 +18,7 @@ export async function newSession(name: string, cwd: string, command: string, env
   // Agents use colours and the mouse wheel for scrollback; HQ shows its own status.
   await run("tmux", ["set-option", "-t", name, "mouse", "on"], { timeoutMs: 5000 });
   await run("tmux", ["set-option", "-t", name, "status", "off"], { timeoutMs: 5000 });
+  await run("tmux", ["set-option", "-t", name, "focus-events", "on"], { timeoutMs: 5000 });
 }
 
 export async function killSession(name: string) {

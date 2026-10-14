@@ -55,6 +55,8 @@ export interface OfficeDataSource {
   sendTerminalInput(agentId: string, data: string): void;
   resizeTerminal(agentId: string, cols: number, rows: number): void;
   assignTask(taskId: string, agentId: string): void;
+  /** You → an agent, delivered like any Team MCP message. */
+  sendMessage(toId: string, text: string): void;
 
   // agent sessions
   startAgent(id: string): void;
