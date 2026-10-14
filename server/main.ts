@@ -13,6 +13,7 @@ import { Hub } from "./hub";
 import { GitHubSync } from "./githubSync";
 import { Inbox } from "./inbox";
 import { Planner } from "./planner";
+import { Sbx } from "./sbx";
 import { run } from "./lib/exec";
 import { log } from "./lib/log";
 import { agentToken, browserToken, slugify } from "./paths";
@@ -47,6 +48,10 @@ async function main() {
   const inbox = new Inbox(hub, { type: (id, text) => sessions.typeInto(id, text), enter: (id) => sessions.pressEnter(id) });
   sessions.onSessionDown = (id) => inbox.sessionDown(id);
   sessions.onSessionReattached = (id) => inbox.sessionReattached(id);
+  const sbx = new Sbx(hub);
+  sessions.envFileFor = (id) => (existsSync(sbx.envFile(id)) ? sbx.envFile(id) : null);
+  sessions.onSandboxReady = (id) => void sbx.syncRules(id);
+  void sbx.refresh();
   const planner = new Planner(hub, inbox);
 
   const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -64,7 +69,7 @@ async function main() {
     agentToken: token,
     distDir: dev ? null : distDir,
     allowedOrigins: [uiOrigin, `http://127.0.0.1:${uiPort}`, `http://localhost:${port}`, `http://127.0.0.1:${port}`],
-    commands: makeCommands(hub, sessions, planner, inbox),
+    commands: makeCommands(hub, sessions, planner, inbox, sbx),
   });
   sessions.startPolling();
   const github = new GitHubSync(hub, planner, repo.github);

@@ -23,6 +23,10 @@ export class Sessions {
   private policyOk = false;
   /** Called whenever an agent's Claude Code session goes away (stop, restart, crash). */
   onSessionDown: (agentId: string) => void = () => {};
+  /** Called once an agent's sandbox exists after Start (to apply its network rules). */
+  onSandboxReady: (agentId: string) => void = () => {};
+  /** The agent's env file, if it has one (passed with --env-file / sourced). */
+  envFileFor: (agentId: string) => string | null = () => null;
   /** Called when HQ reattaches to a session that was already running (e.g. after an HQ restart). */
   onSessionReattached: (agentId: string) => void = () => {};
   private polling: NodeJS.Timeout | null = null;
@@ -61,7 +65,9 @@ export class Sessions {
         // "Opus" / "Sonnet" / "Haiku" → Claude Code's model aliases.
         const model = /^(opus|sonnet|haiku)$/i.test(agent.model) ? agent.model.toLowerCase() : null;
         const claudeArgs = ["--mcp-config", mcp, ...(model ? ["--model", model] : [])];
-        let command = ["claude", ...claudeArgs].join(" ");
+        const envFile = this.envFileFor(id);
+        // Local mode: export the env file's variables into the shell that runs claude.
+        let command = (envFile ? `set -a && . ${shq(envFile)} && set +a && ` : "") + ["claude", ...claudeArgs].join(" ");
         if (agent.mode === "sandbox") {
           hub.setSession(id, { detail: "Allowing the sandbox to reach HQ…" });
           await this.ensurePolicy();
@@ -69,7 +75,8 @@ export class Sessions {
           // Size only applies when sbx creates the sandbox; an existing one keeps its size.
           const { cpus, memoryGb } = agent.sandbox.resources;
           const size = [cpus ? `--cpus ${cpus}` : "", memoryGb ? `--memory ${Math.round(memoryGb * 1024)}m` : ""];
-          command = ["sbx run --name", shq(name), ...size, "claude", shq(dir), "--", ...claudeArgs].filter(Boolean).join(" ");
+          const env = envFile ? ["--env-file", shq(envFile)] : [];
+          command = ["sbx run --name", shq(name), ...size, ...env, "claude", shq(dir), "--", ...claudeArgs].filter(Boolean).join(" ");
         }
         await tmux.newSession(name, dir, command);
       }
@@ -77,7 +84,10 @@ export class Sessions {
       hub.setSession(id, { state: "running", detail: null, workspace: dir });
       hub.setStatus(id, { state: "idle", note: agent.mode === "sandbox" ? "Sandbox running" : "Running locally" });
       hub.activity("session", id, `${agent.name} started (${agent.mode === "sandbox" ? "Docker Sandbox" : "Local mode"})`);
-      if (agent.mode === "sandbox") setTimeout(() => void this.refreshSandboxSizes(), 4000);
+      if (agent.mode === "sandbox") {
+        setTimeout(() => void this.refreshSandboxSizes(), 4000);
+        void this.whenSandboxExists(id).then((ok) => ok && this.onSandboxReady(id));
+      }
     } catch (err) {
       fail(err instanceof Error ? err.message : String(err));
     }
@@ -151,6 +161,20 @@ export class Sessions {
     return done;
   }
 
+  /** Waits (up to ~90s) for sbx to list the agent's sandbox — creation can take a while the first time. */
+  private async whenSandboxExists(id: string): Promise<boolean> {
+    for (let i = 0; i < 45; i++) {
+      const r = await run("sbx", ["ls", "--json"], { timeoutMs: 10_000 });
+      try {
+        if (((JSON.parse(r.stdout) as { sandboxes?: { name: string }[] }).sandboxes ?? []).some((s) => s.name === this.name(id))) return true;
+      } catch {
+        /* keep waiting */
+      }
+      await new Promise((res) => setTimeout(res, 2000));
+    }
+    return false;
+  }
+
   /** Removes the agent's sandbox and starts a fresh one (applies new CPU/memory). The folder is kept. */
   async recreate(id: string) {
     const agent = this.hub.cfg(id);
@@ -180,7 +204,14 @@ export class Sessions {
     }
     for (const agent of this.hub.snap.config.team) {
       const found = list.find((s) => s.name === this.name(agent.id));
-      const size = found?.cpus && found.memory_mib ? { cpus: found.cpus, memoryGb: Math.round((found.memory_mib / 1024) * 10) / 10 } : null;
+      // sbx leaves cpus/memory out for sandboxes created with its defaults:
+      // all host CPUs and half the memory (0.5–32 GB).
+      const m = this.hub.snap.setup.machine;
+      const size = !found
+        ? null
+        : found.cpus && found.memory_mib
+          ? { cpus: found.cpus, memoryGb: Math.round((found.memory_mib / 1024) * 10) / 10 }
+          : { cpus: m.cpus, memoryGb: Math.min(32, Math.max(0.5, m.memoryGb / 2)) };
       const cur = this.hub.status(agent.id)?.session.sandbox;
       if (JSON.stringify(cur ?? null) !== JSON.stringify(size)) this.hub.setSession(agent.id, { sandbox: size });
     }

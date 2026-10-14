@@ -4,6 +4,7 @@
 import type { OfficeEvent, SimSpeed } from "../source";
 import type {
   ActivityType,
+  SbxState,
   SessionInfo,
   SetupState,
   AgentConfig,
@@ -51,6 +52,26 @@ export function mockSetup(): SetupState {
   };
 }
 
+/** What the mock "sbx" reports: domain rules mirror the saved lists. */
+export function mockSbx(team: AgentConfig[], project: string): SbxState {
+  const agents: SbxState["agents"] = {};
+  for (const a of team) {
+    let n = 0;
+    const rule = (decision: "allow" | "deny", r: string, source: "hq" | "kit" = "hq") => ({ id: `${a.id}-${++n}`, decision, resources: [r], source });
+    agents[a.id] = {
+      rules: [
+        rule("allow", "api.anthropic.com", "kit"),
+        ...a.sandbox.allow.map((r) => rule("allow", r)),
+        ...a.sandbox.deny.map((r) => rule("deny", r)),
+      ],
+      keys: a.isLead ? [] : ["openai"],
+      envFile: { path: `~/.jsmhq/${slug(project)}/${a.id}.env`, exists: !a.isLead },
+      syncError: null,
+    };
+  }
+  return { basePolicy: "balanced", proxy: null, globalKeys: ["anthropic", "github"], agents, checkedAt: now() };
+}
+
 export function mockSession(project: string, agentId: string): SessionInfo {
   return { state: "running", detail: null, workspace: `~/.jsmhq/${slug(project)}/${agentId}`, sandbox: { cpus: 8, memoryGb: 8 } };
 }
@@ -92,6 +113,7 @@ export class World {
       }));
     return {
       setup: mockSetup(),
+      sbx: mockSbx(config.team, config.project.name),
       config,
       agents: config.team.map((a) => ({
         agentId: a.id, state: "idle", currentTaskId: null, stateSince: now(), note: null,

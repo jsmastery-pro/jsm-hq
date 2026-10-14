@@ -16,11 +16,8 @@ export interface Preset {
 
 const sandbox = (extra: Partial<SandboxSettings> = {}): SandboxSettings => ({
   resources: { cpus: null, memoryGb: null },
-  policy: "balanced",
-  allow: ["registry.npmjs.org", "github.com", "api.anthropic.com"],
+  allow: ["registry.npmjs.org"],
   deny: [],
-  proxy: null,
-  secrets: ["ANTHROPIC_API_KEY", "GITHUB_TOKEN"],
   ...extra,
 });
 
@@ -44,7 +41,7 @@ function agent(
     roleMd: isLead
       ? `# ${name} — Lead\n\nYou plan and assign work. You never write app code.\nUse the HQ Team MCP: list_workers, get_status, assign_task, send_message.`
       : `# ${name} — ${role}\n\nYou build the tasks assigned to you. One task = one branch = one PR.\nOnly edit the files your task file allows.`,
-    sandbox: sandbox(isLead ? {} : { secrets: ["ANTHROPIC_API_KEY", "GITHUB_TOKEN", "INSTACLOUD_TOKEN"] }),
+    sandbox: sandbox(isLead ? {} : { allow: ["registry.npmjs.org", "console.instacloud.com"] }),
     workspacePath: null,
     ...opts,
   };

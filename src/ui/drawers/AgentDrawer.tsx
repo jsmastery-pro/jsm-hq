@@ -6,7 +6,6 @@ import { ago, Dot, Portrait, ReviewChip, SectionTitle, StateChip, Tabs, useNow }
 import { DrawerHeader } from "./Drawer";
 import { TerminalView } from "./TerminalView";
 
-const POLICY = { open: "Open", balanced: "Balanced", locked: "Locked Down" } as const;
 
 export function AgentDrawer({ id, initialTab }: { id: string; initialTab?: AgentTab }) {
   const snap = useOffice((s) => s.snap);
@@ -242,12 +241,19 @@ function SandboxTab({ snap, agent }: { snap: OfficeSnapshot; agent: AgentConfig 
             {actual && <span className="text-muted"> (now {actual.cpus} CPUs · {actual.memoryGb} GB)</span>}
           </>,
         )}
-        {row("Network policy", POLICY[sb.policy])}
+        {row("Network", `base: ${snap.sbx.basePolicy}`)}
         {row("Allowed", sb.allow.length ? sb.allow.join(", ") : "—")}
         {row("Blocked", sb.deny.length ? sb.deny.join(", ") : "—")}
-        {row("HQ access", <span className="font-term text-[17px]">host.docker.internal:{snap.config.project.hqPort} (added by HQ)</span>)}
-        {row("Proxy", sb.proxy ?? "—")}
-        {row("Secrets", sb.secrets.length ? sb.secrets.map((s) => <span key={s} className="chip mr-1 mb-1 font-term text-[14px]">{s}</span>) : "—")}
+        {row("HQ access", <span className="font-term text-[17px]">localhost / host.docker.internal :{snap.config.project.hqPort} (added by HQ)</span>)}
+        {row(
+          "Service keys",
+          [...snap.sbx.globalKeys.map((k) => `${k} (all)`), ...(snap.sbx.agents[agent.id]?.keys ?? [])].map((k) => (
+            <span key={k} className="chip mb-1 mr-1 font-term text-[14px]">
+              {k}
+            </span>
+          )),
+        )}
+        {row("App variables", snap.sbx.agents[agent.id]?.envFile.exists ? "env file set" : "—")}
         {row("Skills", agent.skills.join(", ") || "—")}
       </div>
       {env && (

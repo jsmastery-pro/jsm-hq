@@ -1,10 +1,12 @@
 // Browser commands → server actions. Names match OfficeDataSource methods.
 
-import type { AgentPatch, Board, NewAgentInput, ProjectConfig, RemoveAgentOptions, SandboxSettings, SetupCheckId, WorkflowPatch } from "../src/data/types";
+import { SERVICE_KEYS, type AgentPatch, type Board, type NewAgentInput, type ProjectConfig, type RemoveAgentOptions, type SandboxSettings, type SetupCheckId, type WorkflowPatch } from "../src/data/types";
+import { run } from "./lib/exec";
 import { agentPalette } from "../src/theme/tokens";
 import { Hub } from "./hub";
 import type { Inbox } from "./inbox";
 import type { Planner } from "./planner";
+import type { Sbx } from "./sbx";
 import type { Sessions } from "./sessions";
 import { newAgent } from "./store";
 
@@ -12,7 +14,16 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(
 const str = (v: unknown, max = 2000) => (typeof v === "string" ? v.slice(0, max) : "");
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 
-export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inbox: Inbox) {
+export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inbox: Inbox, sbx: Sbx) {
+  /** Runs an sbx change and reports failures in the activity feed. */
+  const attempt = async (agentId: string | null, what: string, fn: () => Promise<void>) => {
+    try {
+      await fn();
+      hub.activity("config", agentId, what);
+    } catch (err) {
+      hub.activity("config", agentId, `Couldn't ${what.charAt(0).toLowerCase() + what.slice(1)}: ${err instanceof Error ? err.message : err}`);
+    }
+  };
   const team = () => hub.snap.config.team;
 
   const commands: Record<string, (...args: unknown[]) => unknown> = {
@@ -22,7 +33,10 @@ export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inb
     stopAgent: (id) => sessions.stop(str(id, 80)),
     openWorkspace: (id) => sessions.openWorkspace(str(id, 80)),
     recreateSandbox: (id) => sessions.recreate(str(id, 80)),
-    recheckSetup: () => sessions.recheckSetup(),
+    recheckSetup: async () => {
+      await sessions.recheckSetup();
+      await sbx.refresh();
+    },
     runSetupFix: (id) => sessions.runFix(str(id, 40) as SetupCheckId),
 
     // You → agent: same delivery path as the lead's assign_task / send_message.
@@ -88,14 +102,13 @@ export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inb
     },
 
     updateSandbox: (id, patch) => {
-      // Phase D applies these to sbx; for now they are saved.
       const agent = hub.cfg(str(id));
       if (!agent) return;
       const p = (patch ?? {}) as Partial<SandboxSettings>;
-      if (p.policy === "open" || p.policy === "balanced" || p.policy === "locked") agent.sandbox.policy = p.policy;
-      if (Array.isArray(p.allow)) agent.sandbox.allow = p.allow.map((d) => str(d, 200));
-      if (Array.isArray(p.deny)) agent.sandbox.deny = p.deny.map((d) => str(d, 200));
-      if (p.proxy !== undefined) agent.sandbox.proxy = p.proxy ? str(p.proxy, 300) : null;
+      const clean = (list: unknown[]) => [...new Set(list.map((d) => str(d, 200).trim().toLowerCase()).filter(Boolean))];
+      const rulesChanged = Array.isArray(p.allow) || Array.isArray(p.deny);
+      if (Array.isArray(p.allow)) agent.sandbox.allow = clean(p.allow);
+      if (Array.isArray(p.deny)) agent.sandbox.deny = clean(p.deny);
       if (p.resources) {
         // Same limits as sbx: ≥1 CPU up to the host; 0.5 GB up to 75% of RAM.
         const m = hub.snap.setup.machine;
@@ -105,14 +118,37 @@ export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inb
         agent.sandbox.resources = { cpus, memoryGb };
       }
       hub.configChanged();
+      // Applies now if the sandbox exists; otherwise on its first Start.
+      if (rulesChanged) void sbx.syncRules(agent.id);
     },
 
-    setSecret: (id) => {
-      hub.activity("config", str(id), "Setting secrets from HQ comes in a later phase. Use `sbx secret set` for now.");
+    setSecret: (id, service, value) => {
+      const agentId = id === null ? null : str(id, 80);
+      const svc = str(service, 40);
+      if (!(SERVICE_KEYS as readonly string[]).includes(svc) || typeof value !== "string" || !value.trim()) return;
+      if (agentId && !hub.cfg(agentId)) return;
+      return attempt(agentId, `Stored the ${svc} key ${agentId ? `for ${hub.name(agentId)}'s sandbox` : "for every sandbox"}`, () => sbx.setKey(agentId, svc, value));
     },
-    removeSecret: (id) => {
-      hub.activity("config", str(id), "Removing secrets from HQ comes in a later phase. Use `sbx secret rm` for now.");
+    removeSecret: (id, service) => {
+      const agentId = id === null ? null : str(id, 80);
+      const svc = str(service, 40);
+      if (!(SERVICE_KEYS as readonly string[]).includes(svc)) return;
+      return attempt(agentId, `Removed the ${svc} key ${agentId ? `from ${hub.name(agentId)}'s sandbox` : "from every sandbox"}`, () => sbx.removeKey(agentId, svc));
     },
+    setProxy: (url) => {
+      const u = typeof url === "string" && url.trim() ? str(url, 300).trim() : null;
+      if (u && !/^https?:\/\/[^\s]+$/i.test(u)) return hub.activity("config", null, "Proxy must be an http(s):// URL");
+      return attempt(null, u ? `Set the sandbox proxy to ${u}` : "Removed the sandbox proxy", () => sbx.setProxy(u));
+    },
+    openEnvFile: async (id) => {
+      const agent = hub.cfg(str(id, 80));
+      if (!agent) return;
+      const file = sbx.ensureEnvFile(agent.id);
+      const [cmd, args] = process.platform === "darwin" ? ["open", ["-t", file]] : process.platform === "win32" ? ["notepad", [file]] : ["xdg-open", [file]];
+      await run(cmd, args, { timeoutMs: 5000 });
+      await sbx.refresh();
+    },
+    refreshSbx: () => sbx.refresh(),
 
     updateWorkflow: (patch) => {
       const p = (patch ?? {}) as WorkflowPatch;

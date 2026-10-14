@@ -8,6 +8,7 @@ import type {
   HqConfig,
   NewAgentInput,
   OfficeSnapshot,
+  SbxState,
   RemoveAgentOptions,
   SetupCheckId,
   SetupState,
@@ -22,6 +23,7 @@ import type {
 export type OfficeEvent =
   | { type: "snapshot"; snapshot: OfficeSnapshot }
   | { type: "setup.updated"; setup: SetupState }
+  | { type: "sbx.updated"; sbx: SbxState }
   | { type: "workspace.info"; info: WorkspaceInfo }
   | { type: "config.updated"; config: HqConfig }
   | { type: "agent.updated"; agent: AgentStatus }
@@ -80,9 +82,15 @@ export interface OfficeDataSource {
   /** Asks what removing would delete; answered with a `workspace.info` event. */
   inspectWorkspace(id: string): void;
   updateSandbox(agentId: string, patch: Partial<SandboxSettings>): void;
-  /** The value is handed to Docker's secret store and never kept by HQ. */
-  setSecret(agentId: string, name: string, value: string): void;
-  removeSecret(agentId: string, name: string): void;
+  /** A service key for one agent's sandbox, or every sandbox (agentId null). The value goes to sbx via stdin; HQ never keeps it. */
+  setSecret(agentId: string | null, service: string, value: string): void;
+  removeSecret(agentId: string | null, service: string): void;
+  /** Machine-wide upstream proxy for sandbox traffic (null clears it). */
+  setProxy(url: string | null): void;
+  /** Creates the agent's env file if needed and opens it in the default editor. */
+  openEnvFile(agentId: string): void;
+  /** Re-reads policy rules, keys and proxy from sbx. */
+  refreshSbx(): void;
   updateWorkflow(patch: WorkflowPatch): void;
   updateProject(patch: Partial<ProjectConfig>): void;
   createBoard(title: string): void;

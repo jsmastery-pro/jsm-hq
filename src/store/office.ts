@@ -83,6 +83,8 @@ function reduce(snap: OfficeSnapshot, e: OfficeEvent): OfficeSnapshot {
       return e.snapshot;
     case "workspace.info":
       return snap;
+    case "sbx.updated":
+      return { ...snap, sbx: e.sbx };
     case "setup.updated":
       return { ...snap, setup: e.setup };
     case "config.updated":
@@ -164,8 +166,11 @@ export const officeActions = {
   removeAgent: (id: string, opts?: RemoveAgentOptions) => source.removeAgent(id, opts),
   inspectWorkspace: (id: string) => source.inspectWorkspace(id),
   updateSandbox: source.updateSandbox.bind(source),
-  setSecret: source.setSecret.bind(source),
-  removeSecret: source.removeSecret.bind(source),
+  setSecret: (agentId: string | null, service: string, value: string) => source.setSecret(agentId, service, value),
+  removeSecret: (agentId: string | null, service: string) => source.removeSecret(agentId, service),
+  setProxy: (url: string | null) => source.setProxy(url),
+  openEnvFile: (id: string) => source.openEnvFile(id),
+  refreshSbx: () => source.refreshSbx(),
   updateWorkflow: source.updateWorkflow.bind(source),
   updateProject: source.updateProject.bind(source),
   createBoard: source.createBoard.bind(source),

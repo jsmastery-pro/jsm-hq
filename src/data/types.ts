@@ -2,7 +2,12 @@
 
 // ---------------------------------------------------------------- Config
 
-export type PolicyLevel = "open" | "balanced" | "locked";
+/** sbx's machine-wide base network policy (`sbx policy init`). */
+export type BasePolicy = "allow-all" | "balanced" | "deny-all" | "unknown";
+
+/** Services sbx can inject keys for through its host proxy (the value never enters the VM). */
+export const SERVICE_KEYS = ["anthropic", "openai", "github", "google", "groq", "mistral", "openrouter", "xai", "nebius", "copilot", "cursor", "devin", "droid"] as const;
+export type ServiceKey = (typeof SERVICE_KEYS)[number];
 
 /** VM size. null = let sbx decide (all host CPUs; 50% of RAM, 0.5–32 GB). Set at creation only. */
 export interface SandboxResources {
@@ -10,13 +15,11 @@ export interface SandboxResources {
   memoryGb: number | null;
 }
 
+/** Per-agent sandbox settings HQ applies through sbx. Machine-wide ones live in SbxState. */
 export interface SandboxSettings {
   resources: SandboxResources;
-  policy: PolicyLevel;
-  allow: string[]; // extra allowed domains, e.g. "registry.npmjs.org"
-  deny: string[]; // blocked domains
-  proxy: string | null; // upstream proxy URL
-  secrets: string[]; // secret NAMES only — values live in Docker's secret store
+  allow: string[]; // extra allowed domains for this sandbox, e.g. "registry.npmjs.org"
+  deny: string[]; // blocked domains for this sandbox (deny wins over allow)
 }
 
 export type AgentMode = "sandbox" | "local";
@@ -208,6 +211,30 @@ export interface SetupCheck {
   fix: SetupFix | null;
 }
 
+/** A network rule in effect for a sandbox, as sbx reports it. */
+export interface SbxRule {
+  id: string;
+  decision: "allow" | "deny";
+  resources: string[];
+  source: "hq" | "kit" | "org" | "cli"; // cli = added with the sbx CLI, outside HQ
+}
+
+export interface SbxAgentState {
+  rules: SbxRule[]; // empty until the sandbox exists
+  keys: string[]; // service keys scoped to this sandbox
+  envFile: { path: string; exists: boolean };
+  syncError: string | null;
+}
+
+/** What sbx actually has on this machine (read back, not saved settings). */
+export interface SbxState {
+  basePolicy: BasePolicy;
+  proxy: string | null;
+  globalKeys: string[]; // service keys available to every sandbox
+  agents: Record<string, SbxAgentState>;
+  checkedAt: string;
+}
+
 export interface MachineInfo {
   cpus: number;
   memoryGb: number;
@@ -223,6 +250,7 @@ export interface SetupState {
 
 export interface OfficeSnapshot {
   setup: SetupState;
+  sbx: SbxState;
   config: HqConfig;
   agents: AgentStatus[];
   boards: Board[];

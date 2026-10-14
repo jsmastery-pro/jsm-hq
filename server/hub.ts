@@ -18,6 +18,7 @@ export class Hub {
   constructor(readonly repo: RepoInfo, readonly slug: string, config: HqConfig, plan: PlanFile, setup: SetupState) {
     this.snap = {
       setup,
+      sbx: { basePolicy: "unknown", proxy: null, globalKeys: [], agents: {}, checkedAt: now() },
       config,
       agents: config.team.map((a) => Hub.freshStatus(a.id)),
       boards: plan.boards,

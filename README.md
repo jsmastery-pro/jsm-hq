@@ -89,7 +89,9 @@ HQ saves the team and workflow in `<your repo>/.jsmhq/config.json` (safe to comm
 
 6. **PRs and reviews come from GitHub** (read-only, through your `gh` login, every ~20s). PRs are matched to tasks by `[TASK-ID]` in the title. When the review tool (CodeRabbit, Greptile, Copilot or a human) leaves comments, HQ tells the PR's agent to fix them. When a PR passes, the lead hears it's ready to merge. When you merge, the task is done. HQ never merges itself.
 
-**Coming next:** applying sandbox network/secret settings from the UI (Phase D), a Codex adapter, and `npx jsm-hq` packaging. See `context/plans/`.
+7. **Sandbox settings apply through `sbx`** (Settings → Sandbox). *This agent:* resources, allowed and blocked domains (`sbx policy … --sandbox`, read back as "rules in effect"), service keys for that sandbox only, and an env file for app variables. *This machine:* the base policy (read-only), the upstream proxy, and keys for every sandbox. HQ never stores key values and only removes rules it added.
+
+**Coming next:** a Codex adapter and `npx jsm-hq` packaging. See `context/plans/`.
 
 Debugging message delivery: start HQ with `HQ_DEBUG=1` to log why a queued message is waiting.
 

@@ -28,11 +28,8 @@ function writeJson(file: string, value: unknown) {
 
 export const defaultSandbox = (): SandboxSettings => ({
   resources: { cpus: null, memoryGb: null }, // sbx's own defaults
-  policy: "balanced",
-  allow: ["registry.npmjs.org", "github.com"],
+  allow: [],
   deny: [],
-  proxy: null,
-  secrets: ["github"],
 });
 
 export function newAgent(id: string, name: string, role: string, color: string, isLead: boolean): AgentConfig {
@@ -73,6 +70,11 @@ export function loadConfig(repo: RepoInfo, port: number): HqConfig {
     for (const a of found.team) {
       a.workspacePath ??= null;
       a.sandbox.resources ??= { cpus: null, memoryGb: null };
+      // Phase D: policy level, proxy and secret names moved to sbx itself.
+      const old = a.sandbox as unknown as Record<string, unknown>;
+      delete old.policy;
+      delete old.proxy;
+      delete old.secrets;
     }
     found.project.path = repo.root;
     return found;
