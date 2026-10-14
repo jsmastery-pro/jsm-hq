@@ -60,5 +60,9 @@ A local HQ server that replaces the mock data source. You run `npx jsm-hq` insid
 13. Automations: on "changes requested", tell the author to fix the comments; on merge, mark the task done.
 - **Done when:** a real PR moves across the belt, through the gate and on to merge.
 
+**Phase C.5: Codex adapter** (decided 2026-10-15: only Claude Code + Codex for now)
+- Per-CLI adapter: launch args, instruction file (`AGENTS.md` for Codex), MCP config format, status (hooks, or terminal-activity fallback), model flag.
+- Verify Codex's notify hook and MCP-over-HTTP support live in a sandbox first. Other CLIs (Gemini, Copilot, Cursor, opencode…) wait until users ask.
+
 **Phase D: real sandbox settings and extras**
 14. Policy, domain and secret screens call `sbx` (confirm the exact syntax), then environment readers, and clone mode if a kit or in-sandbox command makes config injection possible.

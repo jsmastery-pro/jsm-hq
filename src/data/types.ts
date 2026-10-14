@@ -166,6 +166,23 @@ export interface ActivityEvent {
   text: string;
 }
 
+/** What removing an agent would delete. Answer to `inspectWorkspace`. */
+export interface WorkspaceInfo {
+  agentId: string;
+  path: string;
+  managed: boolean; // HQ made this folder (only these can be deleted from HQ)
+  exists: boolean;
+  changedFiles: number; // uncommitted changes
+  unpushedCommits: number; // commits on local branches that aren't on any remote
+  sandboxName: string | null;
+  sandboxExists: boolean;
+}
+
+export interface RemoveAgentOptions {
+  deleteSandbox: boolean;
+  deleteFolder: boolean;
+}
+
 // ---------------------------------------------------------------- Setup
 
 export type SetupCheckId = "os" | "sbx" | "sbx-login" | "tmux" | "gh" | "gh-remote" | "github-secret" | "claude";

@@ -2,12 +2,14 @@
 // terminal, and the setup checklist's "Run in terminal" helper.
 
 import { spawn as spawnPty, type IPty } from "node-pty";
-import type { SetupCheckId } from "../src/data/types";
+import { existsSync, rmSync } from "node:fs";
+import { resolve, sep } from "node:path";
+import type { SetupCheckId, WorkspaceInfo } from "../src/data/types";
 import { MCP_CONFIG, writeAgentFiles } from "./agentFiles";
 import type { Hub } from "./hub";
 import { run, shq } from "./lib/exec";
 import { log } from "./lib/log";
-import { sessionName } from "./paths";
+import { projectHome, sessionName } from "./paths";
 import { runSetupChecks } from "./setup";
 import * as tmux from "./tmux";
 import { ensureWorkspace, workspaceFor } from "./workspace";
@@ -95,6 +97,58 @@ export class Sessions {
     hub.setSession(id, { state: "stopped", detail: null });
     hub.setStatus(id, { state: "idle", currentTaskId: null, note: "Stopped" });
     hub.activity("session", id, `${agent.name} stopped`);
+  }
+
+  /** What removing this agent would delete: folder state and whether a sandbox exists. */
+  async inspectWorkspace(id: string): Promise<WorkspaceInfo | null> {
+    const agent = this.hub.cfg(id);
+    if (!agent) return null;
+    const dir = workspaceFor(agent, this.hub.slug);
+    const exists = existsSync(dir);
+    let changedFiles = 0;
+    let unpushedCommits = 0;
+    if (exists) {
+      const status = await run("git", ["status", "--porcelain"], { cwd: dir });
+      changedFiles = status.stdout.split("\n").filter(Boolean).length;
+      // Commits on any local branch that no remote-tracking ref has.
+      const log = await run("git", ["log", "--oneline", "--branches", "--not", "--remotes"], { cwd: dir });
+      unpushedCommits = log.stdout.split("\n").filter(Boolean).length;
+    }
+    const name = this.name(id);
+    const ls = await run("sbx", ["ls", "--json"], { timeoutMs: 10_000 });
+    let sandboxExists = false;
+    try {
+      sandboxExists = ls.ok && ((JSON.parse(ls.stdout) as { sandboxes?: { name: string }[] }).sandboxes ?? []).some((s) => s.name === name);
+    } catch {
+      /* sbx unavailable */
+    }
+    return { agentId: id, path: dir, managed: !agent.workspacePath, exists, changedFiles, unpushedCommits, sandboxName: name, sandboxExists };
+  }
+
+  /** Stops the agent and deletes what was asked. Only HQ-made folders inside HQ's home can be deleted. */
+  async removeResources(id: string, opts: { deleteSandbox: boolean; deleteFolder: boolean }): Promise<string[]> {
+    const agent = this.hub.cfg(id);
+    if (!agent) return [];
+    const done: string[] = [];
+    const name = this.name(id);
+    this.onSessionDown(id);
+    this.ptys.get(id)?.kill();
+    this.ptys.delete(id);
+    await tmux.killSession(name);
+    if (opts.deleteSandbox) {
+      const rm = await run("sbx", ["rm", "-f", name], { timeoutMs: 60_000 });
+      if (rm.ok) done.push("sandbox");
+      else if (!/not found|no such/i.test(rm.stderr)) log.warn(`sbx rm ${name}: ${rm.stderr.trim()}`);
+    } else if (agent.mode === "sandbox") void run("sbx", ["stop", name], { timeoutMs: 30_000 });
+    if (opts.deleteFolder && !agent.workspacePath) {
+      const home = resolve(projectHome(this.hub.slug));
+      const dir = resolve(workspaceFor(agent, this.hub.slug));
+      if (dir.startsWith(home + sep) && dir !== home && existsSync(dir)) {
+        rmSync(dir, { recursive: true, force: true });
+        done.push("folder");
+      }
+    }
+    return done;
   }
 
   /** Removes the agent's sandbox and starts a fresh one (applies new CPU/memory). The folder is kept. */

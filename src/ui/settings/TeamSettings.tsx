@@ -4,6 +4,7 @@ import { officeActions, useOffice } from "../../store/office";
 import { agentPalette } from "../../theme/tokens";
 import { Field, Portrait, SectionTitle } from "../kit";
 import { CommitInput } from "./controls";
+import { RemoveAgentDialog } from "./RemoveAgentDialog";
 
 const MODELS = ["Opus", "Sonnet", "Haiku"];
 const ROLE_SUGGESTIONS = ["Developer", "QA", "Designer", "Docs", "DevOps", "Security"];
@@ -11,6 +12,7 @@ const ROLE_SUGGESTIONS = ["Developer", "QA", "Designer", "Docs", "DevOps", "Secu
 export function TeamSettings() {
   const team = useOffice((s) => s.snap?.config.team);
   const [open, setOpen] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<AgentConfig | null>(null);
   if (!team) return null;
   return (
     <div className="flex flex-col gap-5">
@@ -21,16 +23,17 @@ export function TeamSettings() {
         </p>
         <div className="flex flex-col gap-2">
           {team.map((a) => (
-            <AgentRow key={a.id} agent={a} expanded={open === a.id} onToggle={() => setOpen(open === a.id ? null : a.id)} />
+            <AgentRow key={a.id} agent={a} expanded={open === a.id} onToggle={() => setOpen(open === a.id ? null : a.id)} onRemove={() => setRemoving(a)} />
           ))}
         </div>
       </section>
       <AddAgent />
+      {removing && <RemoveAgentDialog agent={removing} onClose={() => setRemoving(null)} />}
     </div>
   );
 }
 
-function AgentRow({ agent, expanded, onToggle }: { agent: AgentConfig; expanded: boolean; onToggle: () => void }) {
+function AgentRow({ agent, expanded, onToggle, onRemove }: { agent: AgentConfig; expanded: boolean; onToggle: () => void; onRemove: () => void }) {
   const set = (patch: Parameters<typeof officeActions.updateAgent>[1]) => officeActions.updateAgent(agent.id, patch);
   return (
     <div className="border-[3px] border-ink bg-white">
@@ -66,7 +69,7 @@ function AgentRow({ agent, expanded, onToggle }: { agent: AgentConfig; expanded:
           {!agent.isLead && (
             <button
               className="btn px-2 text-[13px] text-red"
-              onClick={() => window.confirm(`Remove ${agent.name}? Their sandbox stops and their open tasks go back to the board.`) && officeActions.removeAgent(agent.id)}
+              onClick={onRemove}
             >
               Remove
             </button>

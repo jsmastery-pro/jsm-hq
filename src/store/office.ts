@@ -5,7 +5,7 @@ import { create } from "zustand";
 import { createMockSource } from "../data/mock/mockSource";
 import type { ConnectionStatus, DataPreset, OfficeDataSource, OfficeEvent, SimSpeed } from "../data/source";
 import { createWsSource } from "../data/ws/wsSource";
-import type { AgentConfig, AgentStatus, OfficeSnapshot, SetupCheckId } from "../data/types";
+import type { AgentConfig, AgentStatus, OfficeSnapshot, RemoveAgentOptions, SetupCheckId, WorkspaceInfo } from "../data/types";
 import { appendTerminal, clearTerminals } from "./terminal";
 
 export interface LoggedEvent {
@@ -22,6 +22,7 @@ interface OfficeState {
   speed: SimSpeed;
   presets: DataPreset[] | null;
   live: boolean; // connected to a real HQ server (vs. the demo mock)
+  workspaceInfo: Record<string, WorkspaceInfo>; // answers to inspectWorkspace
   connection: ConnectionStatus;
   source: OfficeDataSource;
 }
@@ -61,6 +62,7 @@ export const useOffice = create<OfficeState>(() => ({
   speed: 1,
   presets: source.dev?.presets ?? null,
   live: token !== null,
+  workspaceInfo: {},
   connection: "connecting",
   source,
 }));
@@ -79,6 +81,8 @@ function reduce(snap: OfficeSnapshot, e: OfficeEvent): OfficeSnapshot {
   switch (e.type) {
     case "snapshot":
       return e.snapshot;
+    case "workspace.info":
+      return snap;
     case "setup.updated":
       return { ...snap, setup: e.setup };
     case "config.updated":
@@ -112,6 +116,10 @@ function handle(e: OfficeEvent) {
   if (e.type === "terminal.output") {
     appendTerminal(e.agentId, e.data);
     useOffice.setState((s) => ({ terminalChunks: s.terminalChunks + 1 }));
+    return;
+  }
+  if (e.type === "workspace.info") {
+    useOffice.setState((s) => ({ workspaceInfo: { ...s.workspaceInfo, [e.info.agentId]: e.info } }));
     return;
   }
   if (e.type === "snapshot") clearTerminals();
@@ -153,7 +161,8 @@ export const officeActions = {
   sendMessage: (toId: string, text: string) => source.sendMessage(toId, text),
   addAgent: source.addAgent.bind(source),
   updateAgent: source.updateAgent.bind(source),
-  removeAgent: source.removeAgent.bind(source),
+  removeAgent: (id: string, opts?: RemoveAgentOptions) => source.removeAgent(id, opts),
+  inspectWorkspace: (id: string) => source.inspectWorkspace(id),
   updateSandbox: source.updateSandbox.bind(source),
   setSecret: source.setSecret.bind(source),
   removeSecret: source.removeSecret.bind(source),

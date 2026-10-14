@@ -1,6 +1,6 @@
 // Browser commands → server actions. Names match OfficeDataSource methods.
 
-import type { AgentPatch, Board, NewAgentInput, ProjectConfig, SandboxSettings, SetupCheckId, WorkflowPatch } from "../src/data/types";
+import type { AgentPatch, Board, NewAgentInput, ProjectConfig, RemoveAgentOptions, SandboxSettings, SetupCheckId, WorkflowPatch } from "../src/data/types";
 import { agentPalette } from "../src/theme/tokens";
 import { Hub } from "./hub";
 import type { Inbox } from "./inbox";
@@ -60,16 +60,31 @@ export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inb
       hub.configChanged();
     },
 
-    removeAgent: async (id) => {
+    inspectWorkspace: async (id) => {
+      const info = await sessions.inspectWorkspace(str(id, 80));
+      if (info) hub.emit({ type: "workspace.info", info });
+    },
+
+    removeAgent: async (id, opts) => {
       const agent = hub.cfg(str(id));
       if (!agent || agent.isLead) return;
-      await sessions.stop(agent.id);
+      const o = (opts ?? {}) as Partial<RemoveAgentOptions>;
+      const removed = await sessions.removeResources(agent.id, { deleteSandbox: o.deleteSandbox !== false, deleteFolder: o.deleteFolder === true });
       hub.snap.config.team = team().filter((a) => a.id !== agent.id);
       hub.snap.agents = hub.snap.agents.filter((a) => a.agentId !== agent.id);
       inbox.forget(agent.id);
+      for (const t of hub.snap.tasks)
+        if (t.ownerId === agent.id && t.status !== "done") {
+          t.ownerId = null;
+          if (t.status === "in-progress") t.status = "todo";
+          hub.emit({ type: "task.updated", task: { ...t } });
+        }
+      hub.planChanged();
       hub.emit({ type: "agent.removed", agentId: agent.id });
       hub.configChanged();
-      hub.activity("config", null, `Removed ${agent.name}. Their folder is kept.`);
+      const what = removed.length ? ` Deleted: ${removed.join(" and ")}.` : "";
+      const kept = removed.includes("folder") ? "" : " Their folder is kept.";
+      hub.activity("config", null, `Removed ${agent.name}.${what}${kept}`);
     },
 
     updateSandbox: (id, patch) => {

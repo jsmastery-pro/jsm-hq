@@ -8,8 +8,10 @@ import type {
   HqConfig,
   NewAgentInput,
   OfficeSnapshot,
+  RemoveAgentOptions,
   SetupCheckId,
   SetupState,
+  WorkspaceInfo,
   ProjectConfig,
   PullRequest,
   SandboxSettings,
@@ -20,6 +22,7 @@ import type {
 export type OfficeEvent =
   | { type: "snapshot"; snapshot: OfficeSnapshot }
   | { type: "setup.updated"; setup: SetupState }
+  | { type: "workspace.info"; info: WorkspaceInfo }
   | { type: "config.updated"; config: HqConfig }
   | { type: "agent.updated"; agent: AgentStatus }
   | { type: "agent.removed"; agentId: string }
@@ -72,7 +75,10 @@ export interface OfficeDataSource {
 
   addAgent(input: NewAgentInput): void;
   updateAgent(id: string, patch: AgentPatch): void;
-  removeAgent(id: string): void; // ignored for the lead
+  /** Stops the agent and removes it from the team; optionally deletes its sandbox and HQ-made folder. Ignored for the lead. */
+  removeAgent(id: string, opts?: RemoveAgentOptions): void;
+  /** Asks what removing would delete; answered with a `workspace.info` event. */
+  inspectWorkspace(id: string): void;
   updateSandbox(agentId: string, patch: Partial<SandboxSettings>): void;
   /** The value is handed to Docker's secret store and never kept by HQ. */
   setSecret(agentId: string, name: string, value: string): void;

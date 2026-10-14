@@ -197,6 +197,15 @@ export function createMockSource(): OfficeDataSource {
       world.configChanged();
     },
 
+    inspectWorkspace(id) {
+      const st = world.status(id);
+      if (!st) return;
+      listener?.({
+        type: "workspace.info",
+        info: { agentId: id, path: st.session.workspace ?? "", managed: true, exists: true, changedFiles: 1, unpushedCommits: 2, sandboxName: `hq-mock-${id}`, sandboxExists: true },
+      });
+    },
+
     removeAgent(id) {
       const agent = world.cfg(id);
       if (!agent || agent.isLead) return;
