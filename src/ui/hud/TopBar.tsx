@@ -23,10 +23,15 @@ export function TopBar() {
   const hasDev = useOffice((s) => s.presets !== null);
   const planBoardId = useUi((s) => s.planBoardId);
   const debugOpen = useUi((s) => s.debugOpen);
+  const live = useOffice((s) => s.live);
   if (!snap) return null;
+  const setupIssues = snap.setup.checks.filter((c) => c.status !== "ok").length;
+  const stopped = snap.agents.filter((a) => a.session.state === "stopped" || a.session.state === "failed");
 
-  const sandboxes = snap.config.team.filter((a) => a.mode === "sandbox").length;
-  const local = snap.config.team.length - sandboxes;
+  // Live: count real running sessions. Mock: every agent counts as running.
+  const runningIds = new Set(snap.agents.filter((a) => a.session.state === "running").map((a) => a.agentId));
+  const sandboxes = snap.config.team.filter((a) => a.mode === "sandbox" && runningIds.has(a.id)).length;
+  const local = snap.config.team.filter((a) => a.mode === "local" && runningIds.has(a.id)).length;
   const boards = [...snap.boards].sort((a, b) => a.order - b.order);
   const active = boards.filter((b) => b.status === "active");
   const openPrs = snap.pullRequests.filter((p) => !p.merged).length;
@@ -36,6 +41,11 @@ export function TopBar() {
       <div className="flex min-w-0 items-center gap-2.5">
         <Logo />
         <b className="whitespace-nowrap text-[22px] font-bold tracking-[0.02em]">JSM HQ</b>
+        {!live && (
+          <span className="chip shrink-0 text-[12px]" style={{ ["--c" as string]: "#ffec27" }} title="Running on mock data. Start the real HQ with `pnpm dev:hq`.">
+            Demo data
+          </span>
+        )}
         <span className="truncate text-[16px] text-muted">
           — <em className="font-semibold not-italic text-ink">{snap.config.project.name}</em>{" "}
           <span className="font-term text-[17px]">{snap.config.project.repo}</span>
@@ -86,9 +96,19 @@ export function TopBar() {
         <span>
           Sandbox · <b>{sandboxes}</b> running{local ? ` · ${local} local` : ""}
         </span>
-        <i className="led" />
+        <i className="led" style={runningIds.size ? undefined : { background: "#83769c", animation: "none" }} />
       </div>
 
+      {live && stopped.length > 0 && (
+        <button className="btn text-[14px]" onClick={() => stopped.forEach((a) => officeActions.startAgent(a.agentId))}>
+          Start {stopped.length === snap.agents.length ? "team" : `${stopped.length} stopped`}
+        </button>
+      )}
+      {live && (
+        <button className="btn text-[14px]" onClick={() => ui.openSetup()} title="Setup checklist">
+          Setup{setupIssues ? ` · ${setupIssues}` : " ✓"}
+        </button>
+      )}
       <div className="flex gap-1.5">
         <button className="btn text-[14px]" onClick={() => ui.openBoards(planBoardId ?? undefined)}>
           Boards

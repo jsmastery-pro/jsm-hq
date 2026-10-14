@@ -16,6 +16,7 @@ const ICON: Record<ActivityType, [string, string]> = {
   "review.changes": ["✗", "#ff5c86"],
   "pr.merged": ["⇢", "#6cf08a"],
   deploy: ["▲", "#3ee0d0"],
+  session: ["◆", "#9aa6d1"],
   config: ["⚙", "#9aa6d1"],
 };
 

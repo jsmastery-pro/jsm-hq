@@ -2,3 +2,6 @@ node_modules
 dist
 .DS_Store
 *.local
+
+# HQ state when HQ is run on this repo itself
+.jsmhq/

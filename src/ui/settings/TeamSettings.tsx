@@ -17,7 +17,7 @@ export function TeamSettings() {
       <section>
         <SectionTitle>Team · {team.length} agents</SectionTitle>
         <p className="mb-3 text-[14px] text-muted">
-          One lead plans and assigns work. Every other agent gets its own desk, sandbox and (optionally) environment. The office grows as you add agents.
+          Changes to model, mode or folder apply the next time the agent starts. One lead plans and assigns work. Every other agent gets its own desk, sandbox and (optionally) environment. The office grows as you add agents.
         </p>
         <div className="flex flex-col gap-2">
           {team.map((a) => (
@@ -75,7 +75,7 @@ function AgentRow({ agent, expanded, onToggle }: { agent: AgentConfig; expanded:
       </div>
       {agent.mode === "local" && (
         <div className="border-t-2 border-dashed border-cream-3 px-3 py-1 text-[12px] text-muted">
-          Local mode runs plain <code>claude</code> in its own git worktree. Permission prompts stay on.
+          Local mode runs plain <code>claude</code> in the agent's own folder. Permission prompts stay on.
         </div>
       )}
       {expanded && (
@@ -101,7 +101,17 @@ function AgentRow({ agent, expanded, onToggle }: { agent: AgentConfig; expanded:
             />
           </Field>
           <div className="col-span-2">
-            <Field label="ROLE.md" hint="Who this agent is. Gitignored, different per agent.">
+            <Field label="Folder" hint="Leave empty and HQ keeps its own clone of the repo for this agent. Or enter an existing git folder.">
+              <CommitInput
+                className="field font-term text-[17px]"
+                value={agent.workspacePath ?? ""}
+                placeholder={`HQ-managed: ~/.jsmhq/…/${agent.id}`}
+                onCommit={(v) => set({ workspacePath: v.trim() || null })}
+              />
+            </Field>
+          </div>
+          <div className="col-span-2">
+            <Field label="ROLE.md" hint="Who this agent is. HQ writes it into the agent's folder (never committed) and loads it when the session starts.">
               <CommitInput multiline className="field h-[120px] resize-y font-term text-[17px] leading-tight" value={agent.roleMd} onCommit={(v) => set({ roleMd: v })} />
             </Field>
           </div>

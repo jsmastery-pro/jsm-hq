@@ -8,6 +8,8 @@ import type {
   HqConfig,
   NewAgentInput,
   OfficeSnapshot,
+  SetupCheckId,
+  SetupState,
   ProjectConfig,
   PullRequest,
   SandboxSettings,
@@ -17,6 +19,7 @@ import type {
 
 export type OfficeEvent =
   | { type: "snapshot"; snapshot: OfficeSnapshot }
+  | { type: "setup.updated"; setup: SetupState }
   | { type: "config.updated"; config: HqConfig }
   | { type: "agent.updated"; agent: AgentStatus }
   | { type: "agent.removed"; agentId: string }
@@ -32,6 +35,8 @@ export type OfficeEvent =
 
 export type SimSpeed = 1 | 2 | 4;
 
+export type ConnectionStatus = "connecting" | "open" | "reconnecting" | "unauthorized";
+
 export interface DataPreset {
   id: string;
   label: string;
@@ -45,10 +50,23 @@ export interface DevControls {
 }
 
 export interface OfficeDataSource {
-  connect(onEvent: (e: OfficeEvent) => void): () => void; // returns disconnect
+  connect(onEvent: (e: OfficeEvent) => void, onStatus?: (s: ConnectionStatus) => void): () => void; // returns disconnect
 
   sendTerminalInput(agentId: string, data: string): void;
+  resizeTerminal(agentId: string, cols: number, rows: number): void;
   assignTask(taskId: string, agentId: string): void;
+
+  // agent sessions
+  startAgent(id: string): void;
+  stopAgent(id: string): void;
+  openWorkspace(id: string): void; // opens the agent's folder on the host
+  /** Removes and recreates the agent's sandbox (e.g. to apply new CPU/memory). The folder is kept. */
+  recreateSandbox(id: string): void;
+
+  // setup checklist
+  recheckSetup(): void;
+  /** Runs a check's fix command in a visible terminal (output on terminal id `setup:<checkId>`). */
+  runSetupFix(id: SetupCheckId): void;
 
   addAgent(input: NewAgentInput): void;
   updateAgent(id: string, patch: AgentPatch): void;

@@ -4,7 +4,7 @@ import type { AgentConfig, AgentPatch, Board, NewAgentInput, ProjectConfig, Sand
 import { defaultPresetId, presets, type Preset } from "./presets";
 import { Simulation } from "./simulation";
 import * as T from "./terminalScripts";
-import { World } from "./world";
+import { mockSession, mockSetup, World } from "./world";
 
 const TICK_MS = 50;
 const TERM_MS = 30;
@@ -54,8 +54,9 @@ export function createMockSource(): OfficeDataSource {
   }
 
   const source: OfficeDataSource = {
-    connect(onEvent) {
+    connect(onEvent, onStatus) {
       listener = onEvent;
+      onStatus?.("open");
       last = performance.now();
       reset();
       boot();
@@ -100,6 +101,48 @@ export function createMockSource(): OfficeDataSource {
       inputBuf.set(agentId, buf);
     },
 
+    resizeTerminal() {
+      // The mock streams plain lines, so size doesn't matter.
+    },
+
+    startAgent(id) {
+      const st = world.status(id);
+      if (!st || st.session.state === "running") return;
+      world.setStatus(id, { session: { ...st.session, state: "running", detail: null } });
+      world.activity("session", id, `${world.name(id)}'s session started`);
+      if (!world.cfg(id)?.isLead) sim.startWorker(id, 1.5);
+    },
+
+    stopAgent(id) {
+      const st = world.status(id);
+      if (!st) return;
+      sim.stopAgent(id);
+      world.setStatus(id, { state: "idle", currentTaskId: null, note: "Stopped", session: { ...st.session, state: "stopped", detail: null } });
+      world.activity("session", id, `${world.name(id)}'s session stopped`);
+    },
+
+    recreateSandbox(id) {
+      const st = world.status(id);
+      const r = world.cfg(id)?.sandbox.resources;
+      if (!st || !r) return;
+      world.setStatus(id, { session: { ...st.session, sandbox: { cpus: r.cpus ?? 8, memoryGb: r.memoryGb ?? 8 } } });
+      hostCmd(id, `sbx rm hq-…-${id} && sbx run --cpus ${r.cpus ?? "auto"} --memory ${r.memoryGb ?? "auto"}g … (mock)`);
+      world.activity("session", id, `Recreated ${world.name(id)}'s sandbox`);
+    },
+
+    openWorkspace(id) {
+      hostCmd(id, `open ${world.status(id)?.session.workspace ?? "?"} (mock: nothing opens)`);
+    },
+
+    recheckSetup() {
+      world.snap.setup = mockSetup();
+      world.emit({ type: "setup.updated", setup: world.snap.setup });
+    },
+
+    runSetupFix() {
+      // Everything is installed in the mock.
+    },
+
     assignTask(taskId, agentId) {
       const task = world.task(taskId);
       const agent = world.cfg(agentId);
@@ -125,9 +168,13 @@ export function createMockSource(): OfficeDataSource {
         model: input.model, mode: input.mode, color, skills: ["plan", "review"],
         roleMd: `# ${input.name} — ${input.role}\n\nYou build the tasks assigned to you.`,
         sandbox: structuredClone(lead.sandbox),
+        workspacePath: null,
       };
       team.push(agent);
-      world.snap.agents.push({ agentId: id, state: "idle", currentTaskId: null, stateSince: new Date().toISOString(), note: null });
+      world.snap.agents.push({
+        agentId: id, state: "idle", currentTaskId: null, stateSince: new Date().toISOString(), note: null,
+        session: mockSession(world.snap.config.project.name, id),
+      });
       world.configChanged();
       world.emit({ type: "agent.updated", agent: { ...world.snap.agents[world.snap.agents.length - 1] } });
       world.syncEnvironments();

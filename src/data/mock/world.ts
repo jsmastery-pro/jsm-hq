@@ -4,6 +4,8 @@
 import type { OfficeEvent, SimSpeed } from "../source";
 import type {
   ActivityType,
+  SessionInfo,
+  SetupState,
   AgentConfig,
   AgentStatus,
   Board,
@@ -28,6 +30,30 @@ interface TermQueue {
 }
 
 const now = () => new Date().toISOString();
+
+/** The mock machine has everything installed. */
+export function mockSetup(): SetupState {
+  const ok = (id: SetupState["checks"][number]["id"], label: string, detail: string, neededFor: SetupState["checks"][number]["neededFor"]) =>
+    ({ id, label, status: "ok" as const, detail, neededFor, fix: null });
+  return {
+    machine: { cpus: 8, memoryGb: 16 },
+    checks: [
+      ok("os", "Supported machine", "macOS · Apple silicon (mock)", "sandbox"),
+      ok("sbx", "Docker Sandboxes (sbx)", "v0.47.0 (mock)", "sandbox"),
+      ok("sbx-login", "Signed in to Docker", "signed in (mock)", "sandbox"),
+      ok("tmux", "tmux", "3.5a (mock)", "all"),
+      ok("claude", "Claude Code", "installed (mock)", "local"),
+      ok("gh", "GitHub CLI", "signed in (mock)", "github"),
+    ],
+    sandboxReady: true,
+    localReady: true,
+    checkedAt: now(),
+  };
+}
+
+export function mockSession(project: string, agentId: string): SessionInfo {
+  return { state: "running", detail: null, workspace: `~/.jsmhq/${slug(project)}/${agentId}`, sandbox: { cpus: 8, memoryGb: 8 } };
+}
 
 export class World {
   snap: OfficeSnapshot;
@@ -65,8 +91,12 @@ export class World {
         openedAt: new Date(Date.now() - (preset.mergedPrs - (t.prNumber as number) + 1) * 3_600_000).toISOString(),
       }));
     return {
+      setup: mockSetup(),
       config,
-      agents: config.team.map((a) => ({ agentId: a.id, state: "idle", currentTaskId: null, stateSince: now(), note: null })),
+      agents: config.team.map((a) => ({
+        agentId: a.id, state: "idle", currentTaskId: null, stateSince: now(), note: null,
+        session: mockSession(config.project.name, a.id),
+      })),
       boards: structuredClone(preset.boards),
       tasks,
       pullRequests,

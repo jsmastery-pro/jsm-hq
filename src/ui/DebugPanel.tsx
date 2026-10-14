@@ -29,6 +29,7 @@ function JsonNode({ name, value, depth }: { name: string; value: unknown; depth:
 function summary(e: OfficeEvent): string {
   switch (e.type) {
     case "snapshot": return "full snapshot";
+    case "setup.updated": return `sandbox ${e.setup.sandboxReady ? "ready" : "not ready"}`;
     case "config.updated": return `team ${e.config.team.length}`;
     case "agent.updated": return `${e.agent.agentId} → ${e.agent.state}`;
     case "agent.removed": return e.agentId;

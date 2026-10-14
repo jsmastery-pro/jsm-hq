@@ -33,6 +33,7 @@ interface UiState {
   zoomRequest: { delta: number; nonce: number } | null;
   planBoardId: string | null; // board shown on the plan wall; null = first active
   debugOpen: boolean;
+  setupOpen: boolean;
 }
 
 export const useUi = create<UiState>(() => ({
@@ -43,6 +44,7 @@ export const useUi = create<UiState>(() => ({
   zoomRequest: null,
   planBoardId: null,
   debugOpen: false,
+  setupOpen: false,
 }));
 
 let nonce = 0;
@@ -87,6 +89,12 @@ export const ui = {
   },
   showBoardOnWall(boardId: string | null) {
     useUi.setState({ planBoardId: boardId });
+  },
+  openSetup() {
+    useUi.setState({ setupOpen: true });
+  },
+  closeSetup() {
+    useUi.setState({ setupOpen: false });
   },
   toggleDebug() {
     useUi.setState((s) => ({ debugOpen: !s.debugOpen }));

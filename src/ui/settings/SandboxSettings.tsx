@@ -3,6 +3,7 @@ import type { PolicyLevel } from "../../data/types";
 import { officeActions, useOffice } from "../../store/office";
 import { Dot, Field, SectionTitle } from "../kit";
 import { ChipList, CommitInput, isDomain } from "./controls";
+import { ResourcesSection } from "./ResourcesSection";
 
 const LEVELS: { id: PolicyLevel; label: string; detail: string }[] = [
   { id: "open", label: "Open", detail: "All outbound traffic allowed." },
@@ -45,6 +46,8 @@ export function SandboxSettingsTab({ initialAgentId }: { initialAgentId?: string
         </p>
       )}
 
+      <ResourcesSection agent={agent} status={snap.agents.find((a) => a.agentId === agent.id)} team={snap.config.team} machine={snap.setup.machine} />
+
       <section className="border-[3px] border-ink bg-white p-3">
         <SectionTitle>Network policy</SectionTitle>
         <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Network policy">
@@ -64,7 +67,7 @@ export function SandboxSettingsTab({ initialAgentId }: { initialAgentId?: string
           </Field>
         </div>
         <p className="mt-3 text-[12px] text-muted">
-          HQ always allows <span className="font-term text-[15px]">host.docker.internal:{port}</span> so hooks and the Team MCP can reach it. Every request needs HQ's per-start token.
+          HQ always allows <span className="font-term text-[15px]">localhost:{port}</span> and <span className="font-term text-[15px]">host.docker.internal:{port}</span> so hooks and the Team MCP can reach it. Every request needs HQ's per-start token.
         </p>
       </section>
 
@@ -117,8 +120,8 @@ export function SandboxSettingsTab({ initialAgentId }: { initialAgentId?: string
       <section>
         <SectionTitle>What HQ will run</SectionTitle>
         <pre className="scroll-thin overflow-x-auto border-[3px] border-ink bg-navy-2 p-3 font-term text-[17px] leading-tight text-[#dfe6ff]">
-{`sbx policy set ${sb.policy}
-sbx policy allow network host.docker.internal:${port}   # added by HQ
+{`${sb.resources.cpus || sb.resources.memoryGb ? `sbx run --cpus ${sb.resources.cpus ?? "auto"} --memory ${sb.resources.memoryGb ?? "auto"}g …   # size, set at creation\n` : ""}sbx policy set ${sb.policy}
+sbx policy allow network localhost:${port},host.docker.internal:${port}   # added by HQ
 ${sb.allow.length ? `sbx policy allow network ${sb.allow.join(" ")}` : "# no extra allowed domains"}
 ${sb.deny.length ? `sbx policy deny network ${sb.deny.join(" ")}` : "# no blocked domains"}
 ${sb.secrets.map((s) => `sbx secret set ${s}   # value from your keychain`).join("\n") || "# no secrets"}`}

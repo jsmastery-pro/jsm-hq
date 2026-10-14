@@ -4,7 +4,14 @@
 
 export type PolicyLevel = "open" | "balanced" | "locked";
 
+/** VM size. null = let sbx decide (all host CPUs; 50% of RAM, 0.5–32 GB). Set at creation only. */
+export interface SandboxResources {
+  cpus: number | null;
+  memoryGb: number | null;
+}
+
 export interface SandboxSettings {
+  resources: SandboxResources;
   policy: PolicyLevel;
   allow: string[]; // extra allowed domains, e.g. "registry.npmjs.org"
   deny: string[]; // blocked domains
@@ -25,6 +32,7 @@ export interface AgentConfig {
   skills: string[];
   roleMd: string; // contents of ROLE.md
   sandbox: SandboxSettings;
+  workspacePath: string | null; // an existing folder to use; null = HQ-managed clone
 }
 
 export type ReviewTool = "coderabbit" | "greptile" | "copilot" | "human" | "custom";
@@ -53,12 +61,23 @@ export interface HqConfig {
 
 export type AgentState = "idle" | "working" | "needs-input" | "in-review" | "review-passed";
 
+/** The agent's process: its tmux session running `sbx run` (Sandbox) or `claude` (Local). */
+export type SessionState = "stopped" | "starting" | "running" | "failed";
+
+export interface SessionInfo {
+  state: SessionState;
+  detail: string | null; // why it failed, or what it is doing
+  workspace: string | null; // absolute folder path on the host
+  sandbox: { cpus: number; memoryGb: number } | null; // what the existing sandbox actually has
+}
+
 export interface AgentStatus {
   agentId: string;
   state: AgentState;
   currentTaskId: string | null;
   stateSince: string; // ISO time
   note: string | null; // e.g. "Asking: max PDF size 10 MB or 20 MB?"
+  session: SessionInfo;
 }
 
 export type BoardStatus = "active" | "planned" | "done";
@@ -128,6 +147,7 @@ export type ActivityType =
   | "review.changes"
   | "pr.merged"
   | "deploy"
+  | "session"
   | "config";
 
 export interface ActivityEvent {
@@ -138,7 +158,41 @@ export interface ActivityEvent {
   text: string;
 }
 
+// ---------------------------------------------------------------- Setup
+
+export type SetupCheckId = "os" | "sbx" | "sbx-login" | "tmux" | "gh" | "gh-remote" | "github-secret" | "claude";
+export type SetupStatus = "ok" | "missing" | "unsupported" | "warning";
+
+export interface SetupFix {
+  command: string; // shown with a Copy button
+  runnable: boolean; // HQ may run it in a visible terminal ("Run in terminal")
+  docs: string | null;
+}
+
+export interface SetupCheck {
+  id: SetupCheckId;
+  label: string;
+  status: SetupStatus;
+  detail: string; // version found, or what is wrong
+  neededFor: "sandbox" | "local" | "all" | "github";
+  fix: SetupFix | null;
+}
+
+export interface MachineInfo {
+  cpus: number;
+  memoryGb: number;
+}
+
+export interface SetupState {
+  machine: MachineInfo;
+  checks: SetupCheck[];
+  sandboxReady: boolean; // every sandbox check passes
+  localReady: boolean; // Local mode can run
+  checkedAt: string;
+}
+
 export interface OfficeSnapshot {
+  setup: SetupState;
   config: HqConfig;
   agents: AgentStatus[];
   boards: Board[];
@@ -159,7 +213,7 @@ export interface NewAgentInput {
 }
 
 export type AgentPatch = Partial<
-  Pick<AgentConfig, "name" | "role" | "model" | "mode" | "color" | "skills" | "roleMd">
+  Pick<AgentConfig, "name" | "role" | "model" | "mode" | "color" | "skills" | "roleMd" | "workspacePath">
 >;
 
 export interface WorkflowPatch {

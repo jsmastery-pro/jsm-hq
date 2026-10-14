@@ -31,7 +31,7 @@ export function SettingsModal() {
         initial={reduce ? false : { y: -16, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.2 }}
-        className="panel flex h-[min(760px,100%)] w-[min(1080px,100%)] flex-col"
+        className="panel flex h-[min(760px,calc(100dvh-2rem))] w-[min(1080px,100%)] flex-col"
       >
         <div className="flex items-center gap-3 border-b-[3px] border-ink px-4 py-2">
           <h2 className="m-0 flex-1 text-[22px] font-bold">Settings</h2>

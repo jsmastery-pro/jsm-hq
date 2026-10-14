@@ -1,0 +1,82 @@
+// jsm-hq — start HQ for the git repo you're in.
+//
+//   jsm-hq [--repo <path>] [--port 7420] [--dev] [--no-open]
+//
+// --dev: the UI is served by Vite (pnpm dev:hq); HQ prints/opens the Vite URL.
+
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { makeCommands } from "./commands";
+import { startHttp } from "./http";
+import { Hub } from "./hub";
+import { run } from "./lib/exec";
+import { log } from "./lib/log";
+import { agentToken, browserToken, slugify } from "./paths";
+import { detectRepo } from "./repo";
+import { Sessions } from "./sessions";
+import { runSetupChecks } from "./setup";
+import { loadConfig, loadPlan } from "./store";
+
+function arg(name: string): string | undefined {
+  const i = process.argv.indexOf(`--${name}`);
+  return i > -1 ? process.argv[i + 1] : undefined;
+}
+const flag = (name: string) => process.argv.includes(`--${name}`);
+
+async function main() {
+  const dev = flag("dev");
+  const port = Number(arg("port") ?? process.env.HQ_PORT ?? 7420);
+  const repo = await detectRepo(resolve(arg("repo") ?? process.env.HQ_REPO ?? process.cwd()));
+  const config = loadConfig(repo, port);
+  config.project.hqPort = port;
+  const slug = slugify(config.project.name);
+  const token = agentToken(slug);
+  const uiToken = browserToken(slug, dev);
+
+  log.info(`repo   ${repo.root}${repo.github ? `  (github.com/${repo.github})` : ""}`);
+  log.info("checking setup…");
+  const setup = await runSetupChecks(repo);
+  for (const c of setup.checks) log.info(`  ${c.status === "ok" ? "✓" : c.status === "warning" ? "!" : "✗"} ${c.label}: ${c.detail}`);
+
+  const hub = new Hub(repo, slug, config, loadPlan(repo.root), setup);
+  const sessions = new Sessions(hub, token);
+
+  const root = dirname(dirname(fileURLToPath(import.meta.url)));
+  const distDir = join(root, "dist");
+  const uiPort = Number(process.env.HQ_UI_PORT ?? 5173);
+  const uiOrigin = dev ? `http://localhost:${uiPort}` : `http://127.0.0.1:${port}`;
+  if (!dev && !existsSync(join(distDir, "index.html"))) log.warn("No built UI found. Run `pnpm build` first, or use `pnpm dev:hq`.");
+
+  await startHttp({
+    hub,
+    port,
+    browserToken: uiToken,
+    agentToken: token,
+    distDir: dev ? null : distDir,
+    allowedOrigins: [uiOrigin, `http://127.0.0.1:${uiPort}`, `http://localhost:${port}`, `http://127.0.0.1:${port}`],
+    commands: makeCommands(hub, sessions),
+  });
+  sessions.startPolling();
+
+  const url = `${uiOrigin}/?token=${uiToken}`;
+  log.info(`\n\n  JSM HQ is running → ${url}\n`);
+  if (!flag("no-open")) {
+    const opener = process.platform === "darwin" ? "open" : process.platform === "win32" ? "explorer" : "xdg-open";
+    // Give Vite a moment in dev.
+    setTimeout(() => void run(opener, [url]), dev ? 1500 : 0);
+  }
+
+  const quit = () => {
+    log.info("stopping HQ — agent sessions keep running in tmux");
+    sessions.shutdown();
+    process.exit(0);
+  };
+  process.on("SIGINT", quit);
+  process.on("SIGTERM", quit);
+}
+
+main().catch((err) => {
+  log.error(err instanceof Error ? err.message : err);
+  process.exit(1);
+});

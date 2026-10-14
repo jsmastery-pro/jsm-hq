@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import type { AgentConfig, OfficeSnapshot } from "../../data/types";
+import type { AgentConfig, AgentStatus, OfficeSnapshot } from "../../data/types";
 import { officeActions, useOffice } from "../../store/office";
 import { ui, type AgentTab } from "../../store/ui";
 import { ago, Dot, Portrait, ReviewChip, SectionTitle, StateChip, Tabs, useNow } from "../kit";
@@ -34,10 +34,11 @@ export function AgentDrawer({ id, initialTab }: { id: string; initialTab?: Agent
             <StateChip state={status.state} />
           </div>
           <div className="truncate font-term text-[17px] text-muted">
-            {agent.role} · {agent.model} · {agent.mode === "sandbox" ? "Docker Sandbox" : "local worktree"}
+            {agent.role} · {agent.model} · {agent.mode === "sandbox" ? "Docker Sandbox" : "Local mode"}
           </div>
         </div>
       </DrawerHeader>
+      <SessionBar agent={agent} status={status} />
       {status.note && (
         <div className={`border-b-[3px] border-ink px-3 py-1.5 text-[14px] ${status.state === "needs-input" ? "bg-[#ffe1ea] text-red" : "bg-cream-2"}`}>
           {status.note}
@@ -57,12 +58,84 @@ export function AgentDrawer({ id, initialTab }: { id: string; initialTab?: Agent
         />
       </div>
       <div className="min-h-0 flex-1 overflow-hidden">
-        {tab === "terminal" && <TerminalView agentId={id} />}
+        {tab === "terminal" &&
+          (status.session.state === "running" ? (
+            <TerminalView agentId={id} />
+          ) : (
+            <NotRunning agent={agent} status={status} />
+          ))}
         {tab === "task" && <TaskTab snap={snap} agent={agent} taskId={status.currentTaskId} />}
         {tab === "sandbox" && <SandboxTab snap={snap} agent={agent} />}
         {tab === "messages" && <MessagesTab snap={snap} agent={agent} />}
       </div>
     </>
+  );
+}
+
+const SESSION_COLOR = { running: "#00e436", starting: "#29adff", stopped: "#83769c", failed: "#ff004d" } as const;
+
+/** Session state + Start/Stop + the agent's folder. */
+function SessionBar({ agent, status }: { agent: AgentConfig; status: AgentStatus }) {
+  const s = status.session;
+  const live = useOffice((st) => st.live);
+  return (
+    <div className="flex items-center gap-2 border-b-[3px] border-ink bg-cream px-3 py-1.5 text-[13px]">
+      <span className={`chip chip-dot ${s.state === "starting" ? "blink" : ""}`} style={{ ["--c" as string]: SESSION_COLOR[s.state] }}>
+        {s.state === "running" ? "Session running" : s.state === "starting" ? "Starting" : s.state === "failed" ? "Failed" : "Stopped"}
+      </span>
+      <span className="min-w-0 flex-1 truncate font-term text-[15px] text-muted" title={s.workspace ?? undefined}>
+        {s.state === "starting" ? s.detail : (s.workspace ?? "")}
+      </span>
+      {s.workspace && live && (
+        <button className="btn px-2 text-[12px]" onClick={() => officeActions.openWorkspace(agent.id)} title="Open the agent's folder">
+          Open folder
+        </button>
+      )}
+      {s.state === "running" || s.state === "starting" ? (
+        <button className="btn px-2 text-[12px]" disabled={s.state === "starting"} onClick={() => officeActions.stopAgent(agent.id)}>
+          Stop
+        </button>
+      ) : (
+        <button className="btn px-2 text-[12px]" onClick={() => officeActions.startAgent(agent.id)}>
+          Start
+        </button>
+      )}
+    </div>
+  );
+}
+
+function NotRunning({ agent, status }: { agent: AgentConfig; status: AgentStatus }) {
+  const s = status.session;
+  const setup = useOffice((st) => st.snap?.setup);
+  const blocked = agent.mode === "sandbox" ? !setup?.sandboxReady : !setup?.localReady;
+  return (
+    <div className="grid h-full place-items-center bg-navy-2 p-6 text-center text-[#dfe6ff]">
+      <div className="max-w-[380px]">
+        {s.state === "starting" ? (
+          <p className="blink font-term text-[22px]">{s.detail ?? "Starting…"}</p>
+        ) : (
+          <>
+            <p className="mb-2 font-term text-[22px]">{s.state === "failed" ? `${agent.name} could not start` : `${agent.name} isn't running`}</p>
+            {s.detail && <pre className="mb-3 whitespace-pre-wrap border-2 border-red px-2 py-1 text-left font-term text-[16px] text-[#ffd0dc]">{s.detail}</pre>}
+            <p className="mb-4 text-[13px] text-[#9aa6d1]">
+              {agent.mode === "sandbox"
+                ? "Start runs Claude Code in a Docker Sandbox on this agent's own copy of the repo."
+                : "Start runs Claude Code locally in this agent's own copy of the repo, with permission prompts on."}
+            </p>
+            <div className="flex justify-center gap-2">
+              <button className="btn text-ink" onClick={() => officeActions.startAgent(agent.id)}>
+                Start {agent.name}
+              </button>
+              {blocked && (
+                <button className="btn text-ink" onClick={() => ui.openSetup()}>
+                  Setup checklist
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -143,6 +216,7 @@ function SandboxTab({ snap, agent }: { snap: OfficeSnapshot; agent: AgentConfig 
   const env = snap.environments.find((e) => e.agentId === agent.id);
   const now = useNow(5000);
   const sb = agent.sandbox;
+  const actual = snap.agents.find((a) => a.agentId === agent.id)?.session.sandbox;
   const row = (k: string, v: ReactNode) => (
     <div className="grid grid-cols-[140px_1fr] gap-2 border-t border-dashed border-cream-3 py-1.5 text-[14px] first:border-t-0">
       <span className="text-muted">{k}</span>
@@ -154,6 +228,13 @@ function SandboxTab({ snap, agent }: { snap: OfficeSnapshot; agent: AgentConfig 
       <SectionTitle>Sandbox</SectionTitle>
       <div className="panel mb-4 px-3 py-1">
         {row("Mode", agent.mode === "sandbox" ? "Docker Sandbox (microVM), full access inside the VM" : "Local worktree, permission prompts on")}
+        {row(
+          "Resources",
+          <>
+            {sb.resources.cpus || sb.resources.memoryGb ? `${sb.resources.cpus ?? "all"} CPUs · ${sb.resources.memoryGb ?? "default"} GB` : "sbx default"}
+            {actual && <span className="text-muted"> (now {actual.cpus} CPUs · {actual.memoryGb} GB)</span>}
+          </>,
+        )}
         {row("Network policy", POLICY[sb.policy])}
         {row("Allowed", sb.allow.length ? sb.allow.join(", ") : "—")}
         {row("Blocked", sb.deny.length ? sb.deny.join(", ") : "—")}
