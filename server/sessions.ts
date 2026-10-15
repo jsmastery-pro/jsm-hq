@@ -1,7 +1,7 @@
 // Agent sessions: start/stop in tmux, a pty attached to each for the browser
 // terminal, and the setup checklist's "Run in terminal" helper.
 
-import { spawn as spawnPty, type IPty } from "node-pty";
+import { spawn as spawnPty, type IPty } from "@lydell/node-pty";
 import { existsSync, rmSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import type { SetupCheckId, WorkspaceInfo } from "../src/data/types";
