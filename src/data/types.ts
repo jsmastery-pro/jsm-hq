@@ -247,6 +247,8 @@ export interface SbxState {
 export interface MachineInfo {
   cpus: number;
   memoryGb: number;
+  /** False on Windows: agents run inside HQ and stop when it stops (no tmux). */
+  persistentAgents?: boolean;
 }
 
 export interface SetupState {

@@ -1,6 +1,6 @@
 // Agent sessions live in tmux so they survive HQ restarts.
 
-import { run } from "./lib/exec";
+import { run } from "../lib/exec";
 
 export async function hasSession(name: string): Promise<boolean> {
   return (await run("tmux", ["has-session", "-t", `=${name}`], { timeoutMs: 5000 })).ok;

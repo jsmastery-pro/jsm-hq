@@ -81,13 +81,14 @@ async function main() {
   const url = `${uiOrigin}/?token=${uiToken}`;
   log.info(`\n\n  JSM HQ is running → ${url}\n`);
   if (!flag("no-open")) {
-    const opener = process.platform === "darwin" ? "open" : process.platform === "win32" ? "explorer" : "xdg-open";
+    // Windows: rundll32 hands the URL to the default browser without a shell (the token has no special chars, but `&` would).
+    const [opener, args] = process.platform === "darwin" ? ["open", [url]] : process.platform === "win32" ? ["rundll32", ["url.dll,FileProtocolHandler", url]] : ["xdg-open", [url]];
     // Give Vite a moment in dev.
-    setTimeout(() => void run(opener, [url]), dev ? 1500 : 0);
+    setTimeout(() => void run(opener, args), dev ? 1500 : 0);
   }
 
   const quit = () => {
-    log.info("stopping HQ — agent sessions keep running in tmux");
+    log.info(sessions.backend.persistent ? "stopping HQ — agent sessions keep running in tmux" : "stopping HQ and its agents — sandboxes and folders are kept");
     sessions.shutdown();
     github.stop();
     process.exit(0);
@@ -99,6 +100,15 @@ async function main() {
 main().catch((err) => {
   if ((err as NodeJS.ErrnoException)?.code === "EADDRINUSE") {
     log.error(`Port ${arg("port") ?? 7420} is in use — another HQ may be running. Stop it, or pick another port: npx @therealjsmastery/jsm-hq --port 7421`);
+    process.exit(1);
+  }
+  if ((err as NodeJS.ErrnoException)?.code === "EACCES") {
+    const port = arg("port") ?? 7420;
+    log.error(
+      process.platform === "win32"
+        ? `Windows reserved port ${port} (Hyper-V, WSL and Docker reserve port ranges). Pick another: npx @therealjsmastery/jsm-hq --port 8420\n  See the reserved ranges with: netsh interface ipv4 show excludedportrange protocol=tcp`
+        : `Not allowed to use port ${port}. Pick another: npx @therealjsmastery/jsm-hq --port 8420`,
+    );
     process.exit(1);
   }
   log.error(err instanceof Error ? err.message : err);

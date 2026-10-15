@@ -1,23 +1,25 @@
-// Agent sessions: start/stop in tmux, a pty attached to each for the browser
-// terminal, and the setup checklist's "Run in terminal" helper.
+// Agent sessions: start/stop through the session backend (tmux on macOS and
+// Linux), a live terminal view of each for the browser, and the setup
+// checklist's "Run in terminal" helper.
 
-import { spawn as spawnPty, type IPty } from "node-pty";
+import { spawn as spawnPty, type IPty } from "@lydell/node-pty";
 import { existsSync, rmSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import type { SetupCheckId, WorkspaceInfo } from "../src/data/types";
 import { adapters, localBinary } from "./adapters";
 import type { Hub } from "./hub";
-import { run, shq } from "./lib/exec";
+import { sessionBackend, type LaunchSpec, type TermHandle } from "./backends";
+import { run } from "./lib/exec";
 import { log } from "./lib/log";
 import { projectHome, sessionName } from "./paths";
 import { POLICY_NOT_INITIALIZED, runSetupChecks } from "./setup";
-import * as tmux from "./tmux";
 import { ensureWorkspace, workspaceFor } from "./workspace";
 
 const TERM_ENV = { ...process.env, TERM: "xterm-256color", COLORTERM: "truecolor" } as Record<string, string>;
 
 export class Sessions {
-  private ptys = new Map<string, IPty>();
+  readonly backend = sessionBackend();
+  private terms = new Map<string, TermHandle>();
   private sizes = new Map<string, { cols: number; rows: number }>();
   private fixes = new Map<string, IPty>();
   private policyOk = false;
@@ -65,23 +67,25 @@ export class Sessions {
       const dir = await ensureWorkspace(agent, hub.slug, hub.repo);
       const adapter = adapters[agent.cli];
       await adapter.writeFiles(dir, agent, hub.snap.config, this.agentToken);
-      if (!(await tmux.hasSession(name))) {
+      if (!(await this.backend.exists(name))) {
         const launch = adapter.launch(agent, dir);
         const envFile = this.envFileFor(id);
-        // Local mode: export the env file's variables into the shell that runs the agent.
-        let command = (envFile ? `set -a && . ${shq(envFile)} && set +a && ` : "") + [localBinary[agent.cli], ...launch.args].join(" ");
+        // Local mode: the agent gets the env file's variables (tmux only: there's no shell to load them into otherwise).
+        let spec: LaunchSpec = { file: localBinary[agent.cli], args: launch.args, envFile };
+        if (agent.mode === "local" && envFile && !this.backend.persistent)
+          hub.activity("session", id, `${agent.name}'s env file isn't loaded in Local mode on Windows. Use Sandbox mode for app variables.`);
         if (agent.mode === "sandbox") {
           hub.setSession(id, { detail: "Allowing the sandbox to reach HQ…" });
           await this.ensurePolicy();
           hub.setSession(id, { detail: "Starting sandbox…" });
           // Size only applies when sbx creates the sandbox; an existing one keeps its size.
           const { cpus, memoryGb } = agent.sandbox.resources;
-          const size = [cpus ? `--cpus ${cpus}` : "", memoryGb ? `--memory ${Math.round(memoryGb * 1024)}m` : ""];
-          const env = envFile ? ["--env-file", shq(envFile)] : [];
+          const size = [...(cpus ? ["--cpus", String(cpus)] : []), ...(memoryGb ? ["--memory", `${Math.round(memoryGb * 1024)}m`] : [])];
+          const env = envFile ? ["--env-file", envFile] : [];
           const args = launch.args.length ? ["--", ...launch.args] : [];
-          command = ["sbx run --name", shq(name), ...size, ...env, launch.sbxAgent, shq(dir), ...args].filter(Boolean).join(" ");
+          spec = { file: "sbx", args: ["run", "--name", name, ...size, ...env, launch.sbxAgent, dir, ...args], envFile: null };
         }
-        await tmux.newSession(name, dir, command);
+        await this.backend.create(name, dir, spec, { cols: 200, rows: 50 });
       }
       this.attach(id);
       hub.setSession(id, { state: "running", detail: null, workspace: dir });
@@ -102,9 +106,8 @@ export class Sessions {
     if (!agent) return;
     const name = this.name(id);
     this.onSessionDown(id);
-    this.ptys.get(id)?.kill();
-    this.ptys.delete(id);
-    await tmux.killSession(name);
+    this.detach(id);
+    await this.backend.kill(name);
     // Stop (not remove) the VM so it can resume later with its state.
     if (agent.mode === "sandbox") void run("sbx", ["stop", name], { timeoutMs: 30_000 });
     hub.setSession(id, { state: "stopped", detail: null });
@@ -145,9 +148,8 @@ export class Sessions {
     const done: string[] = [];
     const name = this.name(id);
     this.onSessionDown(id);
-    this.ptys.get(id)?.kill();
-    this.ptys.delete(id);
-    await tmux.killSession(name);
+    this.detach(id);
+    await this.backend.kill(name);
     if (opts.deleteSandbox) {
       const rm = await run("sbx", ["rm", "-f", name], { timeoutMs: 60_000 });
       if (rm.ok) done.push("sandbox");
@@ -243,34 +245,40 @@ export class Sessions {
 
   // ------------------------------------------------------------ terminals
 
-  /** One pty per agent, attached to its tmux session; output goes to every browser. */
+  /** One terminal view per agent; output goes to every browser. */
   private attach(id: string) {
-    if (this.ptys.has(id)) return;
+    if (this.terms.has(id)) return;
     const size = this.sizes.get(id) ?? { cols: 120, rows: 36 };
-    const pty = spawnPty("tmux", ["attach-session", "-t", `=${this.name(id)}`], { name: "xterm-256color", cols: size.cols, rows: size.rows, env: TERM_ENV });
-    this.ptys.set(id, pty);
-    pty.onData((d) => this.hub.terminal(id, d));
-    pty.onExit(() => {
-      if (this.ptys.get(id) === pty) this.ptys.delete(id);
-    });
+    const term: TermHandle = this.backend.attach(
+      this.name(id),
+      size,
+      (d) => this.hub.terminal(id, d),
+      () => {
+        if (this.terms.get(id) === term) this.terms.delete(id);
+      },
+    );
+    this.terms.set(id, term);
   }
 
-  /** Types a line into an agent's Claude Code prompt and submits it. */
+  private detach(id: string) {
+    this.terms.get(id)?.close();
+    this.terms.delete(id);
+  }
+
+  /** Types a line into an agent's prompt and submits it. */
   async typeInto(agentId: string, text: string): Promise<boolean> {
-    const target = `=${this.name(agentId)}:`;
-    if (!(await tmux.hasSession(this.name(agentId)))) return false;
-    if (!(await run("tmux", ["send-keys", "-t", target, "-l", text], { timeoutMs: 5000 })).ok) return false;
+    if (!(await this.backend.type(this.name(agentId), text))) return false;
     await new Promise((r) => setTimeout(r, 200));
-    return (await run("tmux", ["send-keys", "-t", target, "Enter"], { timeoutMs: 5000 })).ok;
+    return this.backend.enter(this.name(agentId));
   }
 
   async pressEnter(agentId: string): Promise<boolean> {
-    return (await run("tmux", ["send-keys", "-t", `=${this.name(agentId)}:`, "Enter"], { timeoutMs: 5000 })).ok;
+    return this.backend.enter(this.name(agentId));
   }
 
   input(id: string, data: string) {
     if (id.startsWith("setup:")) return this.fixes.get(id)?.write(data);
-    this.ptys.get(id)?.write(data);
+    this.terms.get(id)?.write(data);
   }
 
   resize(id: string, cols: number, rows: number) {
@@ -278,7 +286,7 @@ export class Sessions {
     const r = Math.max(5, Math.min(200, Math.floor(rows)));
     const same = this.sizes.get(id)?.cols === c && this.sizes.get(id)?.rows === r;
     this.sizes.set(id, { cols: c, rows: r });
-    const pty = id.startsWith("setup:") ? this.fixes.get(id) : this.ptys.get(id);
+    const pty = id.startsWith("setup:") ? this.fixes.get(id) : this.terms.get(id);
     if (!pty) return;
     // A same-size resize doesn't redraw; nudge it so a newly opened terminal gets a full screen.
     if (same) {
@@ -306,13 +314,13 @@ export class Sessions {
         const st = this.hub.status(agent.id);
         if (!st || st.session.state === "starting") continue;
         const name = this.name(agent.id);
-        const alive = await tmux.hasSession(name);
+        const alive = await this.backend.exists(name);
         if (alive) {
-          const pane = await tmux.paneInfo(name);
+          const pane = await this.backend.exitInfo(name);
           if (pane?.dead) {
-            const detail = (await tmux.tailText(name)) || `Exited with code ${pane.exitStatus}`;
-            await tmux.killSession(name);
-            this.ptys.delete(agent.id);
+            const detail = (await this.backend.screenText(name, 6)) || `Exited with code ${pane.exitStatus}`;
+            await this.backend.kill(name);
+            this.detach(agent.id);
             this.onSessionDown(agent.id);
             this.hub.setSession(agent.id, { state: "failed", detail });
             this.hub.setStatus(agent.id, { state: "idle", note: "Session ended" });
@@ -327,7 +335,7 @@ export class Sessions {
           }
           if (agent.cli === "codex") await this.watchCodexScreen(agent.id, name);
         } else if (st.session.state === "running") {
-          this.ptys.delete(agent.id);
+          this.detach(agent.id);
           this.onSessionDown(agent.id);
           this.hub.setSession(agent.id, { state: "stopped", detail: null });
           this.hub.setStatus(agent.id, { state: "idle", note: "Stopped" });
@@ -350,7 +358,7 @@ export class Sessions {
   private async watchCodexScreen(agentId: string, name: string) {
     const st = this.hub.status(agentId);
     if (!st) return;
-    const screen = await tmux.tailText(name, 14);
+    const screen = await this.backend.screenText(name, 14);
     const TRUST_NOTE = "Asking: approve Codex's folder and hook prompts in the terminal (choose Yes, then Trust all)";
     if (/Do you trust the contents of this directory|Hooks need review/i.test(screen)) {
       if (st.note !== TRUST_NOTE) {
@@ -394,8 +402,9 @@ export class Sessions {
 
   shutdown() {
     if (this.polling) clearInterval(this.polling);
-    // Detach only: tmux keeps the agents running.
-    for (const p of this.ptys.values()) p.kill();
+    // tmux keeps the agents running; the pty backend stops them.
+    for (const t of this.terms.values()) t.close();
+    this.backend.shutdown();
     for (const p of this.fixes.values()) p.kill();
   }
 }
