@@ -6,11 +6,11 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentCli, AgentConfig, HqConfig } from "../src/data/types";
 import { excludeFromGit, hookCommand, hqUrl, MCP_CONFIG, roleMd, writeClaudeFiles } from "./agentFiles";
-import { run, shq } from "./lib/exec";
+import { run } from "./lib/exec";
 
 export interface Launch {
   sbxAgent: string; // agent name for `sbx run`
-  args: string[]; // the CLI's own arguments (already shell-quoted)
+  args: string[]; // the CLI's own arguments (not shell-quoted)
 }
 
 export interface CliAdapter {
@@ -29,7 +29,7 @@ const claude: CliAdapter = {
     // "Opus" / "Sonnet" / "Haiku" → Claude Code's aliases; anything else is passed as a full model id.
     const m = agent.model.trim();
     const model = !m || /^default$/i.test(m) ? null : /^(opus|sonnet|haiku)$/i.test(m) ? m.toLowerCase() : m;
-    return { sbxAgent: "claude", args: ["--mcp-config", shq(`${dir}/${MCP_CONFIG}`), ...(model ? ["--model", shq(model)] : [])] };
+    return { sbxAgent: "claude", args: ["--mcp-config", `${dir}/${MCP_CONFIG}`, ...(model ? ["--model", model] : [])] };
   },
 };
 
@@ -71,7 +71,7 @@ const codex: CliAdapter = {
   },
   launch(agent) {
     const model = agent.model.trim() && !/^default$/i.test(agent.model.trim()) ? agent.model.trim() : null;
-    return { sbxAgent: "codex", args: model ? ["-m", shq(model)] : [] };
+    return { sbxAgent: "codex", args: model ? ["-m", model] : [] };
   },
 };
 
