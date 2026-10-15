@@ -49,16 +49,26 @@ jsm-hq --repo <path>   the repo to manage (default: current folder)
 | ------------------------ | ------------------------------------------------ | ------------------------------------------------------------------------- |
 | Node.js 20+              | Runs HQ                                          | [nodejs.org](https://nodejs.org)                                          |
 | git                      | Each agent works in its own clone                | `xcode-select --install`                                                  |
-| tmux                     | Agents keep running if HQ or the browser closes  | `brew install tmux`                                                       |
+| tmux (macOS, Linux)      | Agents keep running if HQ or the browser closes  | `brew install tmux`                                                       |
 | Docker Sandboxes (`sbx`) | Each agent runs in its own microVM               | `brew trust docker/tap && brew install docker/tap/sbx`, then `sbx login` |
 | GitHub CLI (`gh`)        | PRs and reviews (optional)                       | `brew install gh`, then `gh auth login`                                   |
 
 Sandboxes need macOS 14+ on Apple silicon, Windows 11, or Ubuntu 24.04+. On other machines, set agents to **Local** in Settings → Team. They then run Claude Code or Codex installed on your machine, with permission prompts on.
 
+On Linux, install the same tools with your package manager (for example `sudo apt install git tmux gh`).
+
+### Windows 11 (experimental)
+
+Run `npx @therealjsmastery/jsm-hq` in PowerShell or Windows Terminal, not in WSL. Install the tools with winget (`winget install Git.Git Docker.sbx GitHub.cli`); the setup checklist shows the exact commands. On Windows:
+
+- There's no tmux, so HQ runs the agents itself. **Agents stop when HQ stops.** Their sandboxes and folders are kept; press **Start** to run them again.
+- Use the terminal in the agent's drawer; there's no `tmux attach`.
+- In Local mode, the agent's env file isn't loaded. Use Sandbox mode for app variables.
+
 ## How it works
 
 - **Workspaces.** Each agent gets a full clone of your repo at `~/.jsmhq/<project>/<agent>/`. HQ writes the agent's `ROLE.md`, hooks and MCP config there and excludes them from git.
-- **Sessions.** Each agent runs in a tmux session (`hq-<project>-<agent>`) inside its sandbox. Its live terminal is in the agent's drawer, and you can attach from any terminal with `tmux attach -t hq-<project>-<agent>`.
+- **Sessions.** On macOS and Linux each agent runs in a tmux session (`hq-<project>-<agent>`) inside its sandbox. Its live terminal is in the agent's drawer, and you can attach from any terminal with `tmux attach -t hq-<project>-<agent>`. On Windows, HQ runs the agents itself.
 - **Team MCP.** Agents talk to each other and to HQ through an MCP server called `hq`. The lead creates boards and tasks and assigns them; anyone can send a message. HQ delivers it right away if the agent is idle, or when its current turn ends if it's busy.
 - **GitHub.** HQ reads PRs, checks and review comments through your `gh` login (every ~20 seconds). It matches PRs to tasks by `[TASK-ID]` in the title, tells the author about review comments, tells the lead when a PR passes and marks the task done when you merge. **HQ never merges.**
 - **Sandbox settings** (Settings → Sandbox) go straight to `sbx`: CPU and memory, allowed and blocked domains, service keys, an env file for app variables, and the upstream proxy. HQ never stores key values, never reads your env files and only removes rules it added.
@@ -72,7 +82,7 @@ Sandboxes need macOS 14+ on Apple silicon, Windows 11, or Ubuntu 24.04+. On othe
 | A Codex agent is stuck on "Do you trust this folder?"      | Codex asks once per workspace, and again to trust HQ's hooks. Answer it in the agent's terminal. HQ never answers trust prompts for you.                         |
 | "Port 7420 is in use"                                      | Another HQ is running. Stop it, or use `npx @therealjsmastery/jsm-hq --port 7421`.                                                                                                  |
 | Agent state never changes / messages never arrive          | The sandbox can't reach HQ. Check that `sbx policy ls` shows `localhost:<port>` and `host.docker.internal:<port>` allowed. HQ adds them on start if they're missing. |
-| Windows                                                    | Run HQ inside WSL 2 (Ubuntu 24.04+). tmux isn't available on native Windows.                                                                                      |
+| Windows: `listen EACCES` on start                          | Windows reserved that port for Hyper-V, WSL or Docker. Use another: `npx @therealjsmastery/jsm-hq --port 8420`.                                                  |
 | `posix_spawnp failed` when opening a terminal              | Reinstall (`npx clear-npx-cache` then `npx @therealjsmastery/jsm-hq`). HQ fixes the node-pty helper's permissions on install and on start.                                         |
 
 **Clean up a project:** remove each agent in Settings → Team (it deletes the sandbox and, if you choose, the folder), then delete `~/.jsmhq/<project>`.
@@ -109,7 +119,7 @@ src/
   store/     Zustand stores; the only code that talks to the data source
   office/    The PixiJS pixel office: layout generator, sprites, agents, belt
   ui/        Top bar, team panel, activity feed, drawers, settings, setup checklist, welcome
-server/      Local HQ server: setup checks, workspaces, tmux + sbx sessions, hooks, Team MCP, GitHub
+server/      Local HQ server: setup checks, workspaces, sessions (tmux, or HQ-owned on Windows) + sbx, hooks, Team MCP, GitHub
 bin/         The jsm-hq command
 docs/        Product idea and build spec
 context/     Implementation plans
