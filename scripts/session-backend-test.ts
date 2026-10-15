@@ -63,7 +63,8 @@ async function test(backend: SessionBackend) {
     await backend.enter(name);
     await until("exit noticed", async () => (await backend.exitInfo(name))?.dead === true);
     const exit = await backend.exitInfo(name);
-    if (exit?.exitStatus !== 3) throw new Error(`exit status ${exit?.exitStatus}, expected 3`);
+    // Some tmux versions (e.g. Ubuntu's) report a dead pane without its exit code; HQ only shows it in a message.
+    if (exit?.exitStatus !== 3 && !(backend.kind === "tmux" && exit?.exitStatus === null)) throw new Error(`exit status ${exit?.exitStatus}, expected 3`);
 
     await backend.kill(name);
     if (await backend.exists(name)) throw new Error("session still exists after kill");
