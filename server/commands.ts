@@ -1,6 +1,6 @@
 // Browser commands → server actions. Names match OfficeDataSource methods.
 
-import { SERVICE_KEYS, type AgentPatch, type Board, type NewAgentInput, type ProjectConfig, type RemoveAgentOptions, type SandboxSettings, type SetupCheckId, type WorkflowPatch } from "../src/data/types";
+import { SERVICE_KEYS, type AgentCli, type AgentConfig, type AgentPatch, type ReviewTool, type WelcomeInput, type Board, type NewAgentInput, type ProjectConfig, type RemoveAgentOptions, type SandboxSettings, type SetupCheckId, type WorkflowPatch } from "../src/data/types";
 import { run } from "./lib/exec";
 import { agentPalette } from "../src/theme/tokens";
 import { Hub } from "./hub";
@@ -160,6 +160,39 @@ export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inb
     },
     refreshSbx: () => sbx.refresh(),
 
+    completeWelcome: async (raw) => {
+      if (!hub.snap.welcome) return;
+      const input = (raw ?? {}) as Partial<WelcomeInput>;
+      const cli = (c: unknown): AgentCli => (c === "codex" ? "codex" : "claude");
+      const used = new Set<string>();
+      const make = (name: string, role: string, agentCli: AgentCli, isLead: boolean): AgentConfig => {
+        const clean = str(name, 40).trim() || (isLead ? "Lead" : "Agent");
+        let id = slug(clean);
+        for (let i = 2; used.has(id); i++) id = `${slug(clean)}-${i}`;
+        used.add(id);
+        const agent = newAgent(id, clean, isLead ? "Lead" : str(role, 40).trim() || "Developer", agentPalette[used.size - 1] ?? agentPalette[0], isLead);
+        agent.cli = agentCli;
+        return agent;
+      };
+      const lead = make(input.lead?.name ?? "John", "Lead", cli(input.lead?.cli), true);
+      const workers = (Array.isArray(input.workers) ? input.workers : []).slice(0, 11).map((w) => make(w?.name ?? "", w?.role ?? "", cli(w?.cli), false));
+      if (!workers.length) return hub.activity("config", null, "Add at least one worker to the team.");
+      const cfg = hub.snap.config;
+      if (typeof input.projectName === "string" && input.projectName.trim()) cfg.project.name = str(input.projectName, 80).trim();
+      cfg.team = [lead, ...workers];
+      const tools: ReviewTool[] = ["coderabbit", "greptile", "copilot", "human", "custom"];
+      if (tools.includes(input.reviewTool as ReviewTool)) cfg.workflow.review.tool = input.reviewTool as ReviewTool;
+      if (typeof input.reviewEnabled === "boolean") cfg.workflow.review.enabled = input.reviewEnabled;
+      hub.snap.agents = cfg.team.map((a) => Hub.freshStatus(a.id));
+      hub.snap.welcome = false;
+      hub.configChanged(); // saves .jsmhq/config.json for the first time
+      hub.planChanged();
+      await sessions.recheckSetup();
+      await sbx.refresh();
+      hub.emit({ type: "snapshot", snapshot: structuredClone(hub.snap) });
+      hub.activity("config", null, `Welcome! Team created: ${cfg.team.map((a) => a.name).join(", ")}. Press Start team when you're ready.`);
+    },
+
     updateWorkflow: (patch) => {
       const p = (patch ?? {}) as WorkflowPatch;
       const wf = hub.snap.config.workflow;
@@ -174,7 +207,13 @@ export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inb
       const project = hub.snap.config.project;
       if (typeof p.name === "string" && p.name.trim()) project.name = str(p.name, 80);
       if (typeof p.repo === "string" && p.repo.trim()) project.repo = str(p.repo, 200);
+      const exportOn = typeof p.exportPlan === "boolean" && p.exportPlan && !project.exportPlan;
+      if (typeof p.exportPlan === "boolean") project.exportPlan = p.exportPlan;
       hub.configChanged();
+      if (exportOn) {
+        hub.planChanged();
+        hub.activity("config", null, "Plan export on: HQ writes docs/plan.md whenever the plan changes.");
+      }
     },
 
     createBoard: (title) => planner.createBoard(str(title, 80)),

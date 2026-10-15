@@ -5,7 +5,7 @@ import { create } from "zustand";
 import { createMockSource } from "../data/mock/mockSource";
 import type { ConnectionStatus, DataPreset, OfficeDataSource, OfficeEvent, SimSpeed } from "../data/source";
 import { createWsSource } from "../data/ws/wsSource";
-import type { AgentConfig, AgentStatus, OfficeSnapshot, RemoveAgentOptions, SetupCheckId, WorkspaceInfo } from "../data/types";
+import type { AgentConfig, AgentStatus, OfficeSnapshot, RemoveAgentOptions, SetupCheckId, WelcomeInput, WorkspaceInfo } from "../data/types";
 import { appendTerminal, clearTerminals } from "./terminal";
 
 export interface LoggedEvent {
@@ -175,6 +175,7 @@ export const officeActions = {
   updateProject: source.updateProject.bind(source),
   createBoard: source.createBoard.bind(source),
   updateBoard: source.updateBoard.bind(source),
+  completeWelcome: (input: WelcomeInput) => source.completeWelcome(input),
   setSpeed(speed: SimSpeed) {
     source.dev?.setSpeed(speed);
     useOffice.setState({ speed });

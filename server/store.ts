@@ -63,7 +63,8 @@ function defaultConfig(repo: RepoInfo, port: number): HqConfig {
   };
 }
 
-export function loadConfig(repo: RepoInfo, port: number): HqConfig {
+/** `isNew`: no config yet — the welcome screen fills it in, then it's saved. */
+export function loadConfig(repo: RepoInfo, port: number): { config: HqConfig; isNew: boolean } {
   const file = join(dir(repo.root), "config.json");
   const found = readJson<HqConfig>(file);
   if (found) {
@@ -79,11 +80,9 @@ export function loadConfig(repo: RepoInfo, port: number): HqConfig {
       delete old.secrets;
     }
     found.project.path = repo.root;
-    return found;
+    return { config: found, isNew: false };
   }
-  const cfg = defaultConfig(repo, port);
-  saveConfig(repo.root, cfg);
-  return cfg;
+  return { config: defaultConfig(repo, port), isNew: true };
 }
 
 export function saveConfig(root: string, cfg: HqConfig) {
