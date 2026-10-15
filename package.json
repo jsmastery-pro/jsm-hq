@@ -1,6 +1,6 @@
 {
   "name": "@therealjsmastery/jsm-hq",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A pixel office where you run a team of AI coding agents (Claude Code, Codex) in Docker Sandboxes.",
   "license": "MIT",
   "type": "module",
