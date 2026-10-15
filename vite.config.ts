@@ -6,7 +6,7 @@ const hqPort = Number(process.env.HQ_PORT ?? 7420);
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  // Don't scan the standalone prototypes in /prototypes for dependencies.
+  // Only scan the app; local, gitignored prototypes/ HTML files would pull in their own deps.
   optimizeDeps: { entries: ["index.html"] },
   server: {
     // The HQ server reloads itself; don't reload the page for its files.

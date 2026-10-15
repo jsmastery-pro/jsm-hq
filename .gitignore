@@ -9,3 +9,9 @@ dist
 # Built server for the npm package
 dist-server
 *.tgz
+
+# Local only (not part of the project)
+prototypes/
+docs/archive/
+docs/initial-idea.md
+*.tsbuildinfo

@@ -2,7 +2,7 @@
 
 Context for an AI coding agent. Build the **complete JSM HQ interface with mock data and no real backend.** Every piece of data comes from one mock data source that follows the same interface the real local HQ server will use later.
 
-Plan: `context/plans/001-jsm-hq-ui.md`. The previous 3D spec is archived at `docs/archive/jsmhq-context-3d.md`.
+Plan: `context/plans/001-jsm-hq-ui.md`.
 
 ---
 
