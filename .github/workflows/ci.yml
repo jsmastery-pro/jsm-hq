@@ -25,7 +25,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - name: Pack
-        run: npm pack --ignore-scripts --pack-destination pack
+        shell: bash
+        run: mkdir -p pack && npm pack --ignore-scripts --pack-destination pack
       - name: CLI smoke test
         run: node bin/jsm-hq.mjs --version && node bin/jsm-hq.mjs --help
       - name: Install and run like a new user
