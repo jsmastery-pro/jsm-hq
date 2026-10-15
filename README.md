@@ -10,7 +10,7 @@ From inside any git repo:
 
 ```bash
 cd ~/developer/my-app
-npx jsm-hq
+npx @therealjsmastery/jsm-hq
 ```
 
 HQ opens your browser and walks you through the rest:
@@ -24,16 +24,23 @@ Want to try it without touching a real project? Make a throwaway repo:
 ```bash
 mkdir hq-test && cd hq-test
 git init -b main && echo "# HQ test" > README.md && git add . && git commit -m init
-npx jsm-hq
+npx @therealjsmastery/jsm-hq
+```
+
+Use it often? Install it once and run `jsm-hq` from any repo:
+
+```bash
+npm install -g @therealjsmastery/jsm-hq
+jsm-hq
 ```
 
 ### Options
 
 ```
-npx jsm-hq --repo <path>   the repo to manage (default: current folder)
-           --port <n>      HQ port (default: 7420)
-           --no-open       don't open the browser
-           --version, --help
+jsm-hq --repo <path>   the repo to manage (default: current folder)
+       --port <n>      HQ port (default: 7420)
+       --no-open       don't open the browser
+       --version, --help
 ```
 
 ## Requirements
@@ -63,10 +70,10 @@ Sandboxes need macOS 14+ on Apple silicon, Windows 11, or Ubuntu 24.04+. On othe
 | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Agents fail to start with a sign-in error                  | Your Docker sign-in expired. Run `sbx login`, then **Check again** in the setup checklist.                                                                       |
 | A Codex agent is stuck on "Do you trust this folder?"      | Codex asks once per workspace, and again to trust HQ's hooks. Answer it in the agent's terminal. HQ never answers trust prompts for you.                         |
-| "Port 7420 is in use"                                      | Another HQ is running. Stop it, or use `npx jsm-hq --port 7421`.                                                                                                  |
+| "Port 7420 is in use"                                      | Another HQ is running. Stop it, or use `npx @therealjsmastery/jsm-hq --port 7421`.                                                                                                  |
 | Agent state never changes / messages never arrive          | The sandbox can't reach HQ. Check that `sbx policy ls` shows `localhost:<port>` and `host.docker.internal:<port>` allowed. HQ adds them on start if they're missing. |
 | Windows                                                    | Run HQ inside WSL 2 (Ubuntu 24.04+). tmux isn't available on native Windows.                                                                                      |
-| `posix_spawnp failed` when opening a terminal              | Reinstall (`npx clear-npx-cache` then `npx jsm-hq`). HQ fixes the node-pty helper's permissions on install and on start.                                         |
+| `posix_spawnp failed` when opening a terminal              | Reinstall (`npx clear-npx-cache` then `npx @therealjsmastery/jsm-hq`). HQ fixes the node-pty helper's permissions on install and on start.                                         |
 
 **Clean up a project:** remove each agent in Settings → Team (it deletes the sandbox and, if you choose, the folder), then delete `~/.jsmhq/<project>`.
 
@@ -88,7 +95,9 @@ HQ_REPO=~/developer/hq-test pnpm dev:hq    # real HQ server + UI with hot reload
 | `pnpm hq`        | Builds the UI, then runs HQ like a release (`--repo <path> --port 7420`)     |
 | `pnpm build`     | Type-checks, builds the UI to `dist/` and the server to `dist-server/`       |
 | `pnpm typecheck` | Type-check only                                                              |
-| `npm pack`       | Builds and packs the npm tarball (publishing is done by JSM's npm account)   |
+| `npm pack`       | Builds and packs the npm tarball, to test it before publishing               |
+
+**Releasing:** bump `version` in `package.json`, merge to `main`, then from a clean `main` run `npm publish` (it builds first). Only members of the `therealjsmastery` npm org can publish.
 
 Start HQ with `HQ_DEBUG=1` to log why a queued message is waiting.
 

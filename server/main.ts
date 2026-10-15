@@ -98,7 +98,7 @@ async function main() {
 
 main().catch((err) => {
   if ((err as NodeJS.ErrnoException)?.code === "EADDRINUSE") {
-    log.error(`Port ${arg("port") ?? 7420} is in use — another HQ may be running. Stop it, or pick another port: npx jsm-hq --port 7421`);
+    log.error(`Port ${arg("port") ?? 7420} is in use — another HQ may be running. Stop it, or pick another port: npx @therealjsmastery/jsm-hq --port 7421`);
     process.exit(1);
   }
   log.error(err instanceof Error ? err.message : err);
