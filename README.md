@@ -6,7 +6,9 @@ Agents can run **Claude Code** or **Codex**. Everything runs on your machine.
 
 ## Quickstart (2 minutes)
 
-From inside any git repo:
+**First time?** Follow the [getting-started guide](docs/getting-started.md): it installs Docker Sandboxes, sets its network policy, connects GitHub and sets up a repo, step by step for macOS, Linux and Windows.
+
+Already set up? From inside any git repo with a GitHub remote:
 
 ```bash
 cd ~/developer/my-app
@@ -50,8 +52,9 @@ jsm-hq --repo <path>   the repo to manage (default: current folder)
 | Node.js 20+              | Runs HQ                                          | [nodejs.org](https://nodejs.org)                                          |
 | git                      | Each agent works in its own clone                | `xcode-select --install`                                                  |
 | tmux (macOS, Linux)      | Agents keep running if HQ or the browser closes  | `brew install tmux`                                                       |
-| Docker Sandboxes (`sbx`) | Each agent runs in its own microVM               | `brew trust docker/tap && brew install docker/tap/sbx`, then `sbx login` |
-| GitHub CLI (`gh`)        | PRs and reviews (optional)                       | `brew install gh`, then `gh auth login`                                   |
+| Docker Sandboxes (`sbx`) | Each agent runs in its own microVM               | `brew trust docker/tap && brew install docker/tap/sbx`, then `sbx login` and `sbx policy init balanced` (once) |
+| GitHub CLI (`gh`)        | PRs and reviews                                  | `brew install gh`, then `gh auth login`                                   |
+| A GitHub repo            | Agents push branches and open PRs there          | `gh repo create --source . --private --push`                              |
 
 Sandboxes need macOS 14+ on Apple silicon, Windows 11, or Ubuntu 24.04+. On other machines, set agents to **Local** in Settings → Team. They then run Claude Code or Codex installed on your machine, with permission prompts on.
 
@@ -78,6 +81,7 @@ Run `npx @therealjsmastery/jsm-hq` in PowerShell or Windows Terminal, not in WSL
 
 | Problem                                                    | Fix                                                                                                                                                               |
 | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Start fails: "network policy has not been initialized"     | A fresh Docker Sandboxes install needs a base policy once: `sbx policy init balanced` (see the [guide](docs/getting-started.md#3-sign-in-and-choose-a-network-policy)). |
 | Agents fail to start with a sign-in error                  | Your Docker sign-in expired. Run `sbx login`, then **Check again** in the setup checklist.                                                                       |
 | A Codex agent is stuck on "Do you trust this folder?"      | Codex asks once per workspace, and again to trust HQ's hooks. Answer it in the agent's terminal. HQ never answers trust prompts for you.                         |
 | "Port 7420 is in use"                                      | Another HQ is running. Stop it, or use `npx @therealjsmastery/jsm-hq --port 7421`.                                                                                                  |
