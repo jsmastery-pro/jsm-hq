@@ -87,6 +87,7 @@ export function createWsSource(token: string): OfficeDataSource {
     updateProject: (patch) => send("updateProject", patch),
     createBoard: (title) => send("createBoard", title),
     updateBoard: (id, patch) => send("updateBoard", id, patch),
+    completeWelcome: (input) => send("completeWelcome", input),
   };
   return source;
 }

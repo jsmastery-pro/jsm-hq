@@ -8,46 +8,25 @@ importers:
 
   .:
     dependencies:
-      '@fontsource/pixelify-sans':
-        specifier: ^5.3.0
-        version: 5.3.0
-      '@fontsource/vt323':
-        specifier: ^5.3.0
-        version: 5.3.0
       '@modelcontextprotocol/sdk':
         specifier: ^1.32.1
         version: 1.32.1(zod@4.6.7)
-      '@xterm/addon-fit':
-        specifier: ^0.10.0
-        version: 0.10.0(@xterm/xterm@5.5.0)
-      '@xterm/xterm':
-        specifier: ^5.5.0
-        version: 5.5.0
-      framer-motion:
-        specifier: ^11.18.2
-        version: 11.18.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       node-pty:
         specifier: ^1.1.0
         version: 1.1.0
-      pixi.js:
-        specifier: ^8.22.0
-        version: 8.22.0
-      react:
-        specifier: 18.3.1
-        version: 18.3.1
-      react-dom:
-        specifier: 18.3.1
-        version: 18.3.1(react@18.3.1)
       ws:
         specifier: ^8.22.0
         version: 8.22.0
       zod:
         specifier: ^4.6.7
         version: 4.6.7
-      zustand:
-        specifier: ^5.0.15
-        version: 5.0.15(@types/react@18.3.31)(react@18.3.1)
     devDependencies:
+      '@fontsource/pixelify-sans':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/vt323':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@tailwindcss/vite':
         specifier: ^4.3.3
         version: 4.3.3(vite@6.4.4(@types/node@26.6.5)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.15))
@@ -66,9 +45,30 @@ importers:
       '@vitejs/plugin-react':
         specifier: ^4.7.0
         version: 4.7.0(vite@6.4.4(@types/node@26.6.5)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.15))
+      '@xterm/addon-fit':
+        specifier: ^0.10.0
+        version: 0.10.0(@xterm/xterm@5.5.0)
+      '@xterm/xterm':
+        specifier: ^5.5.0
+        version: 5.5.0
       concurrently:
         specifier: ^10.0.6
         version: 10.0.6
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
+      framer-motion:
+        specifier: ^11.18.2
+        version: 11.18.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      pixi.js:
+        specifier: ^8.22.0
+        version: 8.22.0
+      react:
+        specifier: 18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: 18.3.1
+        version: 18.3.1(react@18.3.1)
       tailwindcss:
         specifier: ^4.3.3
         version: 4.3.3
@@ -81,6 +81,9 @@ importers:
       vite:
         specifier: ^6.4.4
         version: 6.4.4(@types/node@26.6.5)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.15)
+      zustand:
+        specifier: ^5.0.15
+        version: 5.0.15(@types/react@18.3.31)(react@18.3.1)
 
 packages:
 

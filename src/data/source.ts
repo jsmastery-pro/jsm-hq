@@ -12,6 +12,7 @@ import type {
   RemoveAgentOptions,
   SetupCheckId,
   SetupState,
+  WelcomeInput,
   WorkspaceInfo,
   ProjectConfig,
   PullRequest,
@@ -95,6 +96,9 @@ export interface OfficeDataSource {
   updateProject(patch: Partial<ProjectConfig>): void;
   createBoard(title: string): void;
   updateBoard(id: string, patch: Partial<Pick<Board, "title" | "status">>): void;
+
+  /** Finishes first-run setup: saves the project's team and review tool. */
+  completeWelcome(input: WelcomeInput): void;
 
   dev?: DevControls;
 }

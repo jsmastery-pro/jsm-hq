@@ -3,6 +3,7 @@
 
 import type { OfficeEvent } from "../src/data/source";
 import type { ActivityType, AgentConfig, AgentStatus, HqConfig, OfficeSnapshot, SessionInfo, SetupState } from "../src/data/types";
+import { writePlanExport } from "./planExport";
 import { saveConfig, savePlan, type PlanFile } from "./store";
 import type { RepoInfo } from "./repo";
 
@@ -97,7 +98,9 @@ export class Hub {
   }
 
   planChanged() {
-    savePlan(this.repo.root, { boards: this.snap.boards, tasks: this.snap.tasks });
+    const plan = { boards: this.snap.boards, tasks: this.snap.tasks };
+    savePlan(this.repo.root, plan);
+    if (this.snap.config.project.exportPlan) writePlanExport(this.repo.root, this.snap.config, plan);
   }
 
   terminal(agentId: string, data: string) {

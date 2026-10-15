@@ -308,6 +308,10 @@ export function createMockSource(): OfficeDataSource {
       world.emit({ type: "board.updated", board: { ...board } });
     },
 
+    completeWelcome() {
+      // The demo never shows the welcome screen.
+    },
+
     dev: {
       presets: presets.map((p) => ({ id: p.id, label: p.label })),
       loadPreset(id) {

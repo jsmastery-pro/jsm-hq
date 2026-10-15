@@ -54,10 +54,13 @@ export interface WorkflowConfig {
 }
 
 export interface ProjectConfig {
+  /** Fixed once created: names sandboxes, tmux sessions and ~/.jsmhq/<id>. Renaming the project never changes it. */
+  id: string; // "askwell"
   name: string; // "Askwell"
   repo: string; // "jsmastery-pro/askwell"
   path: string; // "~/developer/askwell"
   hqPort: number; // port sandboxes use to reach HQ via host.docker.internal
+  exportPlan?: boolean; // also write the plan to docs/plan.md
 }
 
 export interface HqConfig {
@@ -255,6 +258,8 @@ export interface SetupState {
 }
 
 export interface OfficeSnapshot {
+  /** True until the first-run welcome is finished for this repo (real HQ only). */
+  welcome?: boolean;
   setup: SetupState;
   sbx: SbxState;
   config: HqConfig;
@@ -275,6 +280,15 @@ export interface NewAgentInput {
   cli?: AgentCli;
   model?: string;
   mode: AgentMode;
+}
+
+/** First-run choices from the welcome screen. */
+export interface WelcomeInput {
+  projectName: string;
+  lead: { name: string; cli: AgentCli };
+  workers: { name: string; role: string; cli: AgentCli }[];
+  reviewTool: ReviewTool;
+  reviewEnabled: boolean;
 }
 
 export type AgentPatch = Partial<

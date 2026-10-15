@@ -16,7 +16,8 @@ import { Planner } from "./planner";
 import { Sbx } from "./sbx";
 import { run } from "./lib/exec";
 import { log } from "./lib/log";
-import { agentToken, browserToken, slugify } from "./paths";
+import { ensurePtyHelperExecutable } from "./lib/ptyFix";
+import { agentToken, browserToken } from "./paths";
 import { detectRepo } from "./repo";
 import { Sessions } from "./sessions";
 import { runSetupChecks } from "./setup";
@@ -29,12 +30,13 @@ function arg(name: string): string | undefined {
 const flag = (name: string) => process.argv.includes(`--${name}`);
 
 async function main() {
+  ensurePtyHelperExecutable();
   const dev = flag("dev");
   const port = Number(arg("port") ?? process.env.HQ_PORT ?? 7420);
   const repo = await detectRepo(resolve(arg("repo") ?? process.env.HQ_REPO ?? process.cwd()));
-  const config = loadConfig(repo, port);
+  const { config, isNew } = loadConfig(repo, port);
   config.project.hqPort = port;
-  const slug = slugify(config.project.name);
+  const slug = config.project.id;
   const token = agentToken(slug);
   const uiToken = browserToken(slug, dev);
 
@@ -44,6 +46,7 @@ async function main() {
   for (const c of setup.checks) log.info(`  ${c.status === "ok" ? "✓" : c.status === "warning" ? "!" : "✗"} ${c.label}: ${c.detail}`);
 
   const hub = new Hub(repo, slug, config, loadPlan(repo.root), setup);
+  hub.snap.welcome = isNew;
   const sessions = new Sessions(hub, token);
   const inbox = new Inbox(hub, { type: (id, text) => sessions.typeInto(id, text), enter: (id) => sessions.pressEnter(id) });
   sessions.onSessionDown = (id) => inbox.sessionDown(id);
@@ -94,6 +97,10 @@ async function main() {
 }
 
 main().catch((err) => {
+  if ((err as NodeJS.ErrnoException)?.code === "EADDRINUSE") {
+    log.error(`Port ${arg("port") ?? 7420} is in use — another HQ may be running. Stop it, or pick another port: npx jsm-hq --port 7421`);
+    process.exit(1);
+  }
   log.error(err instanceof Error ? err.message : err);
   process.exit(1);
 });

@@ -6,7 +6,7 @@ import { Field, Portrait, SectionTitle } from "../kit";
 import { CommitInput } from "./controls";
 import { RemoveAgentDialog } from "./RemoveAgentDialog";
 
-function CliSelect({ value, onChange }: { value: AgentCli; onChange: (v: AgentCli) => void }) {
+export function CliSelect({ value, onChange }: { value: AgentCli; onChange: (v: AgentCli) => void }) {
   return (
     <select className="field" value={value} onChange={(e) => onChange(e.target.value as AgentCli)} aria-label="Coding agent">
       {(Object.keys(CLI_LABEL) as AgentCli[]).map((c) => (
@@ -17,7 +17,7 @@ function CliSelect({ value, onChange }: { value: AgentCli; onChange: (v: AgentCl
     </select>
   );
 }
-const ROLE_SUGGESTIONS = ["Developer", "QA", "Designer", "Docs", "DevOps", "Security"];
+export const ROLE_SUGGESTIONS = ["Developer", "QA", "Designer", "Docs", "DevOps", "Security"];
 
 export function TeamSettings() {
   const team = useOffice((s) => s.snap?.config.team);

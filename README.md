@@ -1,123 +1,111 @@
 # JSM HQ
 
-A pixel-art office where you run a team of AI coding agents. Every agent works at its own desk (its own Docker Sandbox), and the office shows the team's work as it happens: the plan, tasks, pull requests, reviews and deploys.
+A pixel-art office where you run a team of AI coding agents on your repo. One lead plans the work and assigns tasks; each worker gets its own desk, its own copy of the repo and its own Docker Sandbox. The office shows the team's work as it happens: the plan, tasks, pull requests, reviews and deploys.
 
-There are two ways to run it:
+Agents can run **Claude Code** or **Codex**. Everything runs on your machine.
 
-- **Demo**: the UI with mock data. No setup, nothing leaves your browser.
-- **Real agents**: HQ runs real Claude Code agents on one of your repos.
+## Quickstart (2 minutes)
+
+From inside any git repo:
+
+```bash
+cd ~/developer/my-app
+npx jsm-hq
+```
+
+HQ opens your browser and walks you through the rest:
+
+1. **Welcome:** name the project, pick a lead and workers (Claude Code or Codex for each) and a review tool. HQ saves this to `.jsmhq/config.json` in your repo.
+2. **Setup checklist:** if something is missing on your machine, HQ shows what to install, with a Copy button, docs links and, for safe commands, **Run in terminal**.
+3. **Start the team** from the top bar, then message the lead from their **Messages** tab, for example: *"Plan two small tasks for Bob and assign the first one."*
+
+Want to try it without touching a real project? Make a throwaway repo:
+
+```bash
+mkdir hq-test && cd hq-test
+git init -b main && echo "# HQ test" > README.md && git add . && git commit -m init
+npx jsm-hq
+```
+
+### Options
+
+```
+npx jsm-hq --repo <path>   the repo to manage (default: current folder)
+           --port <n>      HQ port (default: 7420)
+           --no-open       don't open the browser
+           --version, --help
+```
 
 ## Requirements
 
-- [Node.js](https://nodejs.org) 20 or newer
-- [pnpm](https://pnpm.io) 10 or 11 (or run `corepack enable` to get it)
+| What                     | Why                                              | Install (macOS)                                                           |
+| ------------------------ | ------------------------------------------------ | ------------------------------------------------------------------------- |
+| Node.js 20+              | Runs HQ                                          | [nodejs.org](https://nodejs.org)                                          |
+| git                      | Each agent works in its own clone                | `xcode-select --install`                                                  |
+| tmux                     | Agents keep running if HQ or the browser closes  | `brew install tmux`                                                       |
+| Docker Sandboxes (`sbx`) | Each agent runs in its own microVM               | `brew trust docker/tap && brew install docker/tap/sbx`, then `sbx login` |
+| GitHub CLI (`gh`)        | PRs and reviews (optional)                       | `brew install gh`, then `gh auth login`                                   |
+
+Sandboxes need macOS 14+ on Apple silicon, Windows 11, or Ubuntu 24.04+. On other machines, set agents to **Local** in Settings → Team. They then run Claude Code or Codex installed on your machine, with permission prompts on.
+
+## How it works
+
+- **Workspaces.** Each agent gets a full clone of your repo at `~/.jsmhq/<project>/<agent>/`. HQ writes the agent's `ROLE.md`, hooks and MCP config there and excludes them from git.
+- **Sessions.** Each agent runs in a tmux session (`hq-<project>-<agent>`) inside its sandbox. Its live terminal is in the agent's drawer, and you can attach from any terminal with `tmux attach -t hq-<project>-<agent>`.
+- **Team MCP.** Agents talk to each other and to HQ through an MCP server called `hq`. The lead creates boards and tasks and assigns them; anyone can send a message. HQ delivers it right away if the agent is idle, or when its current turn ends if it's busy.
+- **GitHub.** HQ reads PRs, checks and review comments through your `gh` login (every ~20 seconds). It matches PRs to tasks by `[TASK-ID]` in the title, tells the author about review comments, tells the lead when a PR passes and marks the task done when you merge. **HQ never merges.**
+- **Sandbox settings** (Settings → Sandbox) go straight to `sbx`: CPU and memory, allowed and blocked domains, service keys, an env file for app variables, and the upstream proxy. HQ never stores key values, never reads your env files and only removes rules it added.
+- **Files in your repo.** `.jsmhq/config.json` (team and workflow) and `.jsmhq/plan.json` (boards and tasks) are safe to commit. Turn on **Settings → Project → Export plan** to also get a readable `docs/plan.md`.
+
+## Troubleshooting
+
+| Problem                                                    | Fix                                                                                                                                                               |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Agents fail to start with a sign-in error                  | Your Docker sign-in expired. Run `sbx login`, then **Check again** in the setup checklist.                                                                       |
+| A Codex agent is stuck on "Do you trust this folder?"      | Codex asks once per workspace, and again to trust HQ's hooks. Answer it in the agent's terminal. HQ never answers trust prompts for you.                         |
+| "Port 7420 is in use"                                      | Another HQ is running. Stop it, or use `npx jsm-hq --port 7421`.                                                                                                  |
+| Agent state never changes / messages never arrive          | The sandbox can't reach HQ. Check that `sbx policy ls` shows `localhost:<port>` and `host.docker.internal:<port>` allowed. HQ adds them on start if they're missing. |
+| Windows                                                    | Run HQ inside WSL 2 (Ubuntu 24.04+). tmux isn't available on native Windows.                                                                                      |
+| `posix_spawnp failed` when opening a terminal              | Reinstall (`npx clear-npx-cache` then `npx jsm-hq`). HQ fixes the node-pty helper's permissions on install and on start.                                         |
+
+**Clean up a project:** remove each agent in Settings → Team (it deletes the sandbox and, if you choose, the folder), then delete `~/.jsmhq/<project>`.
+
+## Develop JSM HQ
+
+Needs Node.js 20+ and pnpm 10 or 11 (`corepack enable` gets you pnpm).
 
 ```bash
+git clone https://github.com/jsmastery-pro/jsm-hq && cd jsm-hq
 pnpm install
+pnpm dev                                   # UI with mock data, no agents
+HQ_REPO=~/developer/hq-test pnpm dev:hq    # real HQ server + UI with hot reload
 ```
 
-## Demo (mock data)
+| Command          | Does                                                                         |
+| ---------------- | ---------------------------------------------------------------------------- |
+| `pnpm dev`       | Demo UI with mock data at http://localhost:5173 (nothing leaves the browser) |
+| `pnpm dev:hq`    | HQ server + UI with hot reload (`HQ_REPO=<path>`)                            |
+| `pnpm hq`        | Builds the UI, then runs HQ like a release (`--repo <path> --port 7420`)     |
+| `pnpm build`     | Type-checks, builds the UI to `dist/` and the server to `dist-server/`       |
+| `pnpm typecheck` | Type-check only                                                              |
+| `npm pack`       | Builds and packs the npm tarball (publishing is done by JSM's npm account)   |
 
-```bash
-pnpm dev
-```
+Start HQ with `HQ_DEBUG=1` to log why a queued message is waiting.
 
-Open **http://localhost:5173**. The top bar shows a **Demo data** label.
-
-| Do this                           | What happens                                           |
-| --------------------------------- | ------------------------------------------------------ |
-| Click an agent or their desk      | The camera moves to them and their terminal opens     |
-| Type in a terminal, press Enter   | The agent replies. A red "Needs input" agent continues |
-| Click the plan wall               | Boards open. Assign a task to anyone                   |
-| Click the review gate or PR board | Open and merged pull requests                          |
-| Click a server rack               | That environment's details                             |
-| **Settings → Team**               | Add or remove agents. The office grows to fit          |
-| **Settings → Workflow**           | Switch review/deploy tools, or turn them off           |
-| **2x / 4x** in the top bar        | Speed up the simulation                                |
-| **Debug → Load preset**           | Switch to a 7-agent team or a 2-agent team             |
-
-## Real agents (Phase A)
-
-Run this **from the `jsm-hq` folder**, and set `HQ_REPO` to the git repo the agents should work on:
-
-```bash
-cd jsm-hq
-HQ_REPO=~/developer/my-app pnpm dev:hq      # ← your repo's path
-```
-
-To try it safely first, make a throwaway repo:
-
-```bash
-mkdir -p ~/developer/hq-test && cd ~/developer/hq-test
-git init -b main && echo "# HQ test" > README.md && git add . && git commit -m init
-cd -   # back to jsm-hq
-HQ_REPO=~/developer/hq-test pnpm dev:hq
-```
-
-Then: **Continue to the office** → press **2** (Bob) → **Start Bob** → type a prompt in his terminal.
-
-HQ opens your browser. If something is missing on your machine, a **setup checklist** shows what to install, with a Copy button, docs links and, for safe commands, **Run in terminal**.
-
-| What HQ needs              | Why                                        | Install (macOS)                                         |
-| -------------------------- | ------------------------------------------ | ------------------------------------------------------- |
-| Docker Sandboxes (`sbx`)   | Each agent runs in its own microVM         | `brew trust docker/tap && brew install docker/tap/sbx`, then `sbx login` |
-| tmux                       | Agents keep running if HQ or the browser closes | `brew install tmux`                               |
-| GitHub CLI (`gh`)          | PRs and reviews (later phases)             | `brew install gh`, then `gh auth login`                 |
-| Claude Code                | Only for agents in **Local mode**          | [claude.ai/install](https://docs.claude.com/en/docs/claude-code/setup) |
-
-Sandboxes need macOS 14+ on Apple silicon, Windows 11, or Ubuntu 24.04+. On other machines, set agents to **Local** in Settings → Team: they run plain Claude Code with permission prompts on.
-
-**What happens when you press Start:**
-
-1. **The agent gets its own copy of your repo** at `~/.jsmhq/<project>/<agent>/`.
-   - HQ writes the agent's `ROLE.md` and Claude Code hooks there.
-   - Those files are git-excluded, so they are never committed.
-2. **HQ lets sandboxes reach it.** It adds a network rule allowing `localhost:<port>` and `host.docker.internal:<port>` (port 7420 by default), only if the rule is missing.
-3. **The agent starts in a tmux session** named `hq-<project>-<agent>`.
-   - Sandbox mode runs `sbx run`; Local mode runs `claude`.
-   - Its live terminal appears in the agent's drawer.
-4. **Hooks report the agent's state** (working, needs you, finished) and the office updates.
-5. **The agent joins the Team MCP** (server `hq`). The lead creates boards and tasks and assigns them; anyone can `send_message`. HQ delivers each message right away if the agent is idle, or when its current turn ends if it's busy. You can message any agent from its **Messages** tab, or assign tasks from **Boards**.
-
-Try it: start John and Bob, then message John: *"Plan two tiny tasks for Bob and assign the first one."*
-
-You can also attach to an agent from any terminal: `tmux attach -t hq-<project>-<agent>`.
-
-**Clean up a test project:** press **Stop** on each agent, then `sbx rm -f hq-<project>-<agent>` and `rm -rf ~/.jsmhq/<project>`.
-
-HQ saves the team and workflow in `<your repo>/.jsmhq/config.json` (safe to commit) and boards in `.jsmhq/plan.json`.
-
-6. **PRs and reviews come from GitHub** (read-only, through your `gh` login, every ~20s). PRs are matched to tasks by `[TASK-ID]` in the title. When the review tool (CodeRabbit, Greptile, Copilot or a human) leaves comments, HQ tells the PR's agent to fix them. When a PR passes, the lead hears it's ready to merge. When you merge, the task is done. HQ never merges itself.
-
-7. **Sandbox settings apply through `sbx`** (Settings → Sandbox). *This agent:* resources, allowed and blocked domains (`sbx policy … --sandbox`, read back as "rules in effect"), service keys for that sandbox only, and an env file for app variables. *This machine:* the base policy (read-only), the upstream proxy, and keys for every sandbox. HQ never stores key values and only removes rules it added.
-
-**Coming next:** a Codex adapter and `npx jsm-hq` packaging. See `context/plans/`.
-
-Debugging message delivery: start HQ with `HQ_DEBUG=1` to log why a queued message is waiting.
-
-## Keyboard
-
-`1`–`9` jump to an agent · `Esc` closes panels · `D` toggles debug · `+` / `-` zoom. Drag to pan, scroll to zoom.
-
-## Scripts
-
-| Command          | Does                                                    |
-| ---------------- | ------------------------------------------------------- |
-| `pnpm dev`       | Demo UI with mock data                                  |
-| `pnpm dev:hq`    | HQ server + UI with hot reload (`HQ_REPO=<path>`)       |
-| `pnpm hq`        | Builds the UI, then runs HQ without hot reload (like a release). Options: `--repo <path> --port 7420` |
-| `pnpm build`     | Type-check UI + server and build the UI to `dist/`      |
-| `pnpm typecheck` | Type-check only                                         |
-
-## Project layout
+**Keyboard:** `1`–`9` jump to an agent · `Esc` closes panels · `D` toggles debug · `+` / `-` zoom. Drag to pan, scroll to zoom.
 
 ```
 src/
   data/      Domain types, the OfficeDataSource interface, mock (data/mock) and real (data/ws) sources
   store/     Zustand stores; the only code that talks to the data source
   office/    The PixiJS pixel office: layout generator, sprites, agents, belt
-  ui/        Top bar, team panel, activity feed, drawers, settings, setup checklist
-server/      Local HQ server: setup checks, agent folders, tmux + sbx sessions, hooks, WebSocket
+  ui/        Top bar, team panel, activity feed, drawers, settings, setup checklist, welcome
+server/      Local HQ server: setup checks, workspaces, tmux + sbx sessions, hooks, Team MCP, GitHub
+bin/         The jsm-hq command
 docs/        Product idea and build spec
 context/     Implementation plans
 ```
+
+## License
+
+Code: [MIT](LICENSE). The JSM HQ name and logo are not covered by the license; see [TRADEMARKS.md](TRADEMARKS.md).

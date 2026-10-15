@@ -66,7 +66,7 @@ const askwell: Preset = {
   id: "askwell",
   label: "Askwell · 3 agents",
   config: {
-    project: { name: "Askwell", repo: "jsmastery-pro/askwell", path: "~/developer/askwell", hqPort: 7420 },
+    project: { id: "askwell", name: "Askwell", repo: "jsmastery-pro/askwell", path: "~/developer/askwell", hqPort: 7420 },
     team: [
       agent("john", "John", "Lead", "#ff77a8", { isLead: true }),
       agent("bob", "Bob", "Developer", "#29adff"),
@@ -120,7 +120,7 @@ const bigTeam: Preset = {
   id: "big-team",
   label: "Shipyard · 7 agents",
   config: {
-    project: { name: "Shipyard", repo: "jsmastery-pro/shipyard", path: "~/developer/shipyard", hqPort: 7420 },
+    project: { id: "shipyard", name: "Shipyard", repo: "jsmastery-pro/shipyard", path: "~/developer/shipyard", hqPort: 7420 },
     team: [
       agent("maya", "Maya", "Lead", "#ff77a8", { isLead: true }),
       agent("bob", "Bob", "Developer", "#29adff"),
@@ -171,7 +171,7 @@ const duo: Preset = {
   id: "duo",
   label: "Notely · 2 agents",
   config: {
-    project: { name: "Notely", repo: "you/notely", path: "~/code/notely", hqPort: 7420 },
+    project: { id: "notely", name: "Notely", repo: "you/notely", path: "~/code/notely", hqPort: 7420 },
     team: [
       agent("ada", "Ada", "Lead", "#a98bff", { isLead: true, model: "Sonnet" }),
       agent("max", "Max", "Developer", "#29adff"),

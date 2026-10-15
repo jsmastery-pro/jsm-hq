@@ -7,6 +7,7 @@ import { DrawerHost } from "./ui/drawers/Drawer";
 import { ActivityFeed } from "./ui/hud/ActivityFeed";
 import { ConnectionBanner } from "./ui/hud/ConnectionBanner";
 import { SetupChecklist } from "./ui/setup/SetupChecklist";
+import { WelcomeModal } from "./ui/setup/WelcomeModal";
 import { TeamPanel } from "./ui/hud/TeamPanel";
 import { Tooltip } from "./ui/hud/Tooltip";
 import { TopBar } from "./ui/hud/TopBar";
@@ -46,12 +47,12 @@ function useKeyboard() {
   }, []);
 }
 
-/** On a real HQ, open the setup checklist once if anything needed is missing. */
+/** On a real HQ, open the setup checklist once (after the welcome) if anything needed is missing. */
 function useSetupPrompt() {
   useEffect(() => {
     let shown = false;
     return useOffice.subscribe((s) => {
-      if (shown || !s.live || !s.snap) return;
+      if (shown || !s.live || !s.snap || s.snap.welcome) return;
       shown = true;
       const needed = s.snap.setup.checks.some((c) => c.status !== "ok" && c.neededFor !== "github" && c.neededFor !== "local");
       if (needed) ui.openSetup();
@@ -65,6 +66,7 @@ export function App() {
   useSetupPrompt();
   const ready = useOffice((s) => s.snap !== null);
   const setupOpen = useUi((s) => s.setupOpen);
+  const welcome = useOffice((s) => s.live && !!s.snap?.welcome);
 
   return (
     <>
@@ -78,7 +80,7 @@ export function App() {
           <DrawerHost />
           <DebugPanel />
           <SettingsModal />
-          {setupOpen && <SetupChecklist />}
+          {welcome ? <WelcomeModal /> : setupOpen && <SetupChecklist />}
           <Tooltip />
         </>
       )}
