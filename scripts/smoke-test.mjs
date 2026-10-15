@@ -5,7 +5,7 @@
 //   node scripts/smoke-test.mjs <path/to/package.tgz> [port]
 
 import { execFileSync, spawn } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -47,7 +47,7 @@ function spawnSyncKill(pid) {
 
 // 1. Install the tarball into an empty folder.
 step(`installing ${tarball}`);
-sh("mkdir", [app]);
+mkdirSync(app);
 writeFileSync(join(app, "package.json"), '{ "name": "smoke", "private": true }\n');
 try {
   sh("npm", ["install", "--no-audit", "--no-fund", tarball], app);
@@ -71,7 +71,7 @@ await new Promise((done) => {
 step("terminal library spawns processes");
 
 // 3. A fresh repo, and HQ started on it.
-sh("mkdir", [repo]);
+mkdirSync(repo);
 sh("git", ["init", "-q", "-b", "main"], repo);
 writeFileSync(join(repo, "README.md"), "# smoke\n");
 sh("git", ["add", "."], repo);
