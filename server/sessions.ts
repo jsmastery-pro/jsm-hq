@@ -10,7 +10,7 @@ import type { Hub } from "./hub";
 import { run, shq } from "./lib/exec";
 import { log } from "./lib/log";
 import { projectHome, sessionName } from "./paths";
-import { runSetupChecks } from "./setup";
+import { POLICY_NOT_INITIALIZED, runSetupChecks } from "./setup";
 import * as tmux from "./tmux";
 import { ensureWorkspace, workspaceFor } from "./workspace";
 
@@ -231,6 +231,10 @@ export class Sessions {
       const check = await run("sbx", ["policy", "check", "network", target], { timeoutMs: 10_000 });
       if (/^Allowed/m.test(check.stdout)) continue;
       const add = await run("sbx", ["policy", "allow", "network", target], { timeoutMs: 10_000 });
+      if (!add.ok && POLICY_NOT_INITIALIZED.test(add.stderr + add.stdout)) {
+        void this.recheckSetup();
+        throw new Error("Docker Sandboxes needs a base network policy first. Open the setup checklist → “Sandbox network policy”, or run: sbx policy init balanced");
+      }
       if (!add.ok) throw new Error(`Could not allow ${target}: ${add.stderr.trim()}`);
       log.info(`added sandbox network rule: allow ${target}`);
     }

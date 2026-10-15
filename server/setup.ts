@@ -47,6 +47,33 @@ async function checkSbx(brew: boolean): Promise<Check> {
   return { ...base, status: "missing", detail: "Not installed.", fix: fix(cmd, runnable, SBX_DOCS) };
 }
 
+/** sbx's error when its base network policy was never chosen (fresh install). */
+export const POLICY_NOT_INITIALIZED = /not been initialized|sbx policy init/i;
+
+/**
+ * A fresh sbx needs a base network policy (`sbx policy init`) before any rule
+ * can be added or a sandbox started. HQ suggests one but never picks it.
+ */
+async function checkSbxPolicy(loginOk: boolean): Promise<Check> {
+  const base = { id: "sbx-policy" as const, label: "Sandbox network policy", neededFor: "sandbox" as const };
+  if (!loginOk) return { ...base, status: "missing", detail: "Waiting for Docker sign-in.", fix: null };
+  const probe = (host: string) => run("sbx", ["policy", "check", "network", host], { timeoutMs: 10_000 });
+  const registry = await probe("registry.npmjs.org");
+  const out = `${registry.stdout}\n${registry.stderr}`;
+  if (POLICY_NOT_INITIALIZED.test(out))
+    return {
+      ...base,
+      status: "missing",
+      detail:
+        "Not set yet. Choose what sandboxes can reach once: balanced (recommended: AI services, package registries, GitHub), allow-all, or deny-all. Change it later with sbx policy reset.",
+      fix: fix("sbx policy init balanced", true, SBX_DOCS),
+    };
+  if (!/^(Allowed|Denied)/m.test(registry.stdout)) return { ...base, status: "warning", detail: out.trim().split("\n")[0] || "sbx did not respond.", fix: fix("sbx diagnose", true, SBX_DOCS) };
+  const open = /^Allowed/m.test((await probe("hq-probe.invalid")).stdout);
+  const name = open ? "Allow all" : /^Allowed/m.test(registry.stdout) ? "Balanced" : "Deny all";
+  return { ...base, status: "ok", detail: `${name}. HQ adds only the rule that lets sandboxes reach it.`, fix: null };
+}
+
 async function checkSbxLogin(sbxOk: boolean): Promise<Check> {
   const base = { id: "sbx-login" as const, label: "Signed in to Docker", neededFor: "sandbox" as const };
   if (!sbxOk) return { ...base, status: "missing", detail: "Waiting for sbx.", fix: null };
@@ -156,15 +183,16 @@ export async function runSetupChecks(repo: RepoInfo, team: AgentConfig[] = []): 
   const [osCheck, sbx, tmux, claude, gh] = await Promise.all([checkOs(), checkSbx(brew), checkTmux(brew), checkClaude(), checkGh(brew)]);
   const sbxOk = sbx.status === "ok";
   const [login, secret] = await Promise.all([checkSbxLogin(sbxOk), checkGithubSecret(sbxOk)]);
-  const checks: SetupCheck[] = [osCheck, sbx, login, secret, tmux, claude, gh, checkRemote(repo)];
+  const policy = await checkSbxPolicy(login.status === "ok");
+  const checks: SetupCheck[] = [osCheck, sbx, login, policy, secret, tmux, claude, gh, checkRemote(repo)];
   const codexAgents = team.filter((a) => a.cli === "codex");
-  if (codexAgents.some((a) => a.mode === "sandbox")) checks.splice(4, 0, await checkOpenAiSecret(sbxOk));
+  if (codexAgents.some((a) => a.mode === "sandbox")) checks.splice(5, 0, await checkOpenAiSecret(sbxOk));
   if (codexAgents.some((a) => a.mode === "local")) checks.push(await checkCodex());
   const ok = (c: SetupCheck) => c.status === "ok";
   return {
     machine: { cpus: cpus().length, memoryGb: Math.round(totalmem() / 1024 ** 3) },
     checks,
-    sandboxReady: osCheck.status !== "unsupported" && ok(sbx) && ok(login) && ok(tmux),
+    sandboxReady: osCheck.status !== "unsupported" && ok(sbx) && ok(login) && ok(policy) && ok(tmux),
     localReady: ok(tmux) && ok(claude),
     checkedAt: new Date().toISOString(),
   };
