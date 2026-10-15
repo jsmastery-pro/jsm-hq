@@ -21,7 +21,7 @@ const theme = {
 };
 
 /** A real xterm.js terminal fed by the agent's (mock) output stream. */
-export function TerminalView({ agentId }: { agentId: string }) {
+export function TerminalView({ agentId, autoFocus = true }: { agentId: string; autoFocus?: boolean }) {
   const host = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -48,6 +48,9 @@ export function TerminalView({ agentId }: { agentId: string }) {
       if (disposed) return;
       term.open(el);
       fit.fit();
+      // The server sizes the agent's tmux window to this terminal and redraws it.
+      officeActions.resizeTerminal(agentId, term.cols, term.rows);
+      term.onResize(({ cols, rows }) => officeActions.resizeTerminal(agentId, cols, rows));
       term.write(readTerminal(agentId));
       unsub = subscribeTerminal(agentId, (data) => term.write(data));
       term.onData((data) => officeActions.sendTerminalInput(agentId, data));
@@ -59,7 +62,7 @@ export function TerminalView({ agentId }: { agentId: string }) {
         }
       });
       ro.observe(el);
-      term.focus();
+      if (autoFocus) term.focus();
     });
 
     return () => {
@@ -68,7 +71,7 @@ export function TerminalView({ agentId }: { agentId: string }) {
       ro?.disconnect();
       term.dispose();
     };
-  }, [agentId]);
+  }, [agentId, autoFocus]);
 
   return <div ref={host} className="h-full min-h-0 w-full bg-navy-2" />;
 }

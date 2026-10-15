@@ -127,6 +127,11 @@
     width: 100%;
     min-width: 0;
   }
+  /* Inputs and dropdowns share one height so labels in a row line up. */
+  input.field,
+  select.field {
+    height: 2.25rem;
+  }
   .kbd {
     font-family: var(--font-term);
     font-size: 16px;

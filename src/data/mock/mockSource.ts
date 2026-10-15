@@ -4,12 +4,11 @@ import type { AgentConfig, AgentPatch, Board, NewAgentInput, ProjectConfig, Sand
 import { defaultPresetId, presets, type Preset } from "./presets";
 import { Simulation } from "./simulation";
 import * as T from "./terminalScripts";
-import { World } from "./world";
+import { mockSbx, mockSession, mockSetup, World } from "./world";
 
 const TICK_MS = 50;
 const TERM_MS = 30;
 
-const policyLabel: Record<SandboxSettings["policy"], string> = { open: "Open", balanced: "Balanced", locked: "Locked Down" };
 
 export function createMockSource(): OfficeDataSource {
   let presetId = defaultPresetId;
@@ -49,13 +48,25 @@ export function createMockSource(): OfficeDataSource {
     sim.tick(dt);
   }
 
+  /** Rebuilds the mock "sbx" state from config, keeping any keys set in the UI. */
+  function syncSbx() {
+    const old = world.snap.sbx;
+    const next = mockSbx(world.snap.config.team, world.snap.config.project.name);
+    next.globalKeys = old.globalKeys;
+    next.proxy = old.proxy;
+    for (const id of Object.keys(next.agents)) if (old.agents[id]) next.agents[id].keys = old.agents[id].keys;
+    world.snap.sbx = next;
+    world.emit({ type: "sbx.updated", sbx: structuredClone(next) });
+  }
+
   function hostCmd(agentId: string, text: string) {
     world.write(agentId, [{ text: `\x1b[38;2;102;114;159mhq ▸ ${text}\x1b[0m` }]);
   }
 
   const source: OfficeDataSource = {
-    connect(onEvent) {
+    connect(onEvent, onStatus) {
       listener = onEvent;
+      onStatus?.("open");
       last = performance.now();
       reset();
       boot();
@@ -100,6 +111,54 @@ export function createMockSource(): OfficeDataSource {
       inputBuf.set(agentId, buf);
     },
 
+    sendMessage(toId, text) {
+      if (!world.cfg(toId) || !text.trim()) return;
+      world.message("you", toId, text.trim());
+      world.after(1.2, () => world.write(toId, T.cannedReply(!!world.cfg(toId)?.isLead, text.length)));
+    },
+
+    resizeTerminal() {
+      // The mock streams plain lines, so size doesn't matter.
+    },
+
+    startAgent(id) {
+      const st = world.status(id);
+      if (!st || st.session.state === "running") return;
+      world.setStatus(id, { session: { ...st.session, state: "running", detail: null } });
+      world.activity("session", id, `${world.name(id)}'s session started`);
+      if (!world.cfg(id)?.isLead) sim.startWorker(id, 1.5);
+    },
+
+    stopAgent(id) {
+      const st = world.status(id);
+      if (!st) return;
+      sim.stopAgent(id);
+      world.setStatus(id, { state: "idle", currentTaskId: null, note: "Stopped", session: { ...st.session, state: "stopped", detail: null } });
+      world.activity("session", id, `${world.name(id)}'s session stopped`);
+    },
+
+    recreateSandbox(id) {
+      const st = world.status(id);
+      const r = world.cfg(id)?.sandbox.resources;
+      if (!st || !r) return;
+      world.setStatus(id, { session: { ...st.session, sandbox: { cpus: r.cpus ?? 8, memoryGb: r.memoryGb ?? 8 } } });
+      hostCmd(id, `sbx rm hq-…-${id} && sbx run --cpus ${r.cpus ?? "auto"} --memory ${r.memoryGb ?? "auto"}g … (mock)`);
+      world.activity("session", id, `Recreated ${world.name(id)}'s sandbox`);
+    },
+
+    openWorkspace(id) {
+      hostCmd(id, `open ${world.status(id)?.session.workspace ?? "?"} (mock: nothing opens)`);
+    },
+
+    recheckSetup() {
+      world.snap.setup = mockSetup();
+      world.emit({ type: "setup.updated", setup: world.snap.setup });
+    },
+
+    runSetupFix() {
+      // Everything is installed in the mock.
+    },
+
     assignTask(taskId, agentId) {
       const task = world.task(taskId);
       const agent = world.cfg(agentId);
@@ -121,19 +180,24 @@ export function createMockSource(): OfficeDataSource {
       const color = agentPalette.find((c) => !used.has(c)) ?? agentPalette[team.length % agentPalette.length];
       const lead = world.lead();
       const agent: AgentConfig = {
-        id, name: input.name.trim() || "Agent", role: input.role.trim() || "Developer", isLead: false,
-        model: input.model, mode: input.mode, color, skills: ["plan", "review"],
+        id, name: input.name.trim() || "Agent", role: input.role.trim() || "Developer", isLead: false, cli: input.cli ?? "claude",
+        model: input.model ?? "", mode: input.mode, color, skills: ["plan", "review"],
         roleMd: `# ${input.name} — ${input.role}\n\nYou build the tasks assigned to you.`,
         sandbox: structuredClone(lead.sandbox),
+        workspacePath: null,
       };
       team.push(agent);
-      world.snap.agents.push({ agentId: id, state: "idle", currentTaskId: null, stateSince: new Date().toISOString(), note: null });
+      world.snap.agents.push({
+        agentId: id, state: "idle", currentTaskId: null, stateSince: new Date().toISOString(), note: null,
+        session: mockSession(world.snap.config.project.name, id),
+      });
       world.configChanged();
       world.emit({ type: "agent.updated", agent: { ...world.snap.agents[world.snap.agents.length - 1] } });
       world.syncEnvironments();
       world.activity("config", null, `Added ${agent.name} (${agent.role}) — new sandbox starting`);
       world.write(id, T.banner(agent.name, agent.role, world.snap.config.project.repo, agent.mode));
-      hostCmd(id, `sbx run claude · policy ${policyLabel[agent.sandbox.policy]} · allow host.docker.internal:${world.snap.config.project.hqPort}`);
+      hostCmd(id, `sbx run claude · allow host.docker.internal:${world.snap.config.project.hqPort}`);
+      syncSbx();
       sim.startWorker(id, 2);
     },
 
@@ -142,6 +206,15 @@ export function createMockSource(): OfficeDataSource {
       if (!agent) return;
       Object.assign(agent, patch);
       world.configChanged();
+    },
+
+    inspectWorkspace(id) {
+      const st = world.status(id);
+      if (!st) return;
+      listener?.({
+        type: "workspace.info",
+        info: { agentId: id, path: st.session.workspace ?? "", managed: true, exists: true, changedFiles: 1, unpushedCommits: 2, sandboxName: `hq-mock-${id}`, sandboxExists: true },
+      });
     },
 
     removeAgent(id) {
@@ -163,30 +236,40 @@ export function createMockSource(): OfficeDataSource {
       if (!agent) return;
       Object.assign(agent.sandbox, structuredClone(patch));
       world.configChanged();
-      if (patch.policy) hostCmd(agentId, `sbx policy set ${patch.policy}`);
-      if (patch.allow) hostCmd(agentId, `sbx policy allow network ${patch.allow.join(" ") || "(none)"}`);
-      if (patch.deny) hostCmd(agentId, `sbx policy deny network ${patch.deny.join(" ") || "(none)"}`);
-      if (patch.proxy !== undefined) hostCmd(agentId, patch.proxy ? `upstream proxy → ${patch.proxy}` : "upstream proxy off");
+      if (patch.allow || patch.deny) {
+        hostCmd(agentId, `sbx policy allow/deny network --sandbox hq-mock-${agentId} … (mock)`);
+        syncSbx();
+      }
       world.activity("config", agentId, `Updated ${agent.name}'s sandbox settings`);
     },
 
-    setSecret(agentId, name, value) {
-      const agent = world.cfg(agentId);
-      const key = name.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_");
-      if (!agent || !key) return;
-      void value; // A real source passes this to `sbx secret set`; HQ never keeps it.
-      if (!agent.sandbox.secrets.includes(key)) agent.sandbox.secrets.push(key);
-      world.configChanged();
-      hostCmd(agentId, `sbx secret set ${key} (value sent to Docker's secret store)`);
-      world.activity("config", agentId, `Set secret ${key} for ${agent.name}`);
+    setSecret(agentId, service, value) {
+      void value; // A real source pipes this to `sbx secret set`; HQ never keeps it.
+      const sbx = world.snap.sbx;
+      if (agentId === null) sbx.globalKeys = [...new Set([...sbx.globalKeys, service])];
+      else if (sbx.agents[agentId]) sbx.agents[agentId].keys = [...new Set([...sbx.agents[agentId].keys, service])];
+      world.emit({ type: "sbx.updated", sbx: structuredClone(sbx) });
+      world.activity("config", agentId, `Stored the ${service} key ${agentId ? `for ${world.name(agentId)}` : "for every sandbox"} (mock)`);
     },
 
-    removeSecret(agentId, name) {
-      const agent = world.cfg(agentId);
-      if (!agent) return;
-      agent.sandbox.secrets = agent.sandbox.secrets.filter((s) => s !== name);
-      world.configChanged();
-      hostCmd(agentId, `sbx secret rm ${name}`);
+    removeSecret(agentId, service) {
+      const sbx = world.snap.sbx;
+      if (agentId === null) sbx.globalKeys = sbx.globalKeys.filter((k) => k !== service);
+      else if (sbx.agents[agentId]) sbx.agents[agentId].keys = sbx.agents[agentId].keys.filter((k) => k !== service);
+      world.emit({ type: "sbx.updated", sbx: structuredClone(sbx) });
+    },
+
+    setProxy(url) {
+      world.snap.sbx.proxy = url;
+      world.emit({ type: "sbx.updated", sbx: structuredClone(world.snap.sbx) });
+    },
+
+    openEnvFile(agentId) {
+      hostCmd(agentId, `open ${world.snap.sbx.agents[agentId]?.envFile.path ?? "?"} (mock: nothing opens)`);
+    },
+
+    refreshSbx() {
+      syncSbx();
     },
 
     updateWorkflow(patch: WorkflowPatch) {

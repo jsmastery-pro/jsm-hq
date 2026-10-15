@@ -9,7 +9,7 @@ export function PrDrawer() {
   const now = useNow(5000);
   if (!snap) return null;
   const wf = snap.config.workflow;
-  const open = snap.pullRequests.filter((p) => !p.merged).sort((a, b) => b.number - a.number);
+  const open = snap.pullRequests.filter((p) => !p.merged && !p.closed).sort((a, b) => b.number - a.number);
   const merged = snap.pullRequests.filter((p) => p.merged).sort((a, b) => b.number - a.number).slice(0, 15);
 
   const Row = ({ pr }: { pr: PullRequest }) => {
@@ -22,17 +22,24 @@ export function PrDrawer() {
           <div className="flex items-center gap-1.5 text-[12px] text-muted">
             {author && <Dot color={author.color} size={8} />}
             <button className="underline" onClick={() => author && ui.openAgent(author.id)}>
-              {author?.name ?? pr.authorId}
+              {author?.name ?? (pr.authorId || "—")}
             </button>
             · {ago(pr.openedAt, now)} ago
-            {!pr.merged && <> · {pr.openComments} comments · {pr.mergeable ? "mergeable" : "not mergeable"}</>}
+            {!pr.merged && <> · {pr.openComments} open comment{pr.openComments === 1 ? "" : "s"}{pr.conflict ? " · merge conflict" : ""}</>}
           </div>
+          {pr.reviewNote && !pr.merged && <div className="text-[12px] text-[#a35d00]">{pr.reviewNote}</div>}
         </div>
         <div className="flex flex-col items-end gap-1">
           <ReviewChip review={pr.review} merged={pr.merged} />
-          <button className="btn px-1.5 text-[11px]" disabled title="Links out to GitHub in the real app">
-            Open on GitHub
-          </button>
+          {pr.url ? (
+            <a className="btn px-1.5 text-[11px]" href={pr.url} target="_blank" rel="noreferrer">
+              Open on GitHub ↗
+            </a>
+          ) : (
+            <button className="btn px-1.5 text-[11px]" disabled title="Demo data has no GitHub link">
+              Open on GitHub
+            </button>
+          )}
         </div>
       </li>
     );

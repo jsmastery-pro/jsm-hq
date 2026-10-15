@@ -1,0 +1,106 @@
+// The server's single source of truth. Every mutation emits the matching
+// OfficeEvent to all connected browsers, and config/plan changes are saved.
+
+import type { OfficeEvent } from "../src/data/source";
+import type { ActivityType, AgentConfig, AgentStatus, HqConfig, OfficeSnapshot, SessionInfo, SetupState } from "../src/data/types";
+import { saveConfig, savePlan, type PlanFile } from "./store";
+import type { RepoInfo } from "./repo";
+
+type Listener = (e: OfficeEvent) => void;
+
+const now = () => new Date().toISOString();
+
+export class Hub {
+  snap: OfficeSnapshot;
+  private listeners = new Set<Listener>();
+  private seq = 0;
+
+  constructor(readonly repo: RepoInfo, readonly slug: string, config: HqConfig, plan: PlanFile, setup: SetupState) {
+    this.snap = {
+      setup,
+      sbx: { basePolicy: "unknown", proxy: null, globalKeys: [], agents: {}, checkedAt: now() },
+      config,
+      agents: config.team.map((a) => Hub.freshStatus(a.id)),
+      boards: plan.boards,
+      tasks: plan.tasks,
+      pullRequests: [],
+      environments: [],
+      messages: [],
+      activity: [],
+    };
+  }
+
+  static freshStatus(agentId: string): AgentStatus {
+    return {
+      agentId, state: "idle", currentTaskId: null, stateSince: now(), note: "Not started",
+      session: { state: "stopped", detail: null, workspace: null, sandbox: null },
+    };
+  }
+
+  subscribe(fn: Listener) {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  emit(e: OfficeEvent) {
+    for (const fn of this.listeners) fn(e);
+  }
+
+  // ------------------------------------------------------------ lookups
+
+  cfg(id: string): AgentConfig | undefined {
+    return this.snap.config.team.find((a) => a.id === id);
+  }
+
+  status(id: string): AgentStatus | undefined {
+    return this.snap.agents.find((a) => a.agentId === id);
+  }
+
+  name(id: string | null) {
+    if (id === "you") return "You";
+    if (id === "hq") return "HQ";
+    return (id && this.cfg(id)?.name) || "Someone";
+  }
+
+  // ------------------------------------------------------------ mutations
+
+  setStatus(id: string, patch: Partial<Omit<AgentStatus, "agentId" | "session">>) {
+    const s = this.status(id);
+    if (!s) return;
+    if (patch.state !== undefined && patch.state !== s.state) s.stateSince = now();
+    Object.assign(s, patch);
+    this.emit({ type: "agent.updated", agent: structuredClone(s) });
+  }
+
+  setSession(id: string, patch: Partial<SessionInfo>) {
+    const s = this.status(id);
+    if (!s) return;
+    s.session = { ...s.session, ...patch };
+    this.emit({ type: "agent.updated", agent: structuredClone(s) });
+  }
+
+  setSetup(setup: SetupState) {
+    this.snap.setup = setup;
+    this.emit({ type: "setup.updated", setup });
+  }
+
+  activity(type: ActivityType, agentId: string | null, text: string) {
+    this.seq += 1;
+    const event = { id: `a${this.seq}`, at: now(), type, agentId, text };
+    this.snap.activity = [event, ...this.snap.activity].slice(0, 50);
+    this.emit({ type: "activity", event });
+  }
+
+  configChanged() {
+    saveConfig(this.repo.root, this.snap.config);
+    this.emit({ type: "config.updated", config: structuredClone(this.snap.config) });
+  }
+
+  planChanged() {
+    savePlan(this.repo.root, { boards: this.snap.boards, tasks: this.snap.tasks });
+  }
+
+  terminal(agentId: string, data: string) {
+    this.emit({ type: "terminal.output", agentId, data });
+  }
+}

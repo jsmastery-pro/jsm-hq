@@ -1,0 +1,8 @@
+# pnpm settings (pnpm 10 reads onlyBuiltDependencies, pnpm 11 reads allowBuilds).
+# Only these packages may run install scripts: esbuild (Vite) and node-pty (agent terminals).
+onlyBuiltDependencies:
+  - esbuild
+  - node-pty
+allowBuilds:
+  esbuild: true
+  node-pty: true

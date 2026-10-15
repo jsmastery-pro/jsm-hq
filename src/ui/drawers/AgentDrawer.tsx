@@ -1,12 +1,11 @@
 import { useState, type ReactNode } from "react";
-import type { AgentConfig, OfficeSnapshot } from "../../data/types";
+import { CLI_LABEL, HUMAN_ID, type AgentConfig, type AgentStatus, type OfficeSnapshot } from "../../data/types";
 import { officeActions, useOffice } from "../../store/office";
 import { ui, type AgentTab } from "../../store/ui";
 import { ago, Dot, Portrait, ReviewChip, SectionTitle, StateChip, Tabs, useNow } from "../kit";
 import { DrawerHeader } from "./Drawer";
 import { TerminalView } from "./TerminalView";
 
-const POLICY = { open: "Open", balanced: "Balanced", locked: "Locked Down" } as const;
 
 export function AgentDrawer({ id, initialTab }: { id: string; initialTab?: AgentTab }) {
   const snap = useOffice((s) => s.snap);
@@ -34,10 +33,11 @@ export function AgentDrawer({ id, initialTab }: { id: string; initialTab?: Agent
             <StateChip state={status.state} />
           </div>
           <div className="truncate font-term text-[17px] text-muted">
-            {agent.role} · {agent.model} · {agent.mode === "sandbox" ? "Docker Sandbox" : "local worktree"}
+            {agent.role} · {CLI_LABEL[agent.cli]}{agent.model ? ` ${agent.model}` : ""} · {agent.mode === "sandbox" ? "Docker Sandbox" : "Local mode"}
           </div>
         </div>
       </DrawerHeader>
+      <SessionBar agent={agent} status={status} />
       {status.note && (
         <div className={`border-b-[3px] border-ink px-3 py-1.5 text-[14px] ${status.state === "needs-input" ? "bg-[#ffe1ea] text-red" : "bg-cream-2"}`}>
           {status.note}
@@ -57,12 +57,91 @@ export function AgentDrawer({ id, initialTab }: { id: string; initialTab?: Agent
         />
       </div>
       <div className="min-h-0 flex-1 overflow-hidden">
-        {tab === "terminal" && <TerminalView agentId={id} />}
+        {tab === "terminal" &&
+          (status.session.state === "running" ? (
+            <TerminalView agentId={id} />
+          ) : (
+            <NotRunning agent={agent} status={status} />
+          ))}
         {tab === "task" && <TaskTab snap={snap} agent={agent} taskId={status.currentTaskId} />}
         {tab === "sandbox" && <SandboxTab snap={snap} agent={agent} />}
         {tab === "messages" && <MessagesTab snap={snap} agent={agent} />}
       </div>
     </>
+  );
+}
+
+const SESSION_COLOR = { running: "#00e436", starting: "#29adff", stopped: "#83769c", failed: "#ff004d" } as const;
+
+/** Session state + Start/Stop + the agent's folder. */
+function SessionBar({ agent, status }: { agent: AgentConfig; status: AgentStatus }) {
+  const s = status.session;
+  const live = useOffice((st) => st.live);
+  return (
+    <div className="flex items-center gap-2 border-b-[3px] border-ink bg-cream px-3 py-1.5 text-[13px]">
+      <span className={`chip chip-dot ${s.state === "starting" ? "blink" : ""}`} style={{ ["--c" as string]: SESSION_COLOR[s.state] }}>
+        {s.state === "running" ? "Session running" : s.state === "starting" ? "Starting" : s.state === "failed" ? "Failed" : "Stopped"}
+      </span>
+      <span className="min-w-0 flex-1 truncate font-term text-[15px] text-muted" title={s.workspace ?? undefined}>
+        {s.state === "starting" ? s.detail : (s.workspace ?? "")}
+      </span>
+      {s.workspace && live && (
+        <button className="btn px-2 text-[12px]" onClick={() => officeActions.openWorkspace(agent.id)} title="Open the agent's folder">
+          Open folder
+        </button>
+      )}
+      {s.state === "running" || s.state === "starting" ? (
+        <button className="btn px-2 text-[12px]" disabled={s.state === "starting"} onClick={() => officeActions.stopAgent(agent.id)}>
+          Stop
+        </button>
+      ) : (
+        <button className="btn px-2 text-[12px]" onClick={() => officeActions.startAgent(agent.id)}>
+          Start
+        </button>
+      )}
+    </div>
+  );
+}
+
+function NotRunning({ agent, status }: { agent: AgentConfig; status: AgentStatus }) {
+  const s = status.session;
+  const setup = useOffice((st) => st.snap?.setup);
+  const blocked = agent.mode === "sandbox" ? !setup?.sandboxReady : !setup?.localReady;
+  return (
+    <div className="grid h-full place-items-center bg-navy-2 p-6 text-center text-[#dfe6ff]">
+      <div className="max-w-[380px]">
+        {s.state === "starting" ? (
+          <p className="blink font-term text-[22px]">{s.detail ?? "Starting…"}</p>
+        ) : (
+          <>
+            <p className="mb-2 font-term text-[22px]">{s.state === "failed" ? `${agent.name} could not start` : `${agent.name} isn't running`}</p>
+            {s.detail && <pre className="mb-3 whitespace-pre-wrap border-2 border-red px-2 py-1 text-left font-term text-[16px] text-[#ffd0dc]">{s.detail}</pre>}
+            <p className="mb-4 text-[13px] text-[#9aa6d1]">
+              {agent.mode === "sandbox"
+                ? `Start runs ${CLI_LABEL[agent.cli]} in a Docker Sandbox on this agent's own copy of the repo.`
+                : `Start runs ${CLI_LABEL[agent.cli]} locally in this agent's own copy of the repo, with permission prompts on.`}
+            </p>
+            {agent.cli === "codex" && (
+              <p className="mb-4 text-[12px] text-[#ffc14d]">
+                First start only: Codex asks you to trust this folder and HQ's hooks. Choose <b>Yes</b>, then <b>Trust all and continue</b>, in the terminal.
+              </p>
+            )}
+            <p className="hidden">
+            </p>
+            <div className="flex justify-center gap-2">
+              <button className="btn text-ink" onClick={() => officeActions.startAgent(agent.id)}>
+                Start {agent.name}
+              </button>
+              {blocked && (
+                <button className="btn text-ink" onClick={() => ui.openSetup()}>
+                  Setup checklist
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -101,7 +180,14 @@ function TaskTab({ snap, agent, taskId }: { snap: OfficeSnapshot; agent: AgentCo
         <div className="panel mb-4 px-3 py-2">
           <div className="font-term text-[18px] text-muted">{task.id} · {snap.boards.find((b) => b.id === task.boardId)?.title}</div>
           <b className="text-[17px]">{task.title}</b>
-          <div className="mt-1 text-[14px]">Status: {task.status}</div>
+          <div className="mt-1 text-[14px]">Status: {task.status}{task.note ? ` — ${task.note}` : ""}</div>
+          {task.description && <p className="mt-1 whitespace-pre-wrap text-[14px]">{task.description}</p>}
+          {!!task.files?.length && (
+            <div className="mt-1 text-[13px]">
+              Files: {task.files.map((f) => <code key={f} className="mr-1 bg-cream-2 px-1 font-term text-[15px]">{f}</code>)}
+            </div>
+          )}
+          {task.doneWhen && <div className="mt-1 text-[13px]"><b>Done when:</b> {task.doneWhen}</div>}
           {task.needs.length > 0 && (
             <div className="text-[14px]">
               Needs: {task.needs.map((n) => `${n} (${snap.tasks.find((t) => t.id === n)?.status ?? "?"})`).join(", ")}
@@ -143,6 +229,7 @@ function SandboxTab({ snap, agent }: { snap: OfficeSnapshot; agent: AgentConfig 
   const env = snap.environments.find((e) => e.agentId === agent.id);
   const now = useNow(5000);
   const sb = agent.sandbox;
+  const actual = snap.agents.find((a) => a.agentId === agent.id)?.session.sandbox;
   const row = (k: string, v: ReactNode) => (
     <div className="grid grid-cols-[140px_1fr] gap-2 border-t border-dashed border-cream-3 py-1.5 text-[14px] first:border-t-0">
       <span className="text-muted">{k}</span>
@@ -154,12 +241,26 @@ function SandboxTab({ snap, agent }: { snap: OfficeSnapshot; agent: AgentConfig 
       <SectionTitle>Sandbox</SectionTitle>
       <div className="panel mb-4 px-3 py-1">
         {row("Mode", agent.mode === "sandbox" ? "Docker Sandbox (microVM), full access inside the VM" : "Local worktree, permission prompts on")}
-        {row("Network policy", POLICY[sb.policy])}
+        {row(
+          "Resources",
+          <>
+            {sb.resources.cpus || sb.resources.memoryGb ? `${sb.resources.cpus ?? "all"} CPUs · ${sb.resources.memoryGb ?? "default"} GB` : "sbx default"}
+            {actual && <span className="text-muted"> (now {actual.cpus} CPUs · {actual.memoryGb} GB)</span>}
+          </>,
+        )}
+        {row("Network", `base: ${snap.sbx.basePolicy}`)}
         {row("Allowed", sb.allow.length ? sb.allow.join(", ") : "—")}
         {row("Blocked", sb.deny.length ? sb.deny.join(", ") : "—")}
-        {row("HQ access", <span className="font-term text-[17px]">host.docker.internal:{snap.config.project.hqPort} (added by HQ)</span>)}
-        {row("Proxy", sb.proxy ?? "—")}
-        {row("Secrets", sb.secrets.length ? sb.secrets.map((s) => <span key={s} className="chip mr-1 mb-1 font-term text-[14px]">{s}</span>) : "—")}
+        {row("HQ access", <span className="font-term text-[17px]">localhost / host.docker.internal :{snap.config.project.hqPort} (added by HQ)</span>)}
+        {row(
+          "Service keys",
+          [...snap.sbx.globalKeys.map((k) => `${k} (all)`), ...(snap.sbx.agents[agent.id]?.keys ?? [])].map((k) => (
+            <span key={k} className="chip mb-1 mr-1 font-term text-[14px]">
+              {k}
+            </span>
+          )),
+        )}
+        {row("App variables", snap.sbx.agents[agent.id]?.envFile.exists ? "env file set" : "—")}
         {row("Skills", agent.skills.join(", ") || "—")}
       </div>
       {env && (
@@ -182,29 +283,54 @@ function SandboxTab({ snap, agent }: { snap: OfficeSnapshot; agent: AgentConfig 
 
 function MessagesTab({ snap, agent }: { snap: OfficeSnapshot; agent: AgentConfig }) {
   const now = useNow(1000);
+  const [draft, setDraft] = useState("");
   const list = snap.messages.filter((m) => m.fromId === agent.id || m.toId === agent.id);
-  const name = (id: string) => snap.config.team.find((a) => a.id === id);
+  const who = (id: string) =>
+    id === HUMAN_ID ? { name: "You", color: "#ffec27" } : id === "hq" ? { name: "HQ", color: "#3ee0d0" } : snap.config.team.find((a) => a.id === id);
+  const running = snap.agents.find((a) => a.agentId === agent.id)?.session.state === "running";
+  const send = () => {
+    if (!draft.trim()) return;
+    officeActions.sendMessage(agent.id, draft.trim());
+    setDraft("");
+  };
   return (
-    <div className="scroll-thin h-full overflow-y-auto p-4">
-      <SectionTitle>Team MCP messages</SectionTitle>
-      <p className="mb-3 text-[13px] text-muted">Agents can't reach each other's sandboxes. Every message goes through HQ.</p>
-      {list.length === 0 && <p className="text-[15px] text-muted">No messages yet.</p>}
-      <ul className="flex flex-col gap-2">
-        {list.map((m) => {
-          const out = m.fromId === agent.id;
-          const other = name(out ? m.toId : m.fromId);
-          return (
-            <li key={m.id} className={`border-2 border-ink px-2.5 py-1.5 ${out ? "ml-8 bg-white" : "mr-8 bg-cream-2"}`}>
-              <div className="flex items-center gap-1.5 text-[13px] text-muted">
-                {other && <Dot color={other.color} size={8} />}
-                {out ? `To ${other?.name ?? "?"}` : `From ${other?.name ?? "?"}`}
-                <span className="ml-auto font-term text-[15px]">{ago(m.at, now)}</span>
-              </div>
-              <div className="text-[15px]">{m.text}</div>
-            </li>
-          );
-        })}
-      </ul>
+    <div className="flex h-full flex-col">
+      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto p-4">
+        <SectionTitle>Team MCP messages</SectionTitle>
+        <p className="mb-3 text-[13px] text-muted">Agents can't reach each other's sandboxes. Every message goes through HQ.</p>
+        {list.length === 0 && <p className="text-[15px] text-muted">No messages yet.</p>}
+        <ul className="flex flex-col gap-2">
+          {list.map((m) => {
+            const out = m.fromId === agent.id;
+            const other = who(out ? m.toId : m.fromId);
+            return (
+              <li key={m.id} className={`border-2 border-ink px-2.5 py-1.5 ${out ? "ml-8 bg-white" : "mr-8 bg-cream-2"}`}>
+                <div className="flex items-center gap-1.5 text-[13px] text-muted">
+                  {other && <Dot color={other.color} size={8} />}
+                  {out ? `To ${other?.name ?? "?"}` : `From ${other?.name ?? "?"}`}
+                  <span className="ml-auto font-term text-[15px]">{ago(m.at, now)}</span>
+                </div>
+                <div className="text-[15px]">{m.text}</div>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+      <form
+        className="flex gap-2 border-t-[3px] border-ink bg-cream p-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          send();
+        }}
+      >
+        <input className="field" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={`Message ${agent.name}…`} aria-label={`Message ${agent.name}`} />
+        <button className="btn" type="submit" disabled={!draft.trim()}>
+          Send
+        </button>
+      </form>
+      <p className="bg-cream px-2 pb-1.5 text-[11px] text-muted">
+        {running ? "Delivered now if idle, otherwise when the current turn ends." : `${agent.name} isn't running; it's delivered after Start.`}
+      </p>
     </div>
   );
 }

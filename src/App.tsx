@@ -5,6 +5,8 @@ import { ui, useUi } from "./store/ui";
 import { DebugPanel } from "./ui/DebugPanel";
 import { DrawerHost } from "./ui/drawers/Drawer";
 import { ActivityFeed } from "./ui/hud/ActivityFeed";
+import { ConnectionBanner } from "./ui/hud/ConnectionBanner";
+import { SetupChecklist } from "./ui/setup/SetupChecklist";
 import { TeamPanel } from "./ui/hud/TeamPanel";
 import { Tooltip } from "./ui/hud/Tooltip";
 import { TopBar } from "./ui/hud/TopBar";
@@ -19,13 +21,14 @@ function useKeyboard() {
         if (e.key === "Escape" && el.closest(".xterm")) el.blur();
         return;
       }
-      const { settings, drawer } = useUi.getState();
+      const { settings, drawer, setupOpen } = useUi.getState();
       if (e.key === "Escape") {
-        if (settings) ui.closeSettings();
+        if (setupOpen) ui.closeSetup();
+        else if (settings) ui.closeSettings();
         else if (drawer) ui.closeDrawer();
         return;
       }
-      if (settings) return;
+      if (settings || setupOpen) return;
       let handled = true;
       if (e.key === "d" || e.key === "D") ui.toggleDebug();
       else if (e.key === "+" || e.key === "=") ui.zoom(1);
@@ -43,14 +46,30 @@ function useKeyboard() {
   }, []);
 }
 
+/** On a real HQ, open the setup checklist once if anything needed is missing. */
+function useSetupPrompt() {
+  useEffect(() => {
+    let shown = false;
+    return useOffice.subscribe((s) => {
+      if (shown || !s.live || !s.snap) return;
+      shown = true;
+      const needed = s.snap.setup.checks.some((c) => c.status !== "ok" && c.neededFor !== "github" && c.neededFor !== "local");
+      if (needed) ui.openSetup();
+    });
+  }, []);
+}
+
 export function App() {
   useEffect(() => connectOffice(), []);
   useKeyboard();
+  useSetupPrompt();
   const ready = useOffice((s) => s.snap !== null);
+  const setupOpen = useUi((s) => s.setupOpen);
 
   return (
     <>
       <OfficeCanvas />
+      <ConnectionBanner />
       {ready && (
         <>
           <TopBar />
@@ -59,6 +78,7 @@ export function App() {
           <DrawerHost />
           <DebugPanel />
           <SettingsModal />
+          {setupOpen && <SetupChecklist />}
           <Tooltip />
         </>
       )}

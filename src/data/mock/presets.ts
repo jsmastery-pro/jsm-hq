@@ -15,11 +15,9 @@ export interface Preset {
 }
 
 const sandbox = (extra: Partial<SandboxSettings> = {}): SandboxSettings => ({
-  policy: "balanced",
-  allow: ["registry.npmjs.org", "github.com", "api.anthropic.com"],
+  resources: { cpus: null, memoryGb: null },
+  allow: ["registry.npmjs.org"],
   deny: [],
-  proxy: null,
-  secrets: ["ANTHROPIC_API_KEY", "GITHUB_TOKEN"],
   ...extra,
 });
 
@@ -36,6 +34,7 @@ function agent(
     name,
     role,
     isLead,
+    cli: "claude",
     model: isLead ? "Opus" : "Sonnet",
     mode: "sandbox",
     color,
@@ -43,7 +42,8 @@ function agent(
     roleMd: isLead
       ? `# ${name} — Lead\n\nYou plan and assign work. You never write app code.\nUse the HQ Team MCP: list_workers, get_status, assign_task, send_message.`
       : `# ${name} — ${role}\n\nYou build the tasks assigned to you. One task = one branch = one PR.\nOnly edit the files your task file allows.`,
-    sandbox: sandbox(isLead ? {} : { secrets: ["ANTHROPIC_API_KEY", "GITHUB_TOKEN", "INSTACLOUD_TOKEN"] }),
+    sandbox: sandbox(isLead ? {} : { allow: ["registry.npmjs.org", "console.instacloud.com"] }),
+    workspacePath: null,
     ...opts,
   };
 }
@@ -125,7 +125,7 @@ const bigTeam: Preset = {
       agent("maya", "Maya", "Lead", "#ff77a8", { isLead: true }),
       agent("bob", "Bob", "Developer", "#29adff"),
       agent("alice", "Alice", "Developer", "#ffd23a"),
-      agent("kenji", "Kenji", "Developer", "#00e436"),
+      agent("kenji", "Kenji", "Developer", "#00e436", { cli: "codex", model: "" }),
       agent("priya", "Priya", "QA", "#a98bff", { skills: ["test", "review"] }),
       agent("leo", "Leo", "Designer", "#ff8a3d", { skills: ["frontend-design", "review"] }),
       agent("sam", "Sam", "Docs", "#3ee0d0", { model: "Haiku", skills: ["document"] }),

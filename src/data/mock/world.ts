@@ -4,6 +4,9 @@
 import type { OfficeEvent, SimSpeed } from "../source";
 import type {
   ActivityType,
+  SbxState,
+  SessionInfo,
+  SetupState,
   AgentConfig,
   AgentStatus,
   Board,
@@ -28,6 +31,50 @@ interface TermQueue {
 }
 
 const now = () => new Date().toISOString();
+
+/** The mock machine has everything installed. */
+export function mockSetup(): SetupState {
+  const ok = (id: SetupState["checks"][number]["id"], label: string, detail: string, neededFor: SetupState["checks"][number]["neededFor"]) =>
+    ({ id, label, status: "ok" as const, detail, neededFor, fix: null });
+  return {
+    machine: { cpus: 8, memoryGb: 16 },
+    checks: [
+      ok("os", "Supported machine", "macOS · Apple silicon (mock)", "sandbox"),
+      ok("sbx", "Docker Sandboxes (sbx)", "v0.47.0 (mock)", "sandbox"),
+      ok("sbx-login", "Signed in to Docker", "signed in (mock)", "sandbox"),
+      ok("tmux", "tmux", "3.5a (mock)", "all"),
+      ok("claude", "Claude Code", "installed (mock)", "local"),
+      ok("gh", "GitHub CLI", "signed in (mock)", "github"),
+    ],
+    sandboxReady: true,
+    localReady: true,
+    checkedAt: now(),
+  };
+}
+
+/** What the mock "sbx" reports: domain rules mirror the saved lists. */
+export function mockSbx(team: AgentConfig[], project: string): SbxState {
+  const agents: SbxState["agents"] = {};
+  for (const a of team) {
+    let n = 0;
+    const rule = (decision: "allow" | "deny", r: string, source: "hq" | "kit" = "hq") => ({ id: `${a.id}-${++n}`, decision, resources: [r], source });
+    agents[a.id] = {
+      rules: [
+        rule("allow", "api.anthropic.com", "kit"),
+        ...a.sandbox.allow.map((r) => rule("allow", r)),
+        ...a.sandbox.deny.map((r) => rule("deny", r)),
+      ],
+      keys: a.isLead ? [] : ["openai"],
+      envFile: { path: `~/.jsmhq/${slug(project)}/${a.id}.env`, exists: !a.isLead },
+      syncError: null,
+    };
+  }
+  return { basePolicy: "balanced", proxy: null, globalKeys: ["anthropic", "github"], agents, checkedAt: now() };
+}
+
+export function mockSession(project: string, agentId: string): SessionInfo {
+  return { state: "running", detail: null, workspace: `~/.jsmhq/${slug(project)}/${agentId}`, sandbox: { cpus: 8, memoryGb: 8 } };
+}
 
 export class World {
   snap: OfficeSnapshot;
@@ -65,8 +112,13 @@ export class World {
         openedAt: new Date(Date.now() - (preset.mergedPrs - (t.prNumber as number) + 1) * 3_600_000).toISOString(),
       }));
     return {
+      setup: mockSetup(),
+      sbx: mockSbx(config.team, config.project.name),
       config,
-      agents: config.team.map((a) => ({ agentId: a.id, state: "idle", currentTaskId: null, stateSince: now(), note: null })),
+      agents: config.team.map((a) => ({
+        agentId: a.id, state: "idle", currentTaskId: null, stateSince: now(), note: null,
+        session: mockSession(config.project.name, a.id),
+      })),
       boards: structuredClone(preset.boards),
       tasks,
       pullRequests,
@@ -131,6 +183,7 @@ export class World {
   }
 
   name(id: string | null): string {
+    if (id === "you") return "You";
     return (id && this.cfg(id)?.name) || "Someone";
   }
 
@@ -254,8 +307,8 @@ export class World {
     const msg = { id: this.id("m"), at: now(), fromId, toId, text };
     this.snap.messages = [msg, ...this.snap.messages].slice(0, 100);
     this.emit({ type: "message", message: msg });
-    this.activity("message", fromId, `${this.name(fromId)} → ${this.name(toId)}: ${text}`);
-    this.write(fromId, messageLines(this.name(fromId), this.name(toId), text, false));
+    this.activity("message", fromId === "you" ? null : fromId, `${this.name(fromId)} → ${this.name(toId)}: ${text}`);
+    if (fromId !== "you") this.write(fromId, messageLines(this.name(fromId), this.name(toId), text, false));
     this.write(toId, messageLines(this.name(fromId), this.name(toId), text, true));
   }
 

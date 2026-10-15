@@ -3,8 +3,9 @@
 
 import { create } from "zustand";
 import { createMockSource } from "../data/mock/mockSource";
-import type { DataPreset, OfficeDataSource, OfficeEvent, SimSpeed } from "../data/source";
-import type { AgentConfig, AgentStatus, OfficeSnapshot } from "../data/types";
+import type { ConnectionStatus, DataPreset, OfficeDataSource, OfficeEvent, SimSpeed } from "../data/source";
+import { createWsSource } from "../data/ws/wsSource";
+import type { AgentConfig, AgentStatus, OfficeSnapshot, RemoveAgentOptions, SetupCheckId, WorkspaceInfo } from "../data/types";
 import { appendTerminal, clearTerminals } from "./terminal";
 
 export interface LoggedEvent {
@@ -20,11 +21,38 @@ interface OfficeState {
   terminalChunks: number;
   speed: SimSpeed;
   presets: DataPreset[] | null;
+  live: boolean; // connected to a real HQ server (vs. the demo mock)
+  workspaceInfo: Record<string, WorkspaceInfo>; // answers to inspectWorkspace
+  connection: ConnectionStatus;
   source: OfficeDataSource;
 }
 
-// Swap this one line for a WebSocket source later.
-const source: OfficeDataSource = createMockSource();
+/**
+ * HQ opens the UI with `?token=…`. With a token we talk to the real server;
+ * without one (plain `pnpm dev`) the UI runs on the mock.
+ */
+function hqToken(): string | null {
+  const url = new URL(location.href);
+  const fromUrl = url.searchParams.get("token");
+  if (fromUrl) {
+    try {
+      sessionStorage.setItem("hq-token", fromUrl);
+    } catch {
+      /* private mode */
+    }
+    url.searchParams.delete("token");
+    history.replaceState(null, "", url.toString()); // keep the token out of history and screenshots
+    return fromUrl;
+  }
+  try {
+    return sessionStorage.getItem("hq-token");
+  } catch {
+    return null;
+  }
+}
+
+const token = hqToken();
+const source: OfficeDataSource = token ? createWsSource(token) : createMockSource();
 
 export const useOffice = create<OfficeState>(() => ({
   snap: null,
@@ -33,6 +61,9 @@ export const useOffice = create<OfficeState>(() => ({
   terminalChunks: 0,
   speed: 1,
   presets: source.dev?.presets ?? null,
+  live: token !== null,
+  workspaceInfo: {},
+  connection: "connecting",
   source,
 }));
 
@@ -50,6 +81,12 @@ function reduce(snap: OfficeSnapshot, e: OfficeEvent): OfficeSnapshot {
   switch (e.type) {
     case "snapshot":
       return e.snapshot;
+    case "workspace.info":
+      return snap;
+    case "sbx.updated":
+      return { ...snap, sbx: e.sbx };
+    case "setup.updated":
+      return { ...snap, setup: e.setup };
     case "config.updated":
       return { ...snap, config: e.config };
     case "agent.updated":
@@ -83,6 +120,10 @@ function handle(e: OfficeEvent) {
     useOffice.setState((s) => ({ terminalChunks: s.terminalChunks + 1 }));
     return;
   }
+  if (e.type === "workspace.info") {
+    useOffice.setState((s) => ({ workspaceInfo: { ...s.workspaceInfo, [e.info.agentId]: e.info } }));
+    return;
+  }
   if (e.type === "snapshot") clearTerminals();
   useOffice.setState((s) => {
     const base = s.snap ?? (e.type === "snapshot" ? e.snapshot : null);
@@ -100,7 +141,7 @@ let disconnect: (() => void) | null = null;
 
 export function connectOffice() {
   if (disconnect) return disconnect;
-  disconnect = source.connect(handle);
+  disconnect = source.connect(handle, (connection) => useOffice.setState({ connection }));
   return () => {
     disconnect?.();
     disconnect = null;
@@ -111,13 +152,25 @@ export function connectOffice() {
 
 export const officeActions = {
   sendTerminalInput: (agentId: string, data: string) => source.sendTerminalInput(agentId, data),
+  resizeTerminal: (agentId: string, cols: number, rows: number) => source.resizeTerminal(agentId, cols, rows),
+  startAgent: (id: string) => source.startAgent(id),
+  stopAgent: (id: string) => source.stopAgent(id),
+  openWorkspace: (id: string) => source.openWorkspace(id),
+  recreateSandbox: (id: string) => source.recreateSandbox(id),
+  recheckSetup: () => source.recheckSetup(),
+  runSetupFix: (id: SetupCheckId) => source.runSetupFix(id),
   assignTask: (taskId: string, agentId: string) => source.assignTask(taskId, agentId),
+  sendMessage: (toId: string, text: string) => source.sendMessage(toId, text),
   addAgent: source.addAgent.bind(source),
   updateAgent: source.updateAgent.bind(source),
-  removeAgent: source.removeAgent.bind(source),
+  removeAgent: (id: string, opts?: RemoveAgentOptions) => source.removeAgent(id, opts),
+  inspectWorkspace: (id: string) => source.inspectWorkspace(id),
   updateSandbox: source.updateSandbox.bind(source),
-  setSecret: source.setSecret.bind(source),
-  removeSecret: source.removeSecret.bind(source),
+  setSecret: (agentId: string | null, service: string, value: string) => source.setSecret(agentId, service, value),
+  removeSecret: (agentId: string | null, service: string) => source.removeSecret(agentId, service),
+  setProxy: (url: string | null) => source.setProxy(url),
+  openEnvFile: (id: string) => source.openEnvFile(id),
+  refreshSbx: () => source.refreshSbx(),
   updateWorkflow: source.updateWorkflow.bind(source),
   updateProject: source.updateProject.bind(source),
   createBoard: source.createBoard.bind(source),
