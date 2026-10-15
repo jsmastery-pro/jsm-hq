@@ -13,7 +13,7 @@ if (args.includes("--help") || args.includes("-h")) {
   console.log(`JSM HQ ${pkg.version} — a pixel office for your team of AI coding agents.
 
 Usage:
-  npx jsm-hq [options]          run inside a git repo
+  npx @therealjsmastery/jsm-hq [options]          run inside a git repo
 
 Options:
   --repo <path>   the git repo to manage (default: current folder)
@@ -36,7 +36,7 @@ if (major < 20) {
 
 // Check option values here so a typo gets a clear message instead of a silent default.
 const fail = (msg) => {
-  console.error(`jsm-hq: ${msg}\nRun "npx jsm-hq --help" for usage.`);
+  console.error(`jsm-hq: ${msg}\nRun "npx @therealjsmastery/jsm-hq --help" for usage.`);
   process.exit(1);
 };
 for (const name of ["--repo", "--port"]) {
