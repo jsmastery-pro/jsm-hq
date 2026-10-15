@@ -7,7 +7,7 @@ import { TeamSettings } from "./TeamSettings";
 import { WorkflowSettings } from "./WorkflowSettings";
 
 const TABS: { id: SettingsTab; label: string; hint: string }[] = [
-  { id: "team", label: "Team", hint: "Agents, roles, models, skills" },
+  { id: "team", label: "Team", hint: "Agents, roles, skills" },
   { id: "workflow", label: "Workflow", hint: "Review, merge, deploy" },
   { id: "sandbox", label: "Sandbox", hint: "Network, proxy, secrets" },
   { id: "boards", label: "Boards", hint: "Progress boards" },

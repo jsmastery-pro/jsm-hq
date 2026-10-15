@@ -38,7 +38,8 @@ export function newAgent(id: string, name: string, role: string, color: string, 
     name,
     role,
     isLead,
-    model: isLead ? "Opus" : "Sonnet",
+    cli: "claude",
+    model: "", // the CLI's default; users can pick with /model or "Start with model"
     mode: "sandbox",
     color,
     skills: [],
@@ -69,6 +70,7 @@ export function loadConfig(repo: RepoInfo, port: number): HqConfig {
     // Older files may miss newer fields.
     for (const a of found.team) {
       a.workspacePath ??= null;
+      a.cli ??= "claude";
       a.sandbox.resources ??= { cpus: null, memoryGb: null };
       // Phase D: policy level, proxy and secret names moved to sbx itself.
       const old = a.sandbox as unknown as Record<string, unknown>;

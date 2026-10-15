@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { HUMAN_ID, type AgentConfig, type AgentStatus, type OfficeSnapshot } from "../../data/types";
+import { CLI_LABEL, HUMAN_ID, type AgentConfig, type AgentStatus, type OfficeSnapshot } from "../../data/types";
 import { officeActions, useOffice } from "../../store/office";
 import { ui, type AgentTab } from "../../store/ui";
 import { ago, Dot, Portrait, ReviewChip, SectionTitle, StateChip, Tabs, useNow } from "../kit";
@@ -33,7 +33,7 @@ export function AgentDrawer({ id, initialTab }: { id: string; initialTab?: Agent
             <StateChip state={status.state} />
           </div>
           <div className="truncate font-term text-[17px] text-muted">
-            {agent.role} · {agent.model} · {agent.mode === "sandbox" ? "Docker Sandbox" : "Local mode"}
+            {agent.role} · {CLI_LABEL[agent.cli]}{agent.model ? ` ${agent.model}` : ""} · {agent.mode === "sandbox" ? "Docker Sandbox" : "Local mode"}
           </div>
         </div>
       </DrawerHeader>
@@ -118,8 +118,15 @@ function NotRunning({ agent, status }: { agent: AgentConfig; status: AgentStatus
             {s.detail && <pre className="mb-3 whitespace-pre-wrap border-2 border-red px-2 py-1 text-left font-term text-[16px] text-[#ffd0dc]">{s.detail}</pre>}
             <p className="mb-4 text-[13px] text-[#9aa6d1]">
               {agent.mode === "sandbox"
-                ? "Start runs Claude Code in a Docker Sandbox on this agent's own copy of the repo."
-                : "Start runs Claude Code locally in this agent's own copy of the repo, with permission prompts on."}
+                ? `Start runs ${CLI_LABEL[agent.cli]} in a Docker Sandbox on this agent's own copy of the repo.`
+                : `Start runs ${CLI_LABEL[agent.cli]} locally in this agent's own copy of the repo, with permission prompts on.`}
+            </p>
+            {agent.cli === "codex" && (
+              <p className="mb-4 text-[12px] text-[#ffc14d]">
+                First start only: Codex asks you to trust this folder and HQ's hooks. Choose <b>Yes</b>, then <b>Trust all and continue</b>, in the terminal.
+              </p>
+            )}
+            <p className="hidden">
             </p>
             <div className="flex justify-center gap-2">
               <button className="btn text-ink" onClick={() => officeActions.startAgent(agent.id)}>

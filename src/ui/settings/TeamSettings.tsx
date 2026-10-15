@@ -1,12 +1,22 @@
 import { useState } from "react";
-import type { AgentConfig, AgentMode } from "../../data/types";
+import { CLI_LABEL, type AgentCli, type AgentConfig, type AgentMode } from "../../data/types";
 import { officeActions, useOffice } from "../../store/office";
 import { agentPalette } from "../../theme/tokens";
 import { Field, Portrait, SectionTitle } from "../kit";
 import { CommitInput } from "./controls";
 import { RemoveAgentDialog } from "./RemoveAgentDialog";
 
-const MODELS = ["Opus", "Sonnet", "Haiku"];
+function CliSelect({ value, onChange }: { value: AgentCli; onChange: (v: AgentCli) => void }) {
+  return (
+    <select className="field" value={value} onChange={(e) => onChange(e.target.value as AgentCli)} aria-label="Coding agent">
+      {(Object.keys(CLI_LABEL) as AgentCli[]).map((c) => (
+        <option key={c} value={c}>
+          {CLI_LABEL[c]}
+        </option>
+      ))}
+    </select>
+  );
+}
 const ROLE_SUGGESTIONS = ["Developer", "QA", "Designer", "Docs", "DevOps", "Security"];
 
 export function TeamSettings() {
@@ -37,24 +47,20 @@ function AgentRow({ agent, expanded, onToggle, onRemove }: { agent: AgentConfig;
   const set = (patch: Parameters<typeof officeActions.updateAgent>[1]) => officeActions.updateAgent(agent.id, patch);
   return (
     <div className="border-[3px] border-ink bg-white">
-      <div className="grid grid-cols-[40px_1fr_1fr_110px_120px_auto] items-end gap-2.5 p-2.5">
+      <div className="grid grid-cols-[40px_1fr_1fr_150px_130px_auto] items-end gap-2.5 p-2.5">
         <Portrait color={agent.color} lead={agent.isLead} />
         <Field label="Name">
           <CommitInput className="field" value={agent.name} onCommit={(v) => v.trim() && set({ name: v.trim() })} />
         </Field>
         <Field label="Role">
           {agent.isLead ? (
-            <div className="field bg-cream-2">Lead</div>
+            <div className="field flex h-9 items-center bg-cream-2">Lead</div>
           ) : (
             <CommitInput className="field" value={agent.role} list="role-suggestions" onCommit={(v) => v.trim() && set({ role: v.trim() })} />
           )}
         </Field>
-        <Field label="Model">
-          <select className="field" value={agent.model} onChange={(e) => set({ model: e.target.value })}>
-            {MODELS.map((m) => (
-              <option key={m}>{m}</option>
-            ))}
-          </select>
+        <Field label="Agent">
+          <CliSelect value={agent.cli} onChange={(cli) => set({ cli })} />
         </Field>
         <Field label="Runs in">
           <select className="field" value={agent.mode} onChange={(e) => set({ mode: e.target.value as AgentMode })}>
@@ -78,7 +84,7 @@ function AgentRow({ agent, expanded, onToggle, onRemove }: { agent: AgentConfig;
       </div>
       {agent.mode === "local" && (
         <div className="border-t-2 border-dashed border-cream-3 px-3 py-1 text-[12px] text-muted">
-          Local mode runs plain <code>claude</code> in the agent's own folder. Permission prompts stay on.
+          Local mode runs plain <code>{agent.cli}</code> in the agent's own folder. Permission prompts stay on.
         </div>
       )}
       {expanded && (
@@ -95,6 +101,15 @@ function AgentRow({ agent, expanded, onToggle, onRemove }: { agent: AgentConfig;
                 />
               ))}
             </div>
+          </Field>
+          <Field label="Start with model" hint="Optional. Leave empty to use the CLI's default — you can always switch with /model in the terminal. Set it to keep a choice across restarts (e.g. Opus for the lead).">
+            <CommitInput
+              className="field"
+              value={agent.model}
+              placeholder={`${CLI_LABEL[agent.cli]} default`}
+              list={agent.cli === "codex" ? "codex-models" : "claude-models"}
+              onCommit={(v) => set({ model: v.trim() })}
+            />
           </Field>
           <Field label="Skills" hint="Comma separated. Copied into the agent's .claude/skills.">
             <CommitInput
@@ -127,18 +142,18 @@ function AgentRow({ agent, expanded, onToggle, onRemove }: { agent: AgentConfig;
 function AddAgent() {
   const [name, setName] = useState("");
   const [role, setRole] = useState("Developer");
-  const [model, setModel] = useState("Sonnet");
+  const [cli, setCli] = useState<AgentCli>("claude");
   const [mode, setMode] = useState<AgentMode>("sandbox");
   const add = () => {
     if (!name.trim()) return;
-    officeActions.addAgent({ name: name.trim(), role, model, mode });
+    officeActions.addAgent({ name: name.trim(), role, cli, mode });
     setName("");
   };
   return (
     <section className="border-[3px] border-dashed border-ink p-3">
       <SectionTitle>Add an agent</SectionTitle>
       <form
-        className="grid grid-cols-[1fr_1fr_110px_120px_auto] items-end gap-2.5"
+        className="grid grid-cols-[1fr_1fr_150px_130px_auto] items-end gap-2.5"
         onSubmit={(e) => {
           e.preventDefault();
           add();
@@ -150,12 +165,8 @@ function AddAgent() {
         <Field label="Role">
           <input className="field" value={role} list="role-suggestions" onChange={(e) => setRole(e.target.value)} />
         </Field>
-        <Field label="Model">
-          <select className="field" value={model} onChange={(e) => setModel(e.target.value)}>
-            {MODELS.map((m) => (
-              <option key={m}>{m}</option>
-            ))}
-          </select>
+        <Field label="Agent">
+          <CliSelect value={cli} onChange={setCli} />
         </Field>
         <Field label="Runs in">
           <select className="field" value={mode} onChange={(e) => setMode(e.target.value as AgentMode)}>
@@ -170,6 +181,14 @@ function AddAgent() {
       <p className="mt-2 text-[12px] text-muted">
         HQ starts a new sandbox with the lead's network policy and allows it to reach HQ at host.docker.internal.
       </p>
+      <datalist id="codex-models">
+        <option value="gpt-5.6-sol" />
+      </datalist>
+      <datalist id="claude-models">
+        <option value="opus" />
+        <option value="sonnet" />
+        <option value="haiku" />
+      </datalist>
       <datalist id="role-suggestions">
         {ROLE_SUGGESTIONS.map((r) => (
           <option key={r} value={r} />

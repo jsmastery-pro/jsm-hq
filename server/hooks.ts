@@ -1,4 +1,4 @@
-// Claude Code hooks → agent state. Each agent's hooks POST to
+// Claude Code / Codex hooks → agent state. Each agent's hooks POST to
 // /hook/<agentId>/<Event> with the hook's JSON payload.
 
 import type { Hub } from "./hub";
@@ -48,6 +48,13 @@ export function handleHook(hub: Hub, inbox: Inbox, agentId: string, event: strin
       // Also clears "needs input" once a permission prompt is answered.
       if (st.state !== "working" || st.note?.startsWith("Asking")) hub.setStatus(agentId, { state: "working", note: body.tool_name ? `Using ${body.tool_name}` : null });
       break;
+    case "PermissionRequest": {
+      // Codex: an approval prompt is waiting in the terminal.
+      const what = body.tool_name ? `Approve ${body.tool_name}?` : "Approval needed in the terminal";
+      hub.setStatus(agentId, { state: "needs-input", note: `Asking: ${what}` });
+      hub.activity("agent.needs-input", agentId, `${name} needs you: ${what}`);
+      break;
+    }
     case "Notification": {
       const msg = body.message ?? "Needs your attention";
       // "Waiting for your input" fires after a finished turn sits idle — not urgent.

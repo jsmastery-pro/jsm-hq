@@ -5,7 +5,7 @@ import { spawn as spawnPty, type IPty } from "node-pty";
 import { existsSync, rmSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import type { SetupCheckId, WorkspaceInfo } from "../src/data/types";
-import { MCP_CONFIG, writeAgentFiles } from "./agentFiles";
+import { adapters, localBinary } from "./adapters";
 import type { Hub } from "./hub";
 import { run, shq } from "./lib/exec";
 import { log } from "./lib/log";
@@ -52,22 +52,24 @@ export class Sessions {
     };
     if (!setup.checks.find((c) => c.id === "tmux" && c.status === "ok")) return fail("tmux is not installed. See the setup checklist.");
     if (agent.mode === "sandbox" && !setup.sandboxReady) return fail("Docker Sandboxes isn't ready on this machine. Finish the setup checklist, or switch this agent to Local mode.");
-    if (agent.mode === "local" && !setup.localReady) return fail("Claude Code isn't installed. See the setup checklist.");
+    const check = (cid: string) => setup.checks.find((c) => c.id === cid)?.status;
+    if (agent.mode === "local" && agent.cli === "claude" && check("claude") !== "ok") return fail("Claude Code isn't installed. See the setup checklist.");
+    if (agent.mode === "local" && agent.cli === "codex" && check("codex") !== "ok") return fail("Codex isn't installed on this machine. See the setup checklist, or run this agent in a sandbox.");
+    if (agent.mode === "sandbox" && agent.cli === "codex" && check("openai-secret") !== "ok")
+      return fail("Codex needs an OpenAI key in sbx. Run `sbx secret set openai --oauth` (Setup checklist → Run in terminal).");
 
     const name = this.name(id);
     this.onSessionDown(id);
     try {
       hub.setSession(id, { state: "starting", detail: "Preparing folder…", workspace: workspaceFor(agent, hub.slug) });
       const dir = await ensureWorkspace(agent, hub.slug, hub.repo);
-      writeAgentFiles(dir, agent, hub.snap.config, this.agentToken);
+      const adapter = adapters[agent.cli];
+      await adapter.writeFiles(dir, agent, hub.snap.config, this.agentToken);
       if (!(await tmux.hasSession(name))) {
-        const mcp = shq(`${dir}/${MCP_CONFIG}`);
-        // "Opus" / "Sonnet" / "Haiku" → Claude Code's model aliases.
-        const model = /^(opus|sonnet|haiku)$/i.test(agent.model) ? agent.model.toLowerCase() : null;
-        const claudeArgs = ["--mcp-config", mcp, ...(model ? ["--model", model] : [])];
+        const launch = adapter.launch(agent, dir);
         const envFile = this.envFileFor(id);
-        // Local mode: export the env file's variables into the shell that runs claude.
-        let command = (envFile ? `set -a && . ${shq(envFile)} && set +a && ` : "") + ["claude", ...claudeArgs].join(" ");
+        // Local mode: export the env file's variables into the shell that runs the agent.
+        let command = (envFile ? `set -a && . ${shq(envFile)} && set +a && ` : "") + [localBinary[agent.cli], ...launch.args].join(" ");
         if (agent.mode === "sandbox") {
           hub.setSession(id, { detail: "Allowing the sandbox to reach HQ…" });
           await this.ensurePolicy();
@@ -76,14 +78,15 @@ export class Sessions {
           const { cpus, memoryGb } = agent.sandbox.resources;
           const size = [cpus ? `--cpus ${cpus}` : "", memoryGb ? `--memory ${Math.round(memoryGb * 1024)}m` : ""];
           const env = envFile ? ["--env-file", shq(envFile)] : [];
-          command = ["sbx run --name", shq(name), ...size, ...env, "claude", shq(dir), "--", ...claudeArgs].filter(Boolean).join(" ");
+          const args = launch.args.length ? ["--", ...launch.args] : [];
+          command = ["sbx run --name", shq(name), ...size, ...env, launch.sbxAgent, shq(dir), ...args].filter(Boolean).join(" ");
         }
         await tmux.newSession(name, dir, command);
       }
       this.attach(id);
       hub.setSession(id, { state: "running", detail: null, workspace: dir });
       hub.setStatus(id, { state: "idle", note: agent.mode === "sandbox" ? "Sandbox running" : "Running locally" });
-      hub.activity("session", id, `${agent.name} started (${agent.mode === "sandbox" ? "Docker Sandbox" : "Local mode"})`);
+      hub.activity("session", id, `${agent.name} started (${agent.cli === "codex" ? "Codex" : "Claude Code"}, ${agent.mode === "sandbox" ? "Docker Sandbox" : "Local mode"})`);
       if (agent.mode === "sandbox") {
         setTimeout(() => void this.refreshSandboxSizes(), 4000);
         void this.whenSandboxExists(id).then((ok) => ok && this.onSandboxReady(id));
@@ -318,6 +321,7 @@ export class Sessions {
             this.hub.setStatus(agent.id, { note: "Reattached" });
             this.onSessionReattached(agent.id);
           }
+          if (agent.cli === "codex") await this.watchCodexScreen(agent.id, name);
         } else if (st.session.state === "running") {
           this.ptys.delete(agent.id);
           this.onSessionDown(agent.id);
@@ -335,10 +339,33 @@ export class Sessions {
     }, 3000);
   }
 
+  /**
+   * Codex fires SessionStart only on the first prompt, so HQ reads its screen:
+   * the trust prompts mean "needs you"; the empty prompt means HQ can type.
+   */
+  private async watchCodexScreen(agentId: string, name: string) {
+    const st = this.hub.status(agentId);
+    if (!st) return;
+    const screen = await tmux.tailText(name, 14);
+    const TRUST_NOTE = "Asking: approve Codex's folder and hook prompts in the terminal (choose Yes, then Trust all)";
+    if (/Do you trust the contents of this directory|Hooks need review/i.test(screen)) {
+      if (st.note !== TRUST_NOTE) {
+        this.hub.setStatus(agentId, { state: "needs-input", note: TRUST_NOTE });
+        this.hub.activity("agent.needs-input", agentId, `${this.hub.name(agentId)} needs you: approve Codex's trust prompts`);
+      }
+      return;
+    }
+    if (/Ask Codex to do anything/i.test(screen)) {
+      this.onSessionReattached(agentId); // its prompt is ready for typed messages
+      if (st.note === TRUST_NOTE || st.note === "Sandbox running" || st.note === "Running locally" || st.note === "Reattached")
+        this.hub.setStatus(agentId, { state: "idle", note: "Ready" });
+    }
+  }
+
   // ------------------------------------------------------------ setup helper
 
   async recheckSetup() {
-    this.hub.setSetup(await runSetupChecks(this.hub.repo));
+    this.hub.setSetup(await runSetupChecks(this.hub.repo, this.hub.snap.config.team));
   }
 
   /** Runs a check's fix command in a visible terminal. Only commands HQ itself suggested. */

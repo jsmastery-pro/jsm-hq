@@ -24,12 +24,18 @@ export interface SandboxSettings {
 
 export type AgentMode = "sandbox" | "local";
 
+/** Which coding agent CLI runs in the sandbox. */
+export type AgentCli = "claude" | "codex";
+
+export const CLI_LABEL: Record<AgentCli, string> = { claude: "Claude Code", codex: "Codex" };
+
 export interface AgentConfig {
   id: string; // "john"
   name: string; // "John"
   role: string; // "Lead" | "Developer" | "QA" | anything
   isLead: boolean;
-  model: string; // "Opus" | "Sonnet" | "Haiku"
+  cli: AgentCli;
+  model: string; // optional start model ("" = the CLI's default; users can switch with /model)
   mode: AgentMode;
   color: string; // hex, used for the robot, owner dots and chips
   skills: string[];
@@ -193,7 +199,7 @@ export interface RemoveAgentOptions {
 
 // ---------------------------------------------------------------- Setup
 
-export type SetupCheckId = "os" | "sbx" | "sbx-login" | "tmux" | "gh" | "gh-remote" | "github-secret" | "claude";
+export type SetupCheckId = "os" | "sbx" | "sbx-login" | "tmux" | "gh" | "gh-remote" | "github-secret" | "claude" | "codex" | "openai-secret";
 export type SetupStatus = "ok" | "missing" | "unsupported" | "warning";
 
 export interface SetupFix {
@@ -266,12 +272,13 @@ export interface OfficeSnapshot {
 export interface NewAgentInput {
   name: string;
   role: string;
-  model: string;
+  cli?: AgentCli;
+  model?: string;
   mode: AgentMode;
 }
 
 export type AgentPatch = Partial<
-  Pick<AgentConfig, "name" | "role" | "model" | "mode" | "color" | "skills" | "roleMd" | "workspacePath">
+  Pick<AgentConfig, "name" | "role" | "cli" | "model" | "mode" | "color" | "skills" | "roleMd" | "workspacePath">
 >;
 
 export interface WorkflowPatch {

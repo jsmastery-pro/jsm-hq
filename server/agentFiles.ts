@@ -8,7 +8,7 @@ import type { AgentConfig, HqConfig } from "../src/data/types";
 /** Team MCP config, passed with `claude --mcp-config` (so the project's own .mcp.json is untouched). */
 export const MCP_CONFIG = ".claude/hq-mcp.json";
 export const HQ_FILES = ["ROLE.md", ".claude/settings.local.json", MCP_CONFIG];
-const MARK = "# jsmhq-hook";
+export const MARK = "# jsmhq-hook";
 
 const HOOK_EVENTS = ["SessionStart", "UserPromptSubmit", "PreToolUse", "Notification", "Stop", "SessionEnd"] as const;
 
@@ -61,7 +61,7 @@ export function roleMd(agent: AgentConfig, cfg: HqConfig): string {
 type HookEntry = { matcher?: string; hooks: { type: "command"; command: string; timeout?: number }[] };
 type Settings = { hooks?: Record<string, HookEntry[]>; permissions?: { allow?: string[]; [k: string]: unknown }; [k: string]: unknown };
 
-function hookCommand(url: string, token: string, agentId: string, event: string): string {
+export function hookCommand(url: string, token: string, agentId: string, event: string): string {
   // Stop prints HQ's reply: {"decision":"block","reason":…} hands over queued messages.
   const out = event === "Stop" ? "2>/dev/null" : ">/dev/null 2>&1";
   return `curl -sf -m 4 -X POST -H 'Authorization: Bearer ${token}' -H 'Content-Type: application/json' --data-binary @- '${url}/hook/${agentId}/${event}' ${out} || true ${MARK}`;
@@ -108,7 +108,8 @@ export function writeMcpConfig(dir: string, agent: AgentConfig, port: number, to
   writeFileSync(join(dir, MCP_CONFIG), JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
 }
 
-export function writeAgentFiles(dir: string, agent: AgentConfig, cfg: HqConfig, token: string) {
+/** Claude Code's files: ROLE.md (loaded by the SessionStart hook), hooks, and the Team MCP config. */
+export function writeClaudeFiles(dir: string, agent: AgentConfig, cfg: HqConfig, token: string) {
   writeFileSync(join(dir, "ROLE.md"), roleMd(agent, cfg));
   writeSettings(dir, agent, cfg.project.hqPort, token);
   writeMcpConfig(dir, agent, cfg.project.hqPort, token);

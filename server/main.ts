@@ -40,7 +40,7 @@ async function main() {
 
   log.info(`repo   ${repo.root}${repo.github ? `  (github.com/${repo.github})` : ""}`);
   log.info("checking setup…");
-  const setup = await runSetupChecks(repo);
+  const setup = await runSetupChecks(repo, config.team);
   for (const c of setup.checks) log.info(`  ${c.status === "ok" ? "✓" : c.status === "warning" ? "!" : "✗"} ${c.label}: ${c.detail}`);
 
   const hub = new Hub(repo, slug, config, loadPlan(repo.root), setup);

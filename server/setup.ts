@@ -2,7 +2,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { arch, cpus, platform, release, totalmem } from "node:os";
-import type { SetupCheck, SetupFix, SetupState } from "../src/data/types";
+import type { AgentConfig, SetupCheck, SetupFix, SetupState } from "../src/data/types";
 import { has, run } from "./lib/exec";
 import type { RepoInfo } from "./repo";
 
@@ -129,12 +129,37 @@ async function checkGithubSecret(sbxOk: boolean): Promise<Check> {
   };
 }
 
-export async function runSetupChecks(repo: RepoInfo): Promise<SetupState> {
+async function checkCodex(): Promise<Check> {
+  const base = { id: "codex" as const, label: "Codex (for Codex agents in Local mode)", neededFor: "local" as const };
+  const v = await run("codex", ["--version"], { timeoutMs: 8000 });
+  if (v.ok) return { ...base, status: "ok", detail: v.stdout.trim(), fix: null };
+  return { ...base, status: "missing", detail: "Not installed. Only needed for Codex agents in Local mode (sandboxes have it).", fix: fix("npm install -g @openai/codex", false, "https://developers.openai.com/codex/cli") };
+}
+
+async function checkOpenAiSecret(sbxOk: boolean): Promise<Check> {
+  const base = { id: "openai-secret" as const, label: "OpenAI sign-in for Codex agents", neededFor: "sandbox" as const };
+  if (!sbxOk) return { ...base, status: "missing", detail: "Waiting for sbx.", fix: null };
+  const r = await run("sbx", ["secret", "ls", "--json"], { timeoutMs: 10_000 });
+  let has = false;
+  try {
+    has = ((JSON.parse(r.stdout) as { secrets?: { name: string; scope: string }[] }).secrets ?? []).some((s) => s.name === "openai" && s.scope === "global");
+  } catch {
+    /* sbx down */
+  }
+  if (has) return { ...base, status: "ok", detail: "Stored in Docker's secret store.", fix: null };
+  return { ...base, status: "missing", detail: "Codex agents can't sign in until this is set. Opens your browser to sign in with ChatGPT.", fix: fix("sbx secret set openai --oauth", true, "https://docs.docker.com/ai/sandboxes/") };
+}
+
+/** `team` adds the Codex checks only when the team has Codex agents. */
+export async function runSetupChecks(repo: RepoInfo, team: AgentConfig[] = []): Promise<SetupState> {
   const brew = os === "darwin" && (await has("brew"));
   const [osCheck, sbx, tmux, claude, gh] = await Promise.all([checkOs(), checkSbx(brew), checkTmux(brew), checkClaude(), checkGh(brew)]);
   const sbxOk = sbx.status === "ok";
   const [login, secret] = await Promise.all([checkSbxLogin(sbxOk), checkGithubSecret(sbxOk)]);
   const checks: SetupCheck[] = [osCheck, sbx, login, secret, tmux, claude, gh, checkRemote(repo)];
+  const codexAgents = team.filter((a) => a.cli === "codex");
+  if (codexAgents.some((a) => a.mode === "sandbox")) checks.splice(4, 0, await checkOpenAiSecret(sbxOk));
+  if (codexAgents.some((a) => a.mode === "local")) checks.push(await checkCodex());
   const ok = (c: SetupCheck) => c.status === "ok";
   return {
     machine: { cpus: cpus().length, memoryGb: Math.round(totalmem() / 1024 ** 3) },

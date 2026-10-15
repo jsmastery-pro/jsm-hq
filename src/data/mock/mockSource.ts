@@ -180,8 +180,8 @@ export function createMockSource(): OfficeDataSource {
       const color = agentPalette.find((c) => !used.has(c)) ?? agentPalette[team.length % agentPalette.length];
       const lead = world.lead();
       const agent: AgentConfig = {
-        id, name: input.name.trim() || "Agent", role: input.role.trim() || "Developer", isLead: false,
-        model: input.model, mode: input.mode, color, skills: ["plan", "review"],
+        id, name: input.name.trim() || "Agent", role: input.role.trim() || "Developer", isLead: false, cli: input.cli ?? "claude",
+        model: input.model ?? "", mode: input.mode, color, skills: ["plan", "review"],
         roleMd: `# ${input.name} — ${input.role}\n\nYou build the tasks assigned to you.`,
         sandbox: structuredClone(lead.sandbox),
         workspacePath: null,
