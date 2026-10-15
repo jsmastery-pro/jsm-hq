@@ -54,6 +54,8 @@ export interface WorkflowConfig {
 }
 
 export interface ProjectConfig {
+  /** Fixed once created: names sandboxes, tmux sessions and ~/.jsmhq/<id>. Renaming the project never changes it. */
+  id: string; // "askwell"
   name: string; // "Askwell"
   repo: string; // "jsmastery-pro/askwell"
   path: string; // "~/developer/askwell"

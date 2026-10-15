@@ -4,6 +4,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentConfig, Board, HqConfig, SandboxSettings, Task } from "../src/data/types";
+import { slugify } from "./paths";
 import type { RepoInfo } from "./repo";
 
 export interface PlanFile {
@@ -53,7 +54,7 @@ export function newAgent(id: string, name: string, role: string, color: string, 
 
 function defaultConfig(repo: RepoInfo, port: number): HqConfig {
   return {
-    project: { name: repo.name, repo: repo.github ?? repo.name, path: repo.root, hqPort: port },
+    project: { id: slugify(repo.name), name: repo.name, repo: repo.github ?? repo.name, path: repo.root, hqPort: port },
     team: [newAgent("john", "John", "Lead", "#ff77a8", true), newAgent("bob", "Bob", "Developer", "#29adff", false)],
     workflow: {
       review: { enabled: true, tool: repo.hasCodeRabbit ? "coderabbit" : "human", command: "" },
@@ -79,6 +80,9 @@ export function loadConfig(repo: RepoInfo, port: number): { config: HqConfig; is
       delete old.proxy;
       delete old.secrets;
     }
+    // Configs from before project.id: their resources are named after the current name.
+    // Slugified again in case the file was edited by hand: it ends up in paths and sandbox names.
+    found.project.id = slugify(found.project.id ?? found.project.name);
     found.project.path = repo.root;
     return { config: found, isNew: false };
   }

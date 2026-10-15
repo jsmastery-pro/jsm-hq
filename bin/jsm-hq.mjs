@@ -34,4 +34,17 @@ if (major < 20) {
   process.exit(1);
 }
 
+// Check option values here so a typo gets a clear message instead of a silent default.
+const fail = (msg) => {
+  console.error(`jsm-hq: ${msg}\nRun "npx jsm-hq --help" for usage.`);
+  process.exit(1);
+};
+for (const name of ["--repo", "--port"]) {
+  const i = args.indexOf(name);
+  if (i === -1) continue;
+  const value = args[i + 1];
+  if (value === undefined || value.startsWith("-")) fail(`${name} needs a value.`);
+  if (name === "--port" && !(/^\d+$/.test(value) && Number(value) >= 1024 && Number(value) <= 65535)) fail(`--port must be a number from 1024 to 65535 (got "${value}").`);
+}
+
 await import("../dist-server/main.mjs");

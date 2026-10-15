@@ -17,7 +17,7 @@ import { Sbx } from "./sbx";
 import { run } from "./lib/exec";
 import { log } from "./lib/log";
 import { ensurePtyHelperExecutable } from "./lib/ptyFix";
-import { agentToken, browserToken, slugify } from "./paths";
+import { agentToken, browserToken } from "./paths";
 import { detectRepo } from "./repo";
 import { Sessions } from "./sessions";
 import { runSetupChecks } from "./setup";
@@ -36,7 +36,7 @@ async function main() {
   const repo = await detectRepo(resolve(arg("repo") ?? process.env.HQ_REPO ?? process.cwd()));
   const { config, isNew } = loadConfig(repo, port);
   config.project.hqPort = port;
-  const slug = slugify(config.project.name);
+  const slug = config.project.id;
   const token = agentToken(slug);
   const uiToken = browserToken(slug, dev);
 
