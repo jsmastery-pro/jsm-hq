@@ -50,8 +50,8 @@
     "postinstall": "node scripts/fix-node-pty.mjs"
   },
   "dependencies": {
+    "@lydell/node-pty": "1.2.0-beta.15",
     "@modelcontextprotocol/sdk": "^1.32.1",
-    "node-pty": "^1.1.0",
     "ws": "^8.22.0",
     "zod": "^4.6.7"
   },
