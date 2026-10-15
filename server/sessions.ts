@@ -70,8 +70,10 @@ export class Sessions {
       if (!(await this.backend.exists(name))) {
         const launch = adapter.launch(agent, dir);
         const envFile = this.envFileFor(id);
-        // Local mode: the agent gets the env file's variables.
+        // Local mode: the agent gets the env file's variables (tmux only: there's no shell to load them into otherwise).
         let spec: LaunchSpec = { file: localBinary[agent.cli], args: launch.args, envFile };
+        if (agent.mode === "local" && envFile && !this.backend.persistent)
+          hub.activity("session", id, `${agent.name}'s env file isn't loaded in Local mode on Windows. Use Sandbox mode for app variables.`);
         if (agent.mode === "sandbox") {
           hub.setSession(id, { detail: "Allowing the sandbox to reach HQ…" });
           await this.ensurePolicy();

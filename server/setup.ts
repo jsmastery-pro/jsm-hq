@@ -3,6 +3,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { arch, cpus, platform, release, totalmem } from "node:os";
 import type { AgentConfig, SetupCheck, SetupFix, SetupState } from "../src/data/types";
+import { usesTmux } from "./backends";
 import { has, run } from "./lib/exec";
 import type { RepoInfo } from "./repo";
 
@@ -67,6 +68,8 @@ async function checkSbxLogin(sbxOk: boolean): Promise<Check> {
 
 async function checkTmux(brew: boolean): Promise<Check> {
   const base = { id: "tmux" as const, label: "tmux (keeps agents running if HQ closes)", neededFor: "all" as const };
+  if (!usesTmux())
+    return { ...base, label: "Agent sessions", status: "ok", detail: "HQ runs agents itself on Windows (no tmux needed). They stop when HQ stops; sandboxes and folders are kept.", fix: null };
   const v = await run("tmux", ["-V"], { timeoutMs: 5000 });
   if (v.ok) return { ...base, status: "ok", detail: v.stdout.trim(), fix: null };
   if (os === "win32") return { ...base, status: "unsupported", detail: "tmux needs WSL on Windows. Run HQ inside WSL.", fix: fix("wsl --install", false, "https://learn.microsoft.com/windows/wsl/install") };
@@ -162,7 +165,7 @@ export async function runSetupChecks(repo: RepoInfo, team: AgentConfig[] = []): 
   if (codexAgents.some((a) => a.mode === "local")) checks.push(await checkCodex());
   const ok = (c: SetupCheck) => c.status === "ok";
   return {
-    machine: { cpus: cpus().length, memoryGb: Math.round(totalmem() / 1024 ** 3) },
+    machine: { cpus: cpus().length, memoryGb: Math.round(totalmem() / 1024 ** 3), persistentAgents: usesTmux() },
     checks,
     sandboxReady: osCheck.status !== "unsupported" && ok(sbx) && ok(login) && ok(tmux),
     localReady: ok(tmux) && ok(claude),

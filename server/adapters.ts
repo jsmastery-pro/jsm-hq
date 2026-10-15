@@ -5,7 +5,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentCli, AgentConfig, HqConfig } from "../src/data/types";
-import { excludeFromGit, hookCommand, hqUrl, MCP_CONFIG, roleMd, writeClaudeFiles } from "./agentFiles";
+import { excludeFromGit, HOOK_SCRIPT, hookCommand, hookScriptFor, hqUrl, MCP_CONFIG, roleMd, writeClaudeFiles, writeHookScript } from "./agentFiles";
 import { run } from "./lib/exec";
 
 export interface Launch {
@@ -41,8 +41,9 @@ const CODEX_EVENTS = ["SessionStart", "UserPromptSubmit", "PreToolUse", "Permiss
 /** TOML basic string (JSON's escaping is valid TOML for these characters). */
 const t = (s: string) => JSON.stringify(s);
 
-export function codexConfig(agent: AgentConfig, cfg: HqConfig, token: string): string {
+export function codexConfig(agent: AgentConfig, cfg: HqConfig, token: string, dir: string): string {
   const url = hqUrl(agent, cfg.project.hqPort);
+  const script = hookScriptFor(agent, dir);
   const lines = [
     "# Written by JSM HQ for this agent (git-excluded). Codex loads it once you trust this folder.",
     `developer_instructions = ${t(roleMd(agent, cfg))}`,
@@ -55,7 +56,7 @@ export function codexConfig(agent: AgentConfig, cfg: HqConfig, token: string): s
     `http_headers = { Authorization = ${t(`Bearer ${token}`)}, "X-HQ-Agent" = ${t(agent.id)} }`,
   ];
   for (const event of CODEX_EVENTS)
-    lines.push("", `[[hooks.${event}]]`, `[[hooks.${event}.hooks]]`, 'type = "command"', `command = ${t(hookCommand(url, token, agent.id, event))}`);
+    lines.push("", `[[hooks.${event}]]`, `[[hooks.${event}.hooks]]`, 'type = "command"', `command = ${t(hookCommand(url, token, agent.id, event, script))}`);
   return lines.join("\n") + "\n";
 }
 
@@ -66,8 +67,9 @@ const codex: CliAdapter = {
     if (tracked.ok) throw new Error(`This repo commits ${CODEX_CONFIG}, so HQ can't add its Codex settings without changing a tracked file. Use Claude Code for this agent, or remove that file from the repo.`);
     writeFileSync(join(dir, "ROLE.md"), roleMd(agent, cfg));
     mkdirSync(join(dir, ".codex"), { recursive: true });
-    writeFileSync(join(dir, CODEX_CONFIG), codexConfig(agent, cfg, token), { mode: 0o600 });
-    excludeFromGit(dir, ["ROLE.md", CODEX_CONFIG]);
+    writeFileSync(join(dir, CODEX_CONFIG), codexConfig(agent, cfg, token, dir), { mode: 0o600 });
+    if (hookScriptFor(agent, dir)) writeHookScript(dir);
+    excludeFromGit(dir, ["ROLE.md", CODEX_CONFIG, HOOK_SCRIPT]);
   },
   launch(agent) {
     const model = agent.model.trim() && !/^default$/i.test(agent.model.trim()) ? agent.model.trim() : null;

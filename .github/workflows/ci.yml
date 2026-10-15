@@ -24,6 +24,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      - name: Session backends (fake agent)
+        run: npx tsx scripts/session-backend-test.ts
       - name: Pack
         shell: bash
         run: mkdir -p pack && npm pack --ignore-scripts --pack-destination pack

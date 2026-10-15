@@ -7,8 +7,62 @@ import type { AgentConfig, HqConfig } from "../src/data/types";
 
 /** Team MCP config, passed with `claude --mcp-config` (so the project's own .mcp.json is untouched). */
 export const MCP_CONFIG = ".claude/hq-mcp.json";
-export const HQ_FILES = ["ROLE.md", ".claude/settings.local.json", MCP_CONFIG];
+/** Local mode on Windows: hooks run this with node (no sh or curl there). */
+export const HOOK_SCRIPT = ".jsmhq-hook.mjs";
+export const HQ_FILES = ["ROLE.md", ".claude/settings.local.json", MCP_CONFIG, HOOK_SCRIPT];
 export const MARK = "# jsmhq-hook";
+/** Same marker for node hook commands (cmd and PowerShell have no `#` comments). */
+const MARK_ARG = "--jsmhq-hook";
+const isOurs = (command: string) => command.includes(MARK) || command.includes(MARK_ARG);
+
+/**
+ * Hooks run where the agent runs. Sandboxes are Linux, so they use sh + curl;
+ * a Local-mode agent on Windows uses the node script instead.
+ * HQ_NODE_HOOKS=1 forces the script (to test it on macOS/Linux).
+ */
+export function hookScriptFor(agent: AgentConfig, dir: string): string | null {
+  if (agent.mode !== "local" || (process.platform !== "win32" && process.env.HQ_NODE_HOOKS !== "1")) return null;
+  return join(dir, HOOK_SCRIPT).replace(/\\/g, "/");
+}
+
+const HOOK_SCRIPT_SOURCE = `// Written by JSM HQ (git-excluded). Sends this agent's hook events to HQ.
+// Usage: node .jsmhq-hook.mjs <url> <token> [--print-reply] | --print-role
+import { readFileSync } from "node:fs";
+
+const args = process.argv.slice(2).filter((a) => a !== "${MARK_ARG}");
+if (args[0] === "--print-role") {
+  try {
+    process.stdout.write(readFileSync(new URL("./ROLE.md", import.meta.url), "utf8"));
+  } catch {}
+  process.exit(0);
+}
+const [url, token, print] = args;
+let body = "";
+let sent = false;
+const send = async () => {
+  if (sent) return;
+  sent = true;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+      body: body || "{}",
+      signal: AbortSignal.timeout(4000),
+    });
+    // Stop: HQ's reply ({"decision":"block",...}) hands over queued messages.
+    if (print === "--print-reply" && res.ok) process.stdout.write(await res.text());
+  } catch {}
+  process.exit(0);
+};
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (d) => (body += d));
+process.stdin.on("end", send);
+setTimeout(send, 2000).unref();
+`;
+
+export function writeHookScript(dir: string) {
+  writeFileSync(join(dir, HOOK_SCRIPT), HOOK_SCRIPT_SOURCE);
+}
 
 const HOOK_EVENTS = ["SessionStart", "UserPromptSubmit", "PreToolUse", "Notification", "Stop", "SessionEnd"] as const;
 
@@ -61,7 +115,8 @@ export function roleMd(agent: AgentConfig, cfg: HqConfig): string {
 type HookEntry = { matcher?: string; hooks: { type: "command"; command: string; timeout?: number }[] };
 type Settings = { hooks?: Record<string, HookEntry[]>; permissions?: { allow?: string[]; [k: string]: unknown }; [k: string]: unknown };
 
-export function hookCommand(url: string, token: string, agentId: string, event: string): string {
+export function hookCommand(url: string, token: string, agentId: string, event: string, script: string | null = null): string {
+  if (script) return `node "${script}" ${url}/hook/${agentId}/${event} ${token}${event === "Stop" ? " --print-reply" : ""} ${MARK_ARG}`;
   // Stop prints HQ's reply: {"decision":"block","reason":…} hands over queued messages.
   const out = event === "Stop" ? "2>/dev/null" : ">/dev/null 2>&1";
   return `curl -sf -m 4 -X POST -H 'Authorization: Bearer ${token}' -H 'Content-Type: application/json' --data-binary @- '${url}/hook/${agentId}/${event}' ${out} || true ${MARK}`;
@@ -72,6 +127,7 @@ export function hookCommand(url: string, token: string, agentId: string, event: 
  * adds to the session's context. Existing user hooks are kept.
  */
 export function writeSettings(dir: string, agent: AgentConfig, port: number, token: string) {
+  const script = hookScriptFor(agent, dir);
   const file = join(dir, ".claude", "settings.local.json");
   mkdirSync(join(dir, ".claude"), { recursive: true });
   let settings: Settings = {};
@@ -86,10 +142,11 @@ export function writeSettings(dir: string, agent: AgentConfig, port: number, tok
   const url = hqUrl(agent, port);
   for (const event of HOOK_EVENTS) {
     const kept = (hooks[event] ?? [])
-      .map((e) => ({ ...e, hooks: e.hooks.filter((h) => !h.command.includes(MARK)) }))
+      .map((e) => ({ ...e, hooks: e.hooks.filter((h) => !isOurs(h.command)) }))
       .filter((e) => e.hooks.length);
-    const ours: HookEntry["hooks"] = [{ type: "command", command: hookCommand(url, token, agent.id, event), timeout: 5 }];
-    if (event === "SessionStart") ours.unshift({ type: "command", command: `cat "$CLAUDE_PROJECT_DIR/ROLE.md" 2>/dev/null || true ${MARK}` });
+    const ours: HookEntry["hooks"] = [{ type: "command", command: hookCommand(url, token, agent.id, event, script), timeout: 5 }];
+    if (event === "SessionStart")
+      ours.unshift({ type: "command", command: script ? `node "${script}" --print-role ${MARK_ARG}` : `cat "$CLAUDE_PROJECT_DIR/ROLE.md" 2>/dev/null || true ${MARK}` });
     hooks[event] = [...kept, event === "PreToolUse" ? { matcher: "*", hooks: ours } : { hooks: ours }];
   }
   // Let the agent use the Team MCP without a permission prompt for every call.
@@ -113,6 +170,7 @@ export function writeClaudeFiles(dir: string, agent: AgentConfig, cfg: HqConfig,
   writeFileSync(join(dir, "ROLE.md"), roleMd(agent, cfg));
   writeSettings(dir, agent, cfg.project.hqPort, token);
   writeMcpConfig(dir, agent, cfg.project.hqPort, token);
+  if (hookScriptFor(agent, dir)) writeHookScript(dir);
   excludeFromGit(dir, HQ_FILES);
 }
 
