@@ -90,9 +90,11 @@ export class Sessions {
           hub.setSession(id, { detail: "Allowing the sandbox to reach HQ…" });
           await this.ensurePolicy();
           hub.setSession(id, { detail: "Starting sandbox…" });
-          // Size only applies when sbx creates the sandbox; an existing one keeps its size.
+          // sbx only accepts a size when it creates the sandbox; an existing (stopped) one keeps its size,
+          // and passing --cpus/--memory again makes `sbx run` fail. "Recreate sandbox" applies a new size.
           const { cpus, memoryGb } = agent.sandbox.resources;
-          const size = [...(cpus ? ["--cpus", String(cpus)] : []), ...(memoryGb ? ["--memory", `${Math.round(memoryGb * 1024)}m`] : [])];
+          const isNew = !(await this.sandboxExists(name));
+          const size = !isNew ? [] : [...(cpus ? ["--cpus", String(cpus)] : []), ...(memoryGb ? ["--memory", `${Math.round(memoryGb * 1024)}m`] : [])];
           const env = envFile ? ["--env-file", envFile] : [];
           const args = launch.args.length ? ["--", ...launch.args] : [];
           spec = { file: "sbx", args: ["run", "--name", name, ...size, ...env, launch.sbxAgent, dir, ...args], envFile: null };
@@ -176,6 +178,16 @@ export class Sessions {
       }
     }
     return done;
+  }
+
+  /** True if sbx lists a sandbox with this name (running or stopped). */
+  private async sandboxExists(name: string): Promise<boolean> {
+    const r = await run("sbx", ["ls", "--json"], { timeoutMs: 10_000 });
+    try {
+      return ((JSON.parse(r.stdout) as { sandboxes?: { name: string }[] }).sandboxes ?? []).some((s) => s.name === name);
+    } catch {
+      return false;
+    }
   }
 
   /** Waits (up to ~90s) for sbx to list the agent's sandbox — creation can take a while the first time. */
