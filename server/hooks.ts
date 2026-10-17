@@ -48,6 +48,11 @@ export function handleHook(hub: Hub, inbox: Inbox, agentId: string, event: strin
       // Also clears "needs input" once a permission prompt is answered.
       if (st.state !== "working" || st.note?.startsWith("Asking")) hub.setStatus(agentId, { state: "working", note: body.tool_name ? `Using ${body.tool_name}` : null });
       break;
+    case "PostToolUse":
+      // A tool finished: if it was waiting on the user (a question or a permission), they answered.
+      if (turnOpen.get(agentId) === false) break;
+      if (st.state === "needs-input") hub.setStatus(agentId, { state: "working", note: "Continuing after your answer" });
+      break;
     case "PermissionRequest": {
       // Codex: an approval prompt is waiting in the terminal.
       const what = body.tool_name ? `Approve ${body.tool_name}?` : "Approval needed in the terminal";

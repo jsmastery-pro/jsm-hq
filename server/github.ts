@@ -6,22 +6,51 @@ import { run } from "./lib/exec";
 
 // ---------------------------------------------------------------- query
 
-const PR_FIELDS = `
-  number title url headRefName createdAt mergedAt state mergeable isDraft reviewDecision
-  reviews(last: 20) { nodes { author { login } state submittedAt } }
-  reviewThreads(first: 100) { nodes { isResolved isOutdated comments(first: 1) { nodes { author { login } } } } }
-  commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 50) { nodes {
+// GitHub charges GraphQL by how many nested items a query *could* return, from a
+// 5,000-point hourly budget shared with the agents' own `gh` commands. Keep the
+// nested lists small, and fetch only the basics for merged PRs.
+const BASE_FIELDS = "number title url headRefName createdAt mergedAt state mergeable isDraft reviewDecision";
+const REVIEW_FIELDS = `
+  reviews(last: 10) { nodes { author { login } state submittedAt } }
+  reviewThreads(first: 30) { nodes { isResolved isOutdated comments(first: 1) { nodes { author { login } } } } }
+  commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 25) { nodes {
     __typename
     ... on CheckRun { name status conclusion }
     ... on StatusContext { context state description }
   } } } } } }`;
 
 const QUERY = `query($owner: String!, $name: String!) {
+  rateLimit { cost remaining resetAt }
   repository(owner: $owner, name: $name) {
-    open: pullRequests(states: OPEN, first: 30, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { ${PR_FIELDS} } }
-    merged: pullRequests(states: MERGED, first: 15, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { ${PR_FIELDS} } }
+    open: pullRequests(states: OPEN, first: 20, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { ${BASE_FIELDS} ${REVIEW_FIELDS} } }
+    merged: pullRequests(states: MERGED, first: 10, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { ${BASE_FIELDS} } }
   }
 }`;
+
+export interface RateLimit {
+  cost: number;
+  remaining: number;
+  resetAt: string;
+}
+
+/** Thrown when GitHub's API budget is used up; `resetAt` is when it refills. */
+export class RateLimited extends Error {
+  constructor(readonly resetAt: Date) {
+    super("GitHub API rate limit reached");
+  }
+}
+
+/** When the GraphQL budget refills (falls back to 15 minutes from now). */
+async function graphqlResetAt(): Promise<Date> {
+  const r = await run("gh", ["api", "rate_limit"], { timeoutMs: 15_000 });
+  try {
+    const reset = (JSON.parse(r.stdout) as { resources?: { graphql?: { reset?: number } } }).resources?.graphql?.reset;
+    if (reset) return new Date(reset * 1000);
+  } catch {
+    /* fall through */
+  }
+  return new Date(Date.now() + 15 * 60_000);
+}
 
 export interface GhPr {
   number: number;
@@ -43,13 +72,27 @@ type Ctx =
   | { __typename: "CheckRun"; name: string; status: string; conclusion: string | null }
   | { __typename: "StatusContext"; context: string; state: string; description: string | null };
 
-export async function fetchPrs(repo: string): Promise<{ open: GhPr[]; merged: GhPr[] }> {
+const EMPTY_REVIEW = { reviews: { nodes: [] }, reviewThreads: { nodes: [] }, commits: { nodes: [] } };
+
+export async function fetchPrs(repo: string): Promise<{ open: GhPr[]; merged: GhPr[]; rate: RateLimit | null }> {
   const [owner, name] = repo.split("/");
   const r = await run("gh", ["api", "graphql", "-f", `query=${QUERY}`, "-F", `owner=${owner}`, "-F", `name=${name}`], { timeoutMs: 30_000 });
-  if (!r.ok) throw new Error(r.stderr.trim().split("\n")[0] || "gh api failed");
-  const data = JSON.parse(r.stdout) as { data?: { repository?: { open: { nodes: GhPr[] }; merged: { nodes: GhPr[] } } }; errors?: { message: string }[] };
+  if (!r.ok) {
+    const msg = r.stderr.trim().split("\n")[0] || "gh api failed";
+    if (/rate limit/i.test(r.stderr + r.stdout)) throw new RateLimited(await graphqlResetAt());
+    throw new Error(msg);
+  }
+  const data = JSON.parse(r.stdout) as {
+    data?: { rateLimit?: RateLimit; repository?: { open: { nodes: GhPr[] }; merged: { nodes: Omit<GhPr, keyof typeof EMPTY_REVIEW>[] } } };
+    errors?: { message: string; type?: string }[];
+  };
+  if (data.errors?.some((e) => e.type === "RATE_LIMITED" || /rate limit/i.test(e.message))) throw new RateLimited(await graphqlResetAt());
   if (!data.data?.repository) throw new Error(data.errors?.[0]?.message ?? "Repository not found");
-  return { open: data.data.repository.open.nodes, merged: data.data.repository.merged.nodes };
+  return {
+    open: data.data.repository.open.nodes,
+    merged: data.data.repository.merged.nodes.map((pr) => ({ ...pr, ...EMPTY_REVIEW })),
+    rate: data.data.rateLimit ?? null,
+  };
 }
 
 // ---------------------------------------------------------------- review state
