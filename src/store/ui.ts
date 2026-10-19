@@ -8,7 +8,7 @@ export type DrawerState =
   | null;
 
 export type AgentTab = "terminal" | "task" | "sandbox" | "messages";
-export type SettingsTab = "team" | "workflow" | "sandbox" | "boards" | "project";
+export type SettingsTab = "team" | "workflow" | "stack" | "sandbox" | "boards" | "project";
 
 /** Something in the office the camera can fly to. */
 export type FocusTarget =

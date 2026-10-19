@@ -3,6 +3,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { stackRoleMd } from "../src/data/stack";
 import type { AgentConfig, HqConfig } from "../src/data/types";
 
 /** Team MCP config, passed with `claude --mcp-config` (so the project's own .mcp.json is untouched). */
@@ -102,6 +103,7 @@ export function roleMd(agent: AgentConfig, cfg: HqConfig): string {
     "## Rules",
     ...rules.map((r) => `- ${r}`),
     "",
+    ...(stackRoleMd(cfg.stack) ? [stackRoleMd(cfg.stack), ""] : []),
     "## Team MCP (server `hq`)",
     `Your tools: ${tools}.`,
     "Messages that start with `[HQ]` come from JSM HQ: assignments from the lead, or messages from teammates. Act on them.",

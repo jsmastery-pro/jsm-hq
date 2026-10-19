@@ -3,12 +3,14 @@ import { ui, useUi, type SettingsTab } from "../../store/ui";
 import { BoardsSettings } from "./BoardsSettings";
 import { ProjectSettings } from "./ProjectSettings";
 import { SandboxSettingsTab } from "./SandboxSettings";
+import { StackSettings } from "./StackSettings";
 import { TeamSettings } from "./TeamSettings";
 import { WorkflowSettings } from "./WorkflowSettings";
 
 const TABS: { id: SettingsTab; label: string; hint: string }[] = [
   { id: "team", label: "Team", hint: "Agents, roles, skills" },
   { id: "workflow", label: "Workflow", hint: "Review, merge, deploy" },
+  { id: "stack", label: "Stack", hint: "Frameworks, tools" },
   { id: "sandbox", label: "Sandbox", hint: "Network, proxy, secrets" },
   { id: "boards", label: "Boards", hint: "Progress boards" },
   { id: "project", label: "Project", hint: "Repo and HQ" },
@@ -57,6 +59,7 @@ export function SettingsModal() {
           <div className="scroll-thin min-w-0 flex-1 overflow-y-auto p-5">
             {settings.tab === "team" && <TeamSettings />}
             {settings.tab === "workflow" && <WorkflowSettings />}
+            {settings.tab === "stack" && <StackSettings />}
             {settings.tab === "sandbox" && <SandboxSettingsTab initialAgentId={settings.agentId} />}
             {settings.tab === "boards" && <BoardsSettings />}
             {settings.tab === "project" && <ProjectSettings />}

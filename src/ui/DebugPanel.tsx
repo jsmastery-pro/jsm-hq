@@ -44,6 +44,7 @@ function summary(e: OfficeEvent): string {
     case "message": return `${e.message.fromId} → ${e.message.toId}`;
     case "activity": return e.event.text;
     case "terminal.output": return `${e.agentId} +${e.data.length}`;
+    case "access.updated": return `${e.request.agentId} ${e.request.domain} ${e.request.status}`;
   }
 }
 
@@ -84,6 +85,11 @@ export function DebugPanel() {
               </option>
             ))}
           </select>
+        )}
+        {presets && (
+          <button className="btn px-2 text-[12px] text-ink" onClick={() => officeActions.simulateAccessRequest()} title="A random worker asks for a blocked domain">
+            Access request
+          </button>
         )}
         <button className="btn px-2 text-[12px] text-ink" aria-label="Close debug" onClick={() => ui.toggleDebug()}>
           ✕

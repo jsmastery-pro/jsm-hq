@@ -1,4 +1,7 @@
+import type { StackConfig } from "./stack";
 import type {
+  AccessDecision,
+  AccessRequest,
   ActivityEvent,
   AgentMessage,
   AgentPatch,
@@ -37,7 +40,8 @@ export type OfficeEvent =
   | { type: "env.removed"; name: string }
   | { type: "message"; message: AgentMessage }
   | { type: "activity"; event: ActivityEvent }
-  | { type: "terminal.output"; agentId: string; data: string };
+  | { type: "terminal.output"; agentId: string; data: string }
+  | { type: "access.updated"; request: AccessRequest };
 
 export type SimSpeed = 1 | 2 | 4;
 
@@ -53,6 +57,8 @@ export interface DevControls {
   presets: DataPreset[];
   loadPreset(id: string): void;
   setSpeed(multiplier: SimSpeed): void;
+  /** Demo only: a random agent asks for a blocked domain. */
+  simulateAccessRequest(): void;
 }
 
 export interface OfficeDataSource {
@@ -96,6 +102,11 @@ export interface OfficeDataSource {
   updateProject(patch: Partial<ProjectConfig>): void;
   createBoard(title: string): void;
   updateBoard(id: string, patch: Partial<Pick<Board, "title" | "status">>): void;
+
+  /** The project's stack (null clears it). */
+  updateStack(stack: StackConfig | null): void;
+  /** Answers an agent's request_access: allow for that agent, for every agent, or deny. */
+  resolveAccess(requestId: string, decision: AccessDecision): void;
 
   /** Finishes first-run setup: saves the project's team and review tool. */
   completeWelcome(input: WelcomeInput): void;

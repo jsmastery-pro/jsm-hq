@@ -1,3 +1,4 @@
+import type { StackConfig } from "./stack";
 // Domain types shared by the data source, the store, the office and the HUD.
 
 // ---------------------------------------------------------------- Config
@@ -67,7 +68,21 @@ export interface HqConfig {
   project: ProjectConfig;
   team: AgentConfig[];
   workflow: WorkflowConfig;
+  /** Optional: what the project is built with (plan 009). */
+  stack?: StackConfig;
 }
+
+/** An agent asked to reach a domain its sandbox blocks (Team MCP `request_access`). */
+export interface AccessRequest {
+  id: string;
+  agentId: string;
+  domain: string;
+  reason: string;
+  at: string;
+  status: "pending" | "allowed" | "denied";
+}
+
+export type AccessDecision = "agent" | "everyone" | "deny";
 
 // ---------------------------------------------------------------- Live state
 
@@ -272,6 +287,7 @@ export interface OfficeSnapshot {
   environments: Environment[];
   messages: AgentMessage[]; // newest first, last 100
   activity: ActivityEvent[]; // newest first, last 50
+  accessRequests?: AccessRequest[];
 }
 
 // ---------------------------------------------------------------- Inputs

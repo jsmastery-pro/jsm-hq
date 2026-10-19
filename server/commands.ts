@@ -1,6 +1,7 @@
 // Browser commands → server actions. Names match OfficeDataSource methods.
 
 import { SERVICE_KEYS, type AgentCli, type AgentConfig, type AgentPatch, type ReviewTool, type WelcomeInput, type Board, type NewAgentInput, type ProjectConfig, type RemoveAgentOptions, type SandboxSettings, type SetupCheckId, type WorkflowPatch } from "../src/data/types";
+import { STACK_CATEGORIES, stackTool, type StackChoice, type StackConfig } from "../src/data/stack";
 import { run } from "./lib/exec";
 import { agentPalette } from "../src/theme/tokens";
 import { Hub } from "./hub";
@@ -159,6 +160,40 @@ export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inb
       await sbx.refresh();
     },
     refreshSbx: () => sbx.refresh(),
+
+    /** Saves the project's stack (sanitised against the catalog). The agents get it in ROLE.md on their next start. */
+    updateStack: (raw) => {
+      const cfg = hub.snap.config;
+      if (raw === null) {
+        delete cfg.stack;
+        return hub.configChanged();
+      }
+      const input = (raw ?? {}) as Partial<StackConfig>;
+      const choice = (c: unknown, category: string): StackChoice | null => {
+        const v = (c ?? {}) as Partial<StackChoice>;
+        const id = str(v.id, 40);
+        const known = id === "other" || stackTool(id)?.category === category;
+        if (!known) return null;
+        const out: StackChoice = { id };
+        if (typeof v.where === "string" && v.where.trim()) out.where = str(v.where, 120).trim();
+        if (id === "other") {
+          if (typeof v.name === "string" && v.name.trim()) out.name = str(v.name, 60).trim();
+          if (typeof v.docsUrl === "string" && v.docsUrl.trim()) out.docsUrl = str(v.docsUrl, 300).trim();
+        }
+        return out;
+      };
+      const frameworks = (Array.isArray(input.frameworks) ? input.frameworks : []).slice(0, 10).map((f) => choice(f, "framework")).filter((f): f is StackChoice => !!f);
+      const tools: StackConfig["tools"] = {};
+      for (const c of STACK_CATEGORIES) {
+        const picked = choice(input.tools?.[c.id], c.id);
+        if (picked) tools[c.id] = picked;
+      }
+      cfg.stack = { frameworks, tools };
+      hub.configChanged();
+    },
+
+    // request_access is answered here once the backend lands (plan 009, step 1); nothing can be pending before that.
+    resolveAccess: () => {},
 
     completeWelcome: async (raw) => {
       if (!hub.snap.welcome) return;
