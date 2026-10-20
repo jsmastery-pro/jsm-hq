@@ -307,6 +307,8 @@ export interface WelcomeInput {
   workers: { name: string; role: string; cli: AgentCli }[];
   reviewTool: ReviewTool;
   reviewEnabled: boolean;
+  /** Optional: what the project is built with. */
+  stack?: StackConfig;
 }
 
 export type AgentPatch = Partial<

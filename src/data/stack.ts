@@ -5,6 +5,11 @@
 
 export type StackCategory = "auth" | "payments" | "database" | "analytics" | "security";
 
+export interface SkillSpec {
+  source: string;
+  skills: string[];
+}
+
 export interface StackTool {
   id: string;
   name: string;
@@ -15,13 +20,13 @@ export interface StackTool {
   api: string[];
   /** Env var names the tool needs. HQ never asks for or stores the values. */
   keys: string[];
-  /** Agent skills, as `npx skills add <source>` sources. */
-  skills: string[];
+  /** Agent skills to install: a `npx skills add` source and which of its skills. */
+  skills: SkillSpec[];
   /** A hosted MCP server, if the tool has one. */
   mcp?: string;
   /** One line for the agents' ROLE.md. */
   note: string;
-  /** Not yet checked against the tool's own docs. */
+  /** For maintainers: not yet checked against the tool's own docs. */
   verify?: boolean;
 }
 
@@ -49,18 +54,20 @@ export const STACK_CATEGORIES: { id: StackCategory; label: string; hint: string 
   { id: "security", label: "Security", hint: "Bots, rate limits, prompt injection" },
 ];
 
-const fw = (id: string, name: string, docs: string[], skills: string[] = [], verify = false): StackTool => ({
+const fw = (id: string, name: string, docs: string[], skills: SkillSpec[] = [], verify = false): StackTool => ({
   id, name, category: "framework", docs, api: [], keys: [], skills, note: `${name} app`, verify,
 });
 
+const REACT: SkillSpec = { source: "vercel-labs/agent-skills", skills: ["vercel-react-best-practices", "vercel-composition-patterns"] };
+
 export const STACK_CATALOG: StackTool[] = [
   // ---------------------------------------------------------------- frameworks
-  fw("nextjs", "Next.js", ["nextjs.org"], ["vercel/next.js"]),
-  fw("react-vite", "React (Vite)", ["react.dev", "vite.dev"], ["vercel-labs/agent-skills"], true),
+  fw("nextjs", "Next.js", ["nextjs.org"], [{ source: "vercel/next.js", skills: ["next-dev-loop"] }, REACT]),
+  fw("react-vite", "React (Vite)", ["react.dev", "vite.dev"], [REACT]),
   fw("express", "Express", ["expressjs.com"]),
   fw("hono", "Hono", ["hono.dev"]),
   fw("nestjs", "NestJS", ["docs.nestjs.com"]),
-  fw("react-router", "React Router", ["reactrouter.com"]),
+  fw("react-router", "React Router", ["reactrouter.com"], [REACT]),
   fw("astro", "Astro", ["docs.astro.build"]),
   fw("sveltekit", "SvelteKit", ["svelte.dev"]),
   fw("nuxt", "Nuxt", ["nuxt.com"]),
@@ -69,8 +76,9 @@ export const STACK_CATALOG: StackTool[] = [
   {
     id: "clerk", name: "Clerk", category: "auth",
     docs: ["clerk.com"], api: ["api.clerk.com", "*.clerk.accounts.dev"],
-    keys: ["NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "CLERK_SECRET_KEY"], skills: ["clerk/skills"],
-    note: "Auth uses Clerk", verify: true,
+    keys: ["NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "CLERK_SECRET_KEY"],
+    skills: [{ source: "clerk/skills", skills: ["clerk", "clerk-setup", "clerk-nextjs-patterns", "clerk-react-patterns", "clerk-custom-ui", "clerk-backend-api", "clerk-webhooks", "clerk-orgs"] }],
+    note: "Auth uses Clerk",
   },
   {
     id: "better-auth", name: "Better Auth", category: "auth",
@@ -91,13 +99,14 @@ export const STACK_CATALOG: StackTool[] = [
   // ---------------------------------------------------------------- payments
   {
     id: "clerk-billing", name: "Clerk Billing", category: "payments",
-    docs: ["clerk.com"], api: ["api.clerk.com"], keys: ["CLERK_SECRET_KEY"], skills: ["clerk/skills"],
-    note: "Subscriptions use Clerk Billing", verify: true,
+    docs: ["clerk.com"], api: ["api.clerk.com"], keys: ["CLERK_SECRET_KEY"],
+    skills: [{ source: "clerk/skills", skills: ["clerk-billing", "clerk-setup"] }],
+    note: "Subscriptions use Clerk Billing",
   },
   {
     id: "stripe", name: "Stripe", category: "payments",
     docs: ["docs.stripe.com"], api: ["api.stripe.com"], keys: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY"],
-    skills: ["stripe/ai"], mcp: "https://mcp.stripe.com", note: "Payments use Stripe (test mode)", verify: true,
+    skills: [{ source: "stripe/ai", skills: ["stripe-best-practices", "stripe-docs"] }], mcp: "https://mcp.stripe.com", note: "Payments use Stripe (test mode)",
   },
   {
     id: "polar", name: "Polar", category: "payments",
@@ -109,7 +118,7 @@ export const STACK_CATALOG: StackTool[] = [
   {
     id: "instacloud", name: "InstaCloud", category: "database",
     docs: ["instacloud.com", "agents.instacloud.com"], api: ["api.instacloud.com"], keys: ["DATABASE_URL"],
-    skills: ["InsForge/instacloud-skills"], mcp: "https://mcp.instacloud.com/mcp",
+    skills: [{ source: "InsForge/instacloud-skills", skills: ["insta"] }], mcp: "https://mcp.instacloud.com/mcp",
     note: "Database and branch environments use InstaCloud (the insta CLI)",
   },
   {
@@ -132,8 +141,9 @@ export const STACK_CATALOG: StackTool[] = [
   {
     id: "posthog", name: "PostHog", category: "analytics",
     docs: ["posthog.com"], api: ["us.i.posthog.com", "eu.i.posthog.com", "us-assets.i.posthog.com"],
-    keys: ["NEXT_PUBLIC_POSTHOG_KEY", "NEXT_PUBLIC_POSTHOG_HOST"], skills: ["PostHog/skills"], mcp: "https://mcp.posthog.com",
-    note: "Analytics use PostHog", verify: true,
+    keys: ["NEXT_PUBLIC_POSTHOG_KEY", "NEXT_PUBLIC_POSTHOG_HOST"],
+    skills: [{ source: "PostHog/skills", skills: ["instrument-integration", "instrument-product-analytics", "instrument-llm-analytics"] }], mcp: "https://mcp.posthog.com",
+    note: "Analytics use PostHog",
   },
   {
     id: "plausible", name: "Plausible", category: "analytics",
@@ -149,8 +159,8 @@ export const STACK_CATALOG: StackTool[] = [
   // ---------------------------------------------------------------- security
   {
     id: "arcjet", name: "Arcjet", category: "security",
-    docs: ["docs.arcjet.com"], api: ["decide.arcjet.com"], keys: ["ARCJET_KEY"], skills: ["arcjet/skills"],
-    note: "Bot protection, rate limiting and prompt-injection checks use Arcjet", verify: true,
+    docs: ["docs.arcjet.com"], api: ["decide.arcjet.com"], keys: ["ARCJET_KEY"], skills: [{ source: "arcjet/skills", skills: ["arcjet"] }],
+    note: "Bot protection, rate limiting and prompt-injection checks use Arcjet",
   },
   {
     id: "upstash-ratelimit", name: "Upstash Ratelimit", category: "security",
@@ -215,7 +225,13 @@ export function stackRoleMd(stack: StackConfig | undefined): string {
     "",
     "Use the installed agent skills for these tools before writing integration code, and follow their current docs rather than memory.",
     "Secrets come from environment variables; never hard-code or commit them.",
-    "If the sandbox blocks a site you need (docs or an API), call the hq request_access tool with the domain and why. Don't work around the block.",
   );
   return lines.join("\n");
+}
+
+/** Every skill the chosen stack installs, merged per source. */
+export function stackSkills(stack: StackConfig | undefined): SkillSpec[] {
+  const bySource = new Map<string, Set<string>>();
+  for (const t of chosenTools(stack)) for (const spec of t.skills) for (const name of spec.skills) bySource.set(spec.source, (bySource.get(spec.source) ?? new Set()).add(name));
+  return [...bySource].map(([source, names]) => ({ source, skills: [...names].sort() })).sort((a, b) => a.source.localeCompare(b.source));
 }

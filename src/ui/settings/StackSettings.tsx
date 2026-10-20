@@ -95,7 +95,7 @@ function Frameworks({ stack, save }: { stack: StackConfig; save: (s: StackConfig
                 <Skills id={f.id} />
               )}
               <Field label="Where (optional)">
-                <CommitInput className="field font-term text-[17px]" value={f.where ?? ""} placeholder="apps/web" onCommit={(v) => patch(i, { where: v.trim() || undefined })} />
+                <CommitInput className="field font-term text-[17px]" value={f.where ?? ""} placeholder={i === 0 ? "apps/web" : "apps/api"} onCommit={(v) => patch(i, { where: v.trim() || undefined })} />
               </Field>
               {f.id === "other" && (
                 <div className="col-span-3">
@@ -157,8 +157,8 @@ function Skills({ id }: { id: string }) {
     <div className="flex flex-wrap items-center gap-1.5 pb-1 text-[12px]">
       {t.skills.length ? (
         t.skills.map((s) => (
-          <span key={s} className="chip font-term text-[14px]" title={`npx skills add ${s}`}>
-            skills: {s}
+          <span key={s.source} className="chip font-term text-[14px]" title={s.skills.join(", ")}>
+            {s.skills.length} skill{s.skills.length === 1 ? "" : "s"} · {s.source}
           </span>
         ))
       ) : (
@@ -169,7 +169,6 @@ function Skills({ id }: { id: string }) {
           MCP
         </span>
       )}
-      {t.verify && <span className="text-muted" title="Domains and skills not yet checked against the tool's docs">· to verify</span>}
     </div>
   );
 }

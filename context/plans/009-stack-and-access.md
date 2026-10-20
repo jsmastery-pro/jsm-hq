@@ -48,7 +48,12 @@ Plus **access requests**: when an agent's sandbox blocks a domain, the agent ask
 | Analytics | PostHog, Plausible, Vercel Analytics, Other |
 | Security | Arcjet, Upstash Ratelimit, Other |
 
-### To verify before building
+### Verified
+- Skills: `npx skills add <source> --skill <names…> -a claude-code codex -y --copy` installs project-level, non-interactively, into `.claude/skills/` (Claude Code) and `.agents/skills/` (Codex), plus a `skills-lock.json`. HQ installs once per project into `~/.jsmhq/<project>/skills-cache` and copies into each agent's folder (git-excluded; skills the repo already commits are left alone). Measured: 17 skills for Next.js + Express + Clerk + Clerk Billing + InstaCloud + PostHog + Arcjet in 41s the first time, 0.4s after that.
+- Catalog sources and skill names were listed with `npx skills add <source> -l` (clerk/skills, PostHog/skills, arcjet/skills, InsForge/instacloud-skills, stripe/ai, vercel/next.js, vercel-labs/agent-skills).
+- Not yet: how a sandbox block looks to the agent (needs a live sandbox). The ROLE.md rule covers the usual signs (connection refused, 403, proxy/policy error).
+
+### Was "to verify before building"
 - How skills are installed and where each CLI reads them:
   - Claude Code: `.claude/skills/` in the project;
   - Codex: `.agents/skills/` or its own folder;

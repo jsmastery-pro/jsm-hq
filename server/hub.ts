@@ -65,9 +65,37 @@ export class Hub {
 
   // ------------------------------------------------------------ mutations
 
+  /** While an access request is open, the agent stays "needs you"; what hooks report meanwhile is kept for after. */
+  private held = new Map<string, { state: AgentStatus["state"]; note: string | null }>();
+
+  /** Remember what the agent was doing before it asked, to return to it after the answer. */
+  holdForAccess(agentId: string) {
+    const s = this.status(agentId);
+    if (s && !this.held.has(agentId) && s.state !== "needs-input") this.held.set(agentId, { state: s.state, note: s.note });
+  }
+
+  pendingAccess(agentId: string) {
+    return this.snap.accessRequests?.find((r) => r.agentId === agentId && r.status === "pending");
+  }
+
+  /** An access request was answered: drop back to what the agent is really doing (unless another is open). */
+  accessAnswered(agentId: string) {
+    const held = this.held.get(agentId);
+    this.held.delete(agentId);
+    if (this.pendingAccess(agentId)) return;
+    const s = this.status(agentId);
+    if (s?.state === "needs-input" && s.note?.startsWith("Asking: access to"))
+      this.setStatus(agentId, held ?? { state: "working", note: "Access answered" });
+  }
+
   setStatus(id: string, patch: Partial<Omit<AgentStatus, "agentId" | "session">>) {
     const s = this.status(id);
     if (!s) return;
+    const open = this.pendingAccess(id);
+    if (open && patch.state !== undefined && patch.state !== "needs-input") {
+      this.held.set(id, { state: patch.state, note: patch.note ?? s.note });
+      patch = { ...patch, state: "needs-input", note: `Asking: access to ${open.domain}` };
+    }
     if (patch.state !== undefined && patch.state !== s.state) s.stateSince = now();
     Object.assign(s, patch);
     this.emit({ type: "agent.updated", agent: structuredClone(s) });

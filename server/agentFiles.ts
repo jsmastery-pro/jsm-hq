@@ -89,9 +89,14 @@ export function roleMd(agent: AgentConfig, cfg: HqConfig): string {
         "set_my_status tells the lead automatically. Don't also send_message the same news.",
         "If you are blocked or need a decision, call set_my_status blocked with the reason.",
       ];
+  // Sandboxes block most sites; the agent asks instead of working around it.
+  if (agent.mode === "sandbox")
+    rules.push(
+      "Your sandbox blocks most websites and APIs. If a request you need is blocked (a docs page or an API: connection refused, a 403 or a proxy/policy error), call request_access with the domain and why, then continue with other work until HQ tells you it was answered. Never work around the block.",
+    );
   const tools = agent.isLead
-    ? "list_workers, get_status, list_tasks, create_board, create_task, update_task, assign_task, send_message"
-    : "get_my_task, set_my_status, list_workers, get_status, list_tasks, send_message";
+    ? "list_workers, get_status, list_tasks, create_board, create_task, update_task, assign_task, send_message, request_access"
+    : "get_my_task, set_my_status, list_workers, get_status, list_tasks, send_message, request_access";
   return [
     `# ${agent.name} — ${agent.role}`,
     "",
