@@ -92,7 +92,7 @@ export function roleMd(agent: AgentConfig, cfg: HqConfig): string {
   // Sandboxes block most sites; the agent asks instead of working around it.
   if (agent.mode === "sandbox")
     rules.push(
-      "Your sandbox blocks most websites and APIs. If a request you need is blocked (a docs page or an API: connection refused, a 403 or a proxy/policy error), call request_access with the domain and why, then continue with other work until HQ tells you it was answered. Never work around the block.",
+      "Your sandbox blocks most websites and APIs. If a request you need is blocked (a docs page or an API: usually a 403 saying 'Approval required for <host>'), call request_access with the domain and why, then continue with other work until HQ tells you it was answered. Never work around the block.",
     );
   const tools = agent.isLead
     ? "list_workers, get_status, list_tasks, create_board, create_task, update_task, assign_task, send_message, request_access"
