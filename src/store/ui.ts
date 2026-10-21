@@ -7,7 +7,7 @@ export type DrawerState =
   | { kind: "env"; name: string }
   | null;
 
-export type AgentTab = "terminal" | "task" | "sandbox" | "messages";
+export type AgentTab = "terminal" | "shell" | "task" | "sandbox" | "messages";
 export type SettingsTab = "team" | "workflow" | "sandbox" | "boards" | "project";
 
 /** Something in the office the camera can fly to. */

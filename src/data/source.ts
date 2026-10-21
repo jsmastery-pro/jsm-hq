@@ -68,6 +68,9 @@ export interface OfficeDataSource {
   startAgent(id: string): void;
   stopAgent(id: string): void;
   openWorkspace(id: string): void; // opens the agent's folder on the host
+  /** Opens a plain shell in the agent's sandbox (or folder); output on terminal id `shell:<id>`. */
+  openShell(id: string): void;
+  closeShell(id: string): void;
   /** Removes and recreates the agent's sandbox (e.g. to apply new CPU/memory). The folder is kept. */
   recreateSandbox(id: string): void;
 

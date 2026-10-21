@@ -32,6 +32,7 @@ export function createMockSource(): OfficeDataSource {
     world.speed = speed;
     sim = new Simulation(world);
     inputBuf = new Map();
+    openShells.clear();
   }
 
   function boot() {
@@ -63,6 +64,36 @@ export function createMockSource(): OfficeDataSource {
     world.write(agentId, [{ text: `\x1b[38;2;102;114;159mhq ▸ ${text}\x1b[0m` }]);
   }
 
+  /** Demo "Shell" tab: a pretend shell inside the agent's sandbox. */
+  const shellPrompt = (id: string) => `\x1b[38;2;108;240;138m${id.slice(6)}@sandbox\x1b[0m:\x1b[38;2;41;173;255m~/workspace\x1b[0m$ `;
+  const shellOut = (id: string, data: string) => listener?.({ type: "terminal.output", agentId: id, data });
+  const DEMO_SHELL: Record<string, string> = {
+    ls: "README.md  app  components  lib  package.json  pnpm-lock.yaml",
+    pwd: "/Users/you/.jsmhq/askwell/workspace",
+    "git status": "On branch p3-t02-chat-route\r\nChanges not staged for commit:\r\n  modified:   app/api/chat/route.ts",
+    "node -v": "v22.11.0",
+    whoami: "agent",
+  };
+  function demoShell(id: string, data: string) {
+    let buf = inputBuf.get(id) ?? "";
+    for (const ch of data) {
+      if (ch === "\r") {
+        const cmd = buf.trim();
+        buf = "";
+        shellOut(id, "\r\n");
+        if (cmd) shellOut(id, `${DEMO_SHELL[cmd] ?? `(demo shell) ${cmd}: try ls, pwd, git status, node -v`}\r\n`);
+        shellOut(id, shellPrompt(id));
+      } else if (ch === "\x7f") {
+        if (buf.length) (buf = buf.slice(0, -1)), shellOut(id, "\b \b");
+      } else if (ch >= " ") {
+        buf += ch;
+        shellOut(id, ch);
+      }
+    }
+    inputBuf.set(id, buf);
+  }
+  const openShells = new Set<string>();
+
   const source: OfficeDataSource = {
     connect(onEvent, onStatus) {
       listener = onEvent;
@@ -84,6 +115,7 @@ export function createMockSource(): OfficeDataSource {
     },
 
     sendTerminalInput(agentId, data) {
+      if (agentId.startsWith("shell:")) return demoShell(agentId, data);
       // Echo printable input; act on Enter.
       let buf = inputBuf.get(agentId) ?? "";
       for (const ch of data) {
@@ -306,6 +338,18 @@ export function createMockSource(): OfficeDataSource {
       if (!board) return;
       Object.assign(board, patch);
       world.emit({ type: "board.updated", board: { ...board } });
+    },
+
+    openShell(id) {
+      const tid = `shell:${id}`;
+      if (openShells.has(tid)) return;
+      openShells.add(tid);
+      shellOut(tid, `\x1b[2m$ sbx exec -it hq-mock-${id} bash   (demo)\x1b[0m\r\n${shellPrompt(tid)}`);
+    },
+
+    closeShell(id) {
+      openShells.delete(`shell:${id}`);
+      shellOut(`shell:${id}`, "\r\n\x1b[2m[shell closed]\x1b[0m\r\n");
     },
 
     completeWelcome() {

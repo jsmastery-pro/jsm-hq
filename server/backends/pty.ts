@@ -26,7 +26,7 @@ const procs = new Map<string, Proc>();
  * Windows doesn't search PATH the way a shell does for npm's `.cmd` shims, so
  * find the program with `where`; `.cmd`/`.bat` files run through cmd.exe.
  */
-async function resolveCommand(file: string, args: string[]): Promise<{ file: string; args: string[] }> {
+export async function resolveCommand(file: string, args: string[]): Promise<{ file: string; args: string[] }> {
   if (process.platform !== "win32" || /[\\/]/.test(file)) return { file, args };
   const r = await run("where", [file], { timeoutMs: 5000 });
   const found = r.stdout.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);

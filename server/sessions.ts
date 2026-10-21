@@ -9,6 +9,7 @@ import type { SetupCheckId, WorkspaceInfo } from "../src/data/types";
 import { adapters, localBinary } from "./adapters";
 import type { Hub } from "./hub";
 import { sessionBackend, type LaunchSpec, type TermHandle } from "./backends";
+import { resolveCommand } from "./backends/pty";
 import { run } from "./lib/exec";
 import { log } from "./lib/log";
 import { projectHome, sessionName } from "./paths";
@@ -22,6 +23,9 @@ export class Sessions {
   private terms = new Map<string, TermHandle>();
   private sizes = new Map<string, { cols: number; rows: number }>();
   private fixes = new Map<string, IPty>();
+  /** "Shell" tab: a plain shell in the agent's sandbox (or folder), separate from its agent session. */
+  private shells = new Map<string, IPty>();
+  private closing = new WeakSet<IPty>(); // closed on purpose: no "[shell closed]" line
   private policyOk = false;
   /** Called whenever an agent's Claude Code session goes away (stop, restart, crash). */
   onSessionDown: (agentId: string) => void = () => {};
@@ -107,6 +111,7 @@ export class Sessions {
     const name = this.name(id);
     this.onSessionDown(id);
     this.detach(id);
+    this.closeShell(id);
     await this.backend.kill(name);
     // Stop (not remove) the VM so it can resume later with its state.
     if (agent.mode === "sandbox") void run("sbx", ["stop", name], { timeoutMs: 30_000 });
@@ -149,6 +154,7 @@ export class Sessions {
     const name = this.name(id);
     this.onSessionDown(id);
     this.detach(id);
+    this.closeShell(id);
     await this.backend.kill(name);
     if (opts.deleteSandbox) {
       const rm = await run("sbx", ["rm", "-f", name], { timeoutMs: 60_000 });
@@ -278,6 +284,7 @@ export class Sessions {
 
   input(id: string, data: string) {
     if (id.startsWith("setup:")) return this.fixes.get(id)?.write(data);
+    if (id.startsWith("shell:")) return this.shells.get(id)?.write(data);
     this.terms.get(id)?.write(data);
   }
 
@@ -286,7 +293,7 @@ export class Sessions {
     const r = Math.max(5, Math.min(200, Math.floor(rows)));
     const same = this.sizes.get(id)?.cols === c && this.sizes.get(id)?.rows === r;
     this.sizes.set(id, { cols: c, rows: r });
-    const pty = id.startsWith("setup:") ? this.fixes.get(id) : this.terms.get(id);
+    const pty = id.startsWith("setup:") ? this.fixes.get(id) : id.startsWith("shell:") ? this.shells.get(id) : this.terms.get(id);
     if (!pty) return;
     // A same-size resize doesn't redraw; nudge it so a newly opened terminal gets a full screen.
     if (same) {
@@ -400,7 +407,57 @@ export class Sessions {
     });
   }
 
+  // ------------------------------------------------------------ shell tab
+
+  /**
+   * Opens a shell for the "Shell" tab (terminal id `shell:<agentId>`): `sbx exec -it <sandbox> bash`
+   * for a sandboxed agent, your own shell in its folder for Local mode. It runs beside the agent's
+   * session, so the agent keeps working; it closes when you close it or HQ stops.
+   */
+  async openShell(agentId: string) {
+    const id = `shell:${agentId}`;
+    const agent = this.hub.cfg(agentId);
+    const st = this.hub.status(agentId);
+    if (!agent || this.shells.has(id)) return;
+    if (st?.session.state !== "running") return this.hub.terminal(id, "\x1b[2mStart the agent first; the shell opens inside its sandbox.\x1b[0m\r\n");
+    const dir = st.session.workspace ?? workspaceFor(agent, this.hub.slug);
+    const win = process.platform === "win32";
+    let file: string;
+    let args: string[];
+    let banner: string;
+    if (agent.mode === "sandbox") {
+      const name = this.name(agentId);
+      // bash when the image has it, else sh; start in the agent's folder (same path inside the sandbox).
+      ({ file, args } = await resolveCommand("sbx", ["exec", "-it", ...(win ? [] : ["-w", dir]), name, "sh", "-c", "command -v bash >/dev/null && exec bash -l || exec sh -l"]));
+      banner = `sbx exec -it ${name} bash`;
+    } else {
+      file = win ? "powershell.exe" : process.env.SHELL || "/bin/sh";
+      args = win ? ["-NoLogo"] : ["-l"];
+      banner = `${file} in ${dir}`;
+    }
+    const size = this.sizes.get(id) ?? { cols: 100, rows: 30 };
+    const pty = spawnPty(file, args, { name: "xterm-256color", cols: size.cols, rows: size.rows, cwd: dir, env: TERM_ENV });
+    this.shells.set(id, pty);
+    this.hub.terminal(id, `\x1b[2m$ ${banner}\x1b[0m\r\n`);
+    pty.onData((d) => this.hub.terminal(id, d));
+    pty.onExit(({ exitCode }) => {
+      if (this.shells.get(id) === pty) this.shells.delete(id);
+      if (this.closing.has(pty)) return;
+      this.hub.terminal(id, `\r\n\x1b[2m[shell closed${exitCode ? ` (exit ${exitCode})` : ""}. Press "New shell" to open another.]\x1b[0m\r\n`);
+    });
+  }
+
+  closeShell(agentId: string) {
+    const id = `shell:${agentId}`;
+    const pty = this.shells.get(id);
+    if (!pty) return;
+    this.closing.add(pty);
+    pty.kill();
+    this.shells.delete(id);
+  }
+
   shutdown() {
+    for (const p of this.shells.values()) p.kill();
     if (this.polling) clearInterval(this.polling);
     // tmux keeps the agents running; the pty backend stops them.
     for (const t of this.terms.values()) t.close();
