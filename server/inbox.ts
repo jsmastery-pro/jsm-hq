@@ -45,6 +45,11 @@ export class Inbox {
     void this.tryType(agentId);
   }
 
+  /** When the agent's last hook arrived (0 if never). */
+  lastHookAt(agentId: string): number {
+    return this.lastHook.get(agentId) ?? 0;
+  }
+
   pending(agentId: string) {
     return this.queues.get(agentId)?.length ?? 0;
   }
