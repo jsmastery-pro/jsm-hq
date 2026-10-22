@@ -19,11 +19,15 @@ const REVIEW_FIELDS = `
     ... on StatusContext { context state description }
   } } } } } }`;
 
+/** Open PRs fetched per poll. A full page may not be the whole list. */
+export const OPEN_LIMIT = 20;
+
 const QUERY = `query($owner: String!, $name: String!) {
   rateLimit { cost remaining resetAt }
   repository(owner: $owner, name: $name) {
-    open: pullRequests(states: OPEN, first: 20, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { ${BASE_FIELDS} ${REVIEW_FIELDS} } }
+    open: pullRequests(states: OPEN, first: ${OPEN_LIMIT}, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { ${BASE_FIELDS} ${REVIEW_FIELDS} } }
     merged: pullRequests(states: MERGED, first: 10, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { ${BASE_FIELDS} } }
+    closed: pullRequests(states: CLOSED, first: 10, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { number } }
   }
 }`;
 
@@ -72,25 +76,33 @@ type Ctx =
   | { __typename: "CheckRun"; name: string; status: string; conclusion: string | null }
   | { __typename: "StatusContext"; context: string; state: string; description: string | null };
 
+/** GitHub's short "secondary" limits clear within minutes; the hourly budget resets at its own time. */
+async function rateLimited(message: string): Promise<RateLimited> {
+  if (/secondary rate limit/i.test(message)) return new RateLimited(new Date(Date.now() + 2 * 60_000));
+  return new RateLimited(await graphqlResetAt());
+}
+
 const EMPTY_REVIEW = { reviews: { nodes: [] }, reviewThreads: { nodes: [] }, commits: { nodes: [] } };
 
-export async function fetchPrs(repo: string): Promise<{ open: GhPr[]; merged: GhPr[]; rate: RateLimit | null }> {
+export async function fetchPrs(repo: string): Promise<{ open: GhPr[]; merged: GhPr[]; closed: number[]; rate: RateLimit | null }> {
   const [owner, name] = repo.split("/");
   const r = await run("gh", ["api", "graphql", "-f", `query=${QUERY}`, "-F", `owner=${owner}`, "-F", `name=${name}`], { timeoutMs: 30_000 });
   if (!r.ok) {
     const msg = r.stderr.trim().split("\n")[0] || "gh api failed";
-    if (/rate limit/i.test(r.stderr + r.stdout)) throw new RateLimited(await graphqlResetAt());
+    if (/rate limit/i.test(r.stderr + r.stdout)) throw await rateLimited(r.stderr + r.stdout);
     throw new Error(msg);
   }
   const data = JSON.parse(r.stdout) as {
-    data?: { rateLimit?: RateLimit; repository?: { open: { nodes: GhPr[] }; merged: { nodes: Omit<GhPr, keyof typeof EMPTY_REVIEW>[] } } };
+    data?: { rateLimit?: RateLimit; repository?: { open: { nodes: GhPr[] }; merged: { nodes: Omit<GhPr, keyof typeof EMPTY_REVIEW>[] }; closed?: { nodes: { number: number }[] } } };
     errors?: { message: string; type?: string }[];
   };
-  if (data.errors?.some((e) => e.type === "RATE_LIMITED" || /rate limit/i.test(e.message))) throw new RateLimited(await graphqlResetAt());
+  const limited = data.errors?.find((e) => e.type === "RATE_LIMITED" || /rate limit/i.test(e.message));
+  if (limited) throw await rateLimited(limited.message);
   if (!data.data?.repository) throw new Error(data.errors?.[0]?.message ?? "Repository not found");
   return {
     open: data.data.repository.open.nodes,
     merged: data.data.repository.merged.nodes.map((pr) => ({ ...pr, ...EMPTY_REVIEW })),
+    closed: (data.data.repository.closed?.nodes ?? []).map((n) => n.number),
     rate: data.data.rateLimit ?? null,
   };
 }
