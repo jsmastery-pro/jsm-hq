@@ -1,6 +1,9 @@
 // Browser commands → server actions. Names match OfficeDataSource methods.
 
 import { SERVICE_KEYS, type AgentCli, type AgentConfig, type AgentPatch, type ReviewTool, type WelcomeInput, type Board, type NewAgentInput, type ProjectConfig, type RemoveAgentOptions, type SandboxSettings, type SetupCheckId, type WorkflowPatch } from "../src/data/types";
+import { STACK_CATEGORIES, stackSkills, stackTool, type StackChoice, type StackConfig } from "../src/data/stack";
+import { resolveAccess } from "./access";
+import { ensureSkillCache } from "./skills";
 import { run } from "./lib/exec";
 import { agentPalette } from "../src/theme/tokens";
 import { Hub } from "./hub";
@@ -9,6 +12,31 @@ import type { Planner } from "./planner";
 import type { Sbx } from "./sbx";
 import type { Sessions } from "./sessions";
 import { newAgent } from "./store";
+
+/** A stack from the browser, checked against the catalog. Null when nothing is chosen. */
+function cleanStack(raw: unknown): StackConfig | null {
+  const input = (raw ?? {}) as Partial<StackConfig>;
+  const choice = (c: unknown, category: string): StackChoice | null => {
+    const v = (c ?? {}) as Partial<StackChoice>;
+    const id = str(v.id, 40);
+    const known = id === "other" || stackTool(id)?.category === category;
+    if (!known) return null;
+    const out: StackChoice = { id };
+    if (typeof v.where === "string" && v.where.trim()) out.where = str(v.where, 120).trim();
+    if (id === "other") {
+      if (typeof v.name === "string" && v.name.trim()) out.name = str(v.name, 60).trim();
+      if (typeof v.docsUrl === "string" && v.docsUrl.trim()) out.docsUrl = str(v.docsUrl, 300).trim();
+    }
+    return out;
+  };
+  const frameworks = (Array.isArray(input.frameworks) ? input.frameworks : []).slice(0, 10).map((f) => choice(f, "framework")).filter((f): f is StackChoice => !!f);
+  const tools: StackConfig["tools"] = {};
+  for (const c of STACK_CATEGORIES) {
+    const picked = choice(input.tools?.[c.id], c.id);
+    if (picked) tools[c.id] = picked;
+  }
+  return frameworks.length || Object.keys(tools).length ? { frameworks, tools } : null;
+}
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "agent";
 const str = (v: unknown, max = 2000) => (typeof v === "string" ? v.slice(0, max) : "");
@@ -160,6 +188,26 @@ export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inb
     },
     refreshSbx: () => sbx.refresh(),
 
+    /** Saves the project's stack (sanitised against the catalog). The agents get it in ROLE.md on their next start. */
+    updateStack: (raw) => {
+      const cfg = hub.snap.config;
+      const stack = cleanStack(raw);
+      if (!stack) {
+        delete cfg.stack;
+        return hub.configChanged();
+      }
+      cfg.stack = stack;
+      hub.configChanged();
+      // Fetch the skills now so the next Start doesn't wait for them.
+      const specs = stackSkills(cfg.stack);
+      if (specs.length) void ensureSkillCache(hub.slug, specs).catch((e) => hub.activity("config", null, `Couldn't fetch agent skills: ${String(e instanceof Error ? e.message : e).slice(0, 160)}`));
+    },
+
+    resolveAccess: (id, decision) => {
+      const d = decision === "agent" || decision === "everyone" || decision === "deny" ? decision : null;
+      if (d) return resolveAccess(hub, sbx, planner, str(id, 40), d);
+    },
+
     completeWelcome: async (raw) => {
       if (!hub.snap.welcome) return;
       const input = (raw ?? {}) as Partial<WelcomeInput>;
@@ -183,6 +231,12 @@ export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inb
       const tools: ReviewTool[] = ["coderabbit", "greptile", "copilot", "human", "custom"];
       if (tools.includes(input.reviewTool as ReviewTool)) cfg.workflow.review.tool = input.reviewTool as ReviewTool;
       if (typeof input.reviewEnabled === "boolean") cfg.workflow.review.enabled = input.reviewEnabled;
+      const stack = cleanStack(input.stack);
+      if (stack) {
+        cfg.stack = stack;
+        const specs = stackSkills(stack);
+        if (specs.length) void ensureSkillCache(hub.slug, specs).catch(() => {}); // retried on Start
+      }
       hub.snap.agents = cfg.team.map((a) => Hub.freshStatus(a.id));
       hub.snap.welcome = false;
       hub.configChanged(); // saves .jsmhq/config.json for the first time

@@ -5,7 +5,8 @@ import { create } from "zustand";
 import { createMockSource } from "../data/mock/mockSource";
 import type { ConnectionStatus, DataPreset, OfficeDataSource, OfficeEvent, SimSpeed } from "../data/source";
 import { createWsSource } from "../data/ws/wsSource";
-import type { AgentConfig, AgentStatus, OfficeSnapshot, RemoveAgentOptions, SetupCheckId, WelcomeInput, WorkspaceInfo } from "../data/types";
+import type { StackConfig } from "../data/stack";
+import type { AccessDecision, AgentConfig, AgentStatus, OfficeSnapshot, RemoveAgentOptions, SetupCheckId, WelcomeInput, WorkspaceInfo } from "../data/types";
 import { appendTerminal, clearTerminals } from "./terminal";
 
 export interface LoggedEvent {
@@ -111,6 +112,8 @@ function reduce(snap: OfficeSnapshot, e: OfficeEvent): OfficeSnapshot {
       return { ...snap, activity: [e.event, ...snap.activity].slice(0, 50) };
     case "terminal.output":
       return snap;
+    case "access.updated":
+      return { ...snap, accessRequests: upsert(snap.accessRequests ?? [], e.request, (r) => r.id === e.request.id) };
   }
 }
 
@@ -176,6 +179,9 @@ export const officeActions = {
   createBoard: source.createBoard.bind(source),
   updateBoard: source.updateBoard.bind(source),
   completeWelcome: (input: WelcomeInput) => source.completeWelcome(input),
+  updateStack: (stack: StackConfig | null) => source.updateStack(stack),
+  resolveAccess: (requestId: string, decision: AccessDecision) => source.resolveAccess(requestId, decision),
+  simulateAccessRequest: () => source.dev?.simulateAccessRequest(),
   setSpeed(speed: SimSpeed) {
     source.dev?.setSpeed(speed);
     useOffice.setState({ speed });

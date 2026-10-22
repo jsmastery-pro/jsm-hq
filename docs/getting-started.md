@@ -112,7 +112,7 @@ npx @therealjsmastery/jsm-hq
 
 HQ opens your browser. If it doesn't, open the `http://127.0.0.1:7420/?token=…` link printed in the terminal.
 
-- **Welcome:** name the project, pick a lead and workers (Claude Code or Codex for each) and a review tool. This is saved to `.jsmhq/config.json` in your repo.
+- **Welcome:** name the project, pick a lead and workers (Claude Code or Codex for each) and a review tool. Optionally pick your stack (frameworks, auth, payments, database, analytics, security): agents then get those tools' agent skills and know what the project uses. This is saved to `.jsmhq/config.json` in your repo.
 - **Setup checklist:** anything still missing shows here with a **Copy** button and, for safe commands, **Run in terminal**. Press **Check again** after fixing something.
 
 Leave the terminal running while you work. On macOS and Linux, agents keep running even if you close HQ; on Windows they stop with it.
@@ -126,6 +126,8 @@ Leave the terminal running while you work. On macOS and Linux, agents keep runni
 4. Review and merge PRs on GitHub yourself. HQ never merges. When you merge, the task is marked done.
 
 An agent with a red **Needs input** badge is waiting for you. Click them and answer in their terminal.
+
+When an agent needs a website its sandbox blocks (a tool's docs, an API), it asks instead of guessing: its drawer shows the domain and why, with **Allow for this agent / Allow for everyone / Deny**. To allow your stack's docs up front, use **Settings → Stack → Network access**.
 
 ## Something not working?
 

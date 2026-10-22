@@ -1,8 +1,10 @@
 // The files HQ writes into each agent's folder. All of them are listed in the
 // clone's .git/info/exclude, so they are never committed.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { lstatSync } from "node:fs";
+import { agentRead, agentWrite } from "./lib/agentFs";
 import { join } from "node:path";
+import { stackRoleMd } from "../src/data/stack";
 import type { AgentConfig, HqConfig } from "../src/data/types";
 
 /** Team MCP config, passed with `claude --mcp-config` (so the project's own .mcp.json is untouched). */
@@ -61,7 +63,7 @@ setTimeout(send, 2000).unref();
 `;
 
 export function writeHookScript(dir: string) {
-  writeFileSync(join(dir, HOOK_SCRIPT), HOOK_SCRIPT_SOURCE);
+  agentWrite(dir, HOOK_SCRIPT, HOOK_SCRIPT_SOURCE);
 }
 
 // PostToolUse: the moment a question or permission prompt is answered, the tool completes.
@@ -89,9 +91,14 @@ export function roleMd(agent: AgentConfig, cfg: HqConfig): string {
         "set_my_status tells the lead automatically. Don't also send_message the same news.",
         "If you are blocked or need a decision, call set_my_status blocked with the reason.",
       ];
+  // Sandboxes block most sites; the agent asks instead of working around it.
+  if (agent.mode === "sandbox")
+    rules.push(
+      "Your sandbox blocks most websites and APIs. If a request you need is blocked (a docs page or an API: usually a 403 saying 'Approval required for <host>'), call request_access with the domain and why, then continue with other work until HQ tells you it was answered. Never work around the block.",
+    );
   const tools = agent.isLead
-    ? "list_workers, get_status, list_tasks, create_board, create_task, update_task, assign_task, send_message"
-    : "get_my_task, set_my_status, list_workers, get_status, list_tasks, send_message";
+    ? "list_workers, get_status, list_tasks, create_board, create_task, update_task, assign_task, send_message, request_access"
+    : "get_my_task, set_my_status, list_workers, get_status, list_tasks, send_message, request_access";
   return [
     `# ${agent.name} — ${agent.role}`,
     "",
@@ -103,6 +110,7 @@ export function roleMd(agent: AgentConfig, cfg: HqConfig): string {
     "## Rules",
     ...rules.map((r) => `- ${r}`),
     "",
+    ...(stackRoleMd(cfg.stack) ? [stackRoleMd(cfg.stack), ""] : []),
     "## Team MCP (server `hq`)",
     `Your tools: ${tools}.`,
     "Messages that start with `[HQ]` come from JSM HQ: assignments from the lead, or messages from teammates. Act on them.",
@@ -129,12 +137,12 @@ export function hookCommand(url: string, token: string, agentId: string, event: 
  */
 export function writeSettings(dir: string, agent: AgentConfig, port: number, token: string) {
   const script = hookScriptFor(agent, dir);
-  const file = join(dir, ".claude", "settings.local.json");
-  mkdirSync(join(dir, ".claude"), { recursive: true });
+  const file = ".claude/settings.local.json";
   let settings: Settings = {};
-  if (existsSync(file)) {
+  const existing = agentRead(dir, file); // a symlink reads as missing: never pull in a host file
+  if (existing) {
     try {
-      settings = JSON.parse(readFileSync(file, "utf8")) as Settings;
+      settings = JSON.parse(existing) as Settings;
     } catch {
       settings = {};
     }
@@ -152,7 +160,7 @@ export function writeSettings(dir: string, agent: AgentConfig, port: number, tok
   }
   // Let the agent use the Team MCP without a permission prompt for every call.
   const allow = new Set([...(settings.permissions?.allow ?? []), "mcp__hq"]);
-  writeFileSync(file, JSON.stringify({ ...settings, hooks, permissions: { ...(settings.permissions ?? {}), allow: [...allow] } }, null, 2) + "\n");
+  agentWrite(dir, file, JSON.stringify({ ...settings, hooks, permissions: { ...(settings.permissions ?? {}), allow: [...allow] } }, null, 2) + "\n");
 }
 
 /** Team MCP config: HQ's URL plus this agent's identity and token. */
@@ -162,13 +170,12 @@ export function writeMcpConfig(dir: string, agent: AgentConfig, port: number, to
       hq: { type: "http", url: `${hqUrl(agent, port)}/mcp`, headers: { Authorization: `Bearer ${token}`, "X-HQ-Agent": agent.id } },
     },
   };
-  mkdirSync(join(dir, ".claude"), { recursive: true });
-  writeFileSync(join(dir, MCP_CONFIG), JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
+  agentWrite(dir, MCP_CONFIG, JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
 }
 
 /** Claude Code's files: ROLE.md (loaded by the SessionStart hook), hooks, and the Team MCP config. */
 export function writeClaudeFiles(dir: string, agent: AgentConfig, cfg: HqConfig, token: string) {
-  writeFileSync(join(dir, "ROLE.md"), roleMd(agent, cfg));
+  agentWrite(dir, "ROLE.md", roleMd(agent, cfg));
   writeSettings(dir, agent, cfg.project.hqPort, token);
   writeMcpConfig(dir, agent, cfg.project.hqPort, token);
   if (hookScriptFor(agent, dir)) writeHookScript(dir);
@@ -177,11 +184,14 @@ export function writeClaudeFiles(dir: string, agent: AgentConfig, cfg: HqConfig,
 
 /** Adds paths to .git/info/exclude (a per-clone .gitignore that is never committed). */
 export function excludeFromGit(dir: string, paths: string[]) {
-  const infoDir = join(dir, ".git", "info");
-  if (!existsSync(join(dir, ".git"))) return;
-  mkdirSync(infoDir, { recursive: true });
-  const file = join(infoDir, "exclude");
-  const current = existsSync(file) ? readFileSync(file, "utf8") : "";
+  // Only a real .git folder (a worktree's .git is a file; a symlink isn't followed).
+  try {
+    if (!lstatSync(join(dir, ".git")).isDirectory()) return;
+  } catch {
+    return;
+  }
+  const file = ".git/info/exclude";
+  const current = agentRead(dir, file) ?? "";
   const missing = paths.filter((p) => !current.split("\n").includes(p));
-  if (missing.length) writeFileSync(file, current + (current.endsWith("\n") || !current ? "" : "\n") + "# JSM HQ\n" + missing.join("\n") + "\n");
+  if (missing.length) agentWrite(dir, file, current + (current.endsWith("\n") || !current ? "" : "\n") + "# JSM HQ\n" + missing.join("\n") + "\n");
 }

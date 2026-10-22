@@ -7,6 +7,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import type { Hub } from "./hub";
+import { requestAccess } from "./access";
 import type { Planner } from "./planner";
 
 type Result = { content: { type: "text"; text: string }[]; isError?: boolean };
@@ -172,6 +173,16 @@ function buildServer(hub: Hub, planner: Planner, me: string): McpServer {
       const t = planner.setStatus(me, status, note, prNumber);
       return ok(`${t.id} is now ${t.status}.`);
     }),
+  );
+
+  server.registerTool(
+    "request_access",
+    {
+      description:
+        "Your sandbox blocks most websites and APIs. When a request you need is blocked (docs or an API), ask the user to allow that domain. Pass the host (e.g. docs.example.com) and why you need it. The user answers in HQ; you'll get a message.",
+      inputSchema: { domain: z.string(), reason: z.string() },
+    },
+    guard(({ domain, reason }: { domain: string; reason: string }) => ok(requestAccess(hub, me, domain, reason))),
   );
 
   server.registerTool(
