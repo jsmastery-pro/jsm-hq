@@ -3,7 +3,8 @@
 // agent's folder: Claude Code reads .claude/skills/, Codex reads .agents/skills/.
 // The copies are git-excluded and replaced when the stack changes.
 
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { agentMkdir, agentPath, agentRemove } from "./lib/agentFs";
 import { createHash } from "node:crypto";
 import { join, resolve, sep } from "node:path";
 import type { SkillSpec } from "../src/data/stack";
@@ -82,22 +83,37 @@ export async function syncSkillsInto(slug: string, workspace: string): Promise<s
   const tracked = async (rel: string) => (await run("git", ["ls-files", "--error-unmatch", rel], { cwd: workspace })).ok;
   const inside = (rel: string) => SAFE.test(rel) && resolve(workspace, rel).startsWith(resolve(workspace) + sep);
   const now: string[] = [];
+  const there = (rel: string) => {
+    try {
+      lstatSync(agentPath(workspace, rel));
+      return true;
+    } catch {
+      return false;
+    }
+  };
   for (const sub of AGENT_DIRS) {
     const from = join(cacheDir(slug), sub);
     if (!existsSync(from)) continue;
+    agentMkdir(workspace, sub); // refuses if .claude, .agents or skills is a symlink
     for (const name of readdirSync(from)) {
       const rel = `${sub}/${name}`;
       if (!inside(rel)) continue;
       // Never touch a skill the repo commits, or one that's already there and isn't HQ's.
       if (await tracked(rel)) continue;
-      if (existsSync(join(workspace, rel)) && !before.includes(rel)) continue;
-      rmSync(join(workspace, rel), { recursive: true, force: true });
-      mkdirSync(join(workspace, sub), { recursive: true });
-      cpSync(join(from, name), join(workspace, rel), { recursive: true });
+      if (there(rel) && !before.includes(rel)) continue;
+      agentRemove(workspace, rel); // removes a symlink itself, never its target
+      cpSync(join(from, name), agentPath(workspace, rel), { recursive: true });
       now.push(rel);
     }
   }
-  for (const rel of before) if (!now.includes(rel) && inside(rel) && !(await tracked(rel))) rmSync(join(workspace, rel), { recursive: true, force: true });
+  for (const rel of before) {
+    if (now.includes(rel) || !inside(rel) || (await tracked(rel))) continue;
+    try {
+      agentRemove(workspace, rel);
+    } catch {
+      /* a symlinked parent: leave it */
+    }
+  }
   mkdirSync(join(projectHome(slug), "skills-owned"), { recursive: true });
   writeFileSync(ownedFile(slug, workspace), JSON.stringify(now));
   excludeFromGit(workspace, now);

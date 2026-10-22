@@ -87,14 +87,13 @@ async function answer(hub: Hub, sbx: Sbx, planner: Planner, requestId: string, d
 
   // Applies the per-sandbox rules (only sandboxes that exist; others get them when they start).
   // sbx may refuse the rule for any of them: then undo it everywhere and keep the request open.
+  // allSettled: every sync finishes before any rollback, so a late one can't re-add the rule after it.
   let failure: string | null = null;
-  try {
-    await Promise.all(ids.map((id) => sbx.syncRules(id)));
-    const bad = ids.find((id) => sbx.state.agents[id]?.syncError?.includes(req.domain));
-    if (bad) failure = `${hub.name(bad)}: ${sbx.state.agents[bad]?.syncError}`;
-  } catch (err) {
-    failure = err instanceof Error ? err.message : String(err);
-  }
+  const results = await Promise.allSettled(ids.map((id) => sbx.syncRules(id)));
+  const thrown = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
+  const bad = ids.find((id) => sbx.state.agents[id]?.syncError?.includes(req.domain));
+  if (thrown) failure = thrown.reason instanceof Error ? thrown.reason.message : String(thrown.reason);
+  else if (bad) failure = `${hub.name(bad)}: ${sbx.state.agents[bad]?.syncError}`;
   if (failure) {
     for (const id of added) {
       const a = hub.cfg(id);
