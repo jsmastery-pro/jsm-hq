@@ -2,7 +2,7 @@
 // comments → tell the author; passed → tell the lead; merged → task done.
 
 import type { PullRequest } from "../src/data/types";
-import { branchAgent, fetchPrs, RateLimited, taskIdOf, toPullRequest } from "./github";
+import { branchAgent, fetchPrs, OPEN_LIMIT, RateLimited, taskIdOf, toPullRequest } from "./github";
 import type { Hub } from "./hub";
 import { log } from "./lib/log";
 import type { Planner } from "./planner";
@@ -78,6 +78,8 @@ export class GitHubSync {
 
   async refresh() {
     if (!this.repo || this.busy || Date.now() < this.pausedUntil) return;
+    // Never closer together than the minimum gap (a nudge can land right after a regular poll).
+    if (Date.now() - this.lastFetch < MIN_POLL_MS - 1000) return;
     if (!this.hub.snap.setup.checks.find((c) => c.id === "gh" && c.status === "ok")) return;
     this.busy = true;
     this.lastFetch = Date.now();
@@ -95,9 +97,11 @@ export class GitHubSync {
         const authorId = task?.ownerId ?? (fromBranch && team.has(fromBranch) ? fromBranch : "");
         return toPullRequest(gh, wf.review.tool, wf.review.enabled, task?.id ?? taskId ?? "", authorId);
       });
-      // PRs we showed as open that are now neither open nor recently merged were closed.
+      // PRs we showed as open that are now neither open nor recently merged were closed. Only
+      // trust that when the open list is complete; a full page may have left older open PRs out.
       const seen = new Set(next.map((p) => p.number));
-      for (const old of this.prev.values()) if (!seen.has(old.number) && !old.merged && !old.closed) next.push({ ...old, closed: true });
+      const complete = open.length < OPEN_LIMIT;
+      for (const old of this.prev.values()) if (!seen.has(old.number) && !old.merged && !old.closed) next.push(complete ? { ...old, closed: true } : old);
 
       for (const pr of next) {
         const old = this.prev.get(pr.number);
