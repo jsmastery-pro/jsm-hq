@@ -5,8 +5,8 @@
 import { spawn as spawnPty, type IPty } from "@lydell/node-pty";
 import { existsSync, rmSync } from "node:fs";
 import { stackSkills } from "../src/data/stack";
-import { prepareSkills } from "./skills";
-import { join, resolve, sep } from "node:path";
+import { hasHqSkills, prepareSkills } from "./skills";
+import { resolve, sep } from "node:path";
 import type { AgentCli, SetupCheckId, WorkspaceInfo } from "../src/data/types";
 import { adapters, localBinary } from "./adapters";
 import type { Hub } from "./hub";
@@ -82,7 +82,7 @@ export class Sessions {
       const adapter = adapters[agent.cli];
       await adapter.writeFiles(dir, agent, hub.snap.config, this.agentToken);
       const specs = stackSkills(hub.snap.config.stack);
-      if (specs.length || existsSync(join(dir, ".git", "info", "jsmhq-skills.json"))) {
+      if (specs.length || hasHqSkills(hub.slug, dir)) {
         hub.setSession(id, { detail: "Installing agent skills…" });
         const skills = await prepareSkills(hub.slug, dir, specs);
         if (skills.error) hub.activity("session", id, `${agent.name}: some agent skills didn't install (${skills.error.slice(0, 120)}). Starting anyway.`);

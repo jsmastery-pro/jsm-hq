@@ -4,7 +4,8 @@
 // The copies are git-excluded and replaced when the stack changes.
 
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { createHash } from "node:crypto";
+import { join, resolve, sep } from "node:path";
 import type { SkillSpec } from "../src/data/stack";
 import { excludeFromGit } from "./agentFiles";
 import { run } from "./lib/exec";
@@ -12,7 +13,6 @@ import { log } from "./lib/log";
 import { projectHome } from "./paths";
 
 const AGENT_DIRS = [".claude/skills", ".agents/skills"]; // Claude Code, Codex
-const MARKER = "jsmhq-skills.json"; // in the clone's .git/info: what HQ put there
 
 const cacheDir = (slug: string) => join(projectHome(slug), "skills-cache");
 const key = (specs: SkillSpec[]) => JSON.stringify(specs);
@@ -57,27 +57,49 @@ export function ensureSkillCache(slug: string, specs: SkillSpec[]): Promise<void
   return next;
 }
 
+// Which skill folders HQ put in each agent's folder. Kept in HQ's own home, not in the
+// agent's folder (an agent can edit its .git), and only ever names paths like
+// .claude/skills/<name> — so nothing outside those two folders can be deleted.
+const SAFE = /^\.(claude|agents)\/skills\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const ownedFile = (slug: string, workspace: string) =>
+  join(projectHome(slug), "skills-owned", `${createHash("sha1").update(resolve(workspace)).digest("hex").slice(0, 16)}.json`);
+
+function readOwned(slug: string, workspace: string): string[] {
+  try {
+    const list = JSON.parse(readFileSync(ownedFile(slug, workspace), "utf8")) as unknown;
+    return Array.isArray(list) ? list.filter((p): p is string => typeof p === "string" && SAFE.test(p)) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** True if HQ has put skills into this folder before (so a now-empty stack still cleans them up). */
+export const hasHqSkills = (slug: string, workspace: string) => readOwned(slug, workspace).length > 0;
+
 /** Copies the cached skills into an agent's folder and removes ones HQ added before that the stack dropped. */
 export async function syncSkillsInto(slug: string, workspace: string): Promise<string[]> {
-  const gitInfo = join(workspace, ".git", "info");
-  const marker = join(gitInfo, MARKER);
-  const before: string[] = existsSync(marker) ? (JSON.parse(readFileSync(marker, "utf8")) as string[]) : [];
+  const before = readOwned(slug, workspace);
+  const tracked = async (rel: string) => (await run("git", ["ls-files", "--error-unmatch", rel], { cwd: workspace })).ok;
+  const inside = (rel: string) => SAFE.test(rel) && resolve(workspace, rel).startsWith(resolve(workspace) + sep);
   const now: string[] = [];
   for (const sub of AGENT_DIRS) {
     const from = join(cacheDir(slug), sub);
     if (!existsSync(from)) continue;
     for (const name of readdirSync(from)) {
       const rel = `${sub}/${name}`;
-      // Never overwrite a skill the repo itself commits.
-      if ((await run("git", ["ls-files", "--error-unmatch", rel], { cwd: workspace })).ok) continue;
+      if (!inside(rel)) continue;
+      // Never touch a skill the repo commits, or one that's already there and isn't HQ's.
+      if (await tracked(rel)) continue;
+      if (existsSync(join(workspace, rel)) && !before.includes(rel)) continue;
       rmSync(join(workspace, rel), { recursive: true, force: true });
       mkdirSync(join(workspace, sub), { recursive: true });
       cpSync(join(from, name), join(workspace, rel), { recursive: true });
       now.push(rel);
     }
   }
-  for (const rel of before) if (!now.includes(rel)) rmSync(join(workspace, rel), { recursive: true, force: true });
-  if (existsSync(gitInfo)) writeFileSync(marker, JSON.stringify(now));
+  for (const rel of before) if (!now.includes(rel) && inside(rel) && !(await tracked(rel))) rmSync(join(workspace, rel), { recursive: true, force: true });
+  mkdirSync(join(projectHome(slug), "skills-owned"), { recursive: true });
+  writeFileSync(ownedFile(slug, workspace), JSON.stringify(now));
   excludeFromGit(workspace, now);
   return now;
 }

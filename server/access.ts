@@ -46,12 +46,20 @@ export function requestAccess(hub: Hub, agentId: string, rawDomain: string, reas
   return `Asked the user to allow ${domain}. Continue with other work if you can; HQ will message you as soon as they answer. Don't work around the block meanwhile.`;
 }
 
-const resolving = new Set<string>();
+// Answers are applied one at a time: rules for the same sandbox are synced in order, and an
+// "everyone" answer can't settle a request that another answer is still working on.
+let queue: Promise<void> = Promise.resolve();
 
 /** Your answer: allow for that agent, for every sandboxed agent, or deny. */
-export async function resolveAccess(hub: Hub, sbx: Sbx, planner: Planner, requestId: string, decision: AccessDecision) {
+export function resolveAccess(hub: Hub, sbx: Sbx, planner: Planner, requestId: string, decision: AccessDecision): Promise<void> {
+  const next = queue.then(() => answer(hub, sbx, planner, requestId, decision));
+  queue = next.catch(() => {});
+  return next;
+}
+
+async function answer(hub: Hub, sbx: Sbx, planner: Planner, requestId: string, decision: AccessDecision) {
   const req = hub.snap.accessRequests?.find((r) => r.id === requestId);
-  if (!req || req.status !== "pending" || resolving.has(req.id)) return;
+  if (!req || req.status !== "pending") return;
   const who = hub.name(req.agentId);
   const settle = (r: AccessRequest, status: AccessRequest["status"]) => {
     r.status = status;
@@ -66,44 +74,47 @@ export async function resolveAccess(hub: Hub, sbx: Sbx, planner: Planner, reques
     return;
   }
 
-  resolving.add(req.id);
+  const ids = decision === "everyone" ? hub.snap.config.team.filter((a) => a.mode === "sandbox").map((a) => a.id) : [req.agentId];
+  const added: string[] = [];
+  for (const id of ids) {
+    const a = hub.cfg(id);
+    if (a && !a.sandbox.allow.includes(req.domain)) {
+      a.sandbox.allow = [...a.sandbox.allow, req.domain];
+      added.push(id);
+    }
+  }
+  hub.configChanged();
+
+  // Applies the per-sandbox rules (only sandboxes that exist; others get them when they start).
+  // sbx may refuse the rule for any of them: then undo it everywhere and keep the request open.
+  let failure: string | null = null;
   try {
-    const ids = decision === "everyone" ? hub.snap.config.team.filter((a) => a.mode === "sandbox").map((a) => a.id) : [req.agentId];
-    const added: string[] = [];
-    for (const id of ids) {
+    await Promise.all(ids.map((id) => sbx.syncRules(id)));
+    const bad = ids.find((id) => sbx.state.agents[id]?.syncError?.includes(req.domain));
+    if (bad) failure = `${hub.name(bad)}: ${sbx.state.agents[bad]?.syncError}`;
+  } catch (err) {
+    failure = err instanceof Error ? err.message : String(err);
+  }
+  if (failure) {
+    for (const id of added) {
       const a = hub.cfg(id);
-      if (a && !a.sandbox.allow.includes(req.domain)) {
-        a.sandbox.allow = [...a.sandbox.allow, req.domain];
-        added.push(id);
-      }
+      if (a) a.sandbox.allow = a.sandbox.allow.filter((d) => d !== req.domain);
     }
     hub.configChanged();
-    // Applies the per-sandbox rules (only sandboxes that exist; others get them when they start).
-    await Promise.all(ids.map((id) => sbx.syncRules(id)));
-
-    // sbx may refuse the rule: then the agent is still blocked. Say so, undo it, and keep the request open.
-    const error = sbx.state.agents[req.agentId]?.syncError;
-    if (error && error.includes(req.domain)) {
-      for (const id of added) {
-        const a = hub.cfg(id);
-        if (a) a.sandbox.allow = a.sandbox.allow.filter((d) => d !== req.domain);
-      }
-      hub.configChanged();
-      hub.activity("config", req.agentId, `Couldn't allow ${req.domain} for ${who}: ${error.slice(0, 160)}. The request is still open: try again or deny it.`);
-      return;
-    }
-
-    settle(req, "allowed");
-    hub.activity("config", req.agentId, `You allowed ${req.domain} for ${decision === "everyone" ? "every agent" : who}`);
-    planner.notify(req.agentId, `The user allowed ${req.domain} for your sandbox. Try the request again.`);
-    // Other agents waiting on the same domain are covered too.
-    if (decision === "everyone")
-      for (const other of hub.snap.accessRequests ?? [])
-        if (other.status === "pending" && other.domain === req.domain && other.id !== req.id) {
-          settle(other, "allowed");
-          planner.notify(other.agentId, `The user allowed ${req.domain} for your sandbox. Try the request again.`);
-        }
-  } finally {
-    resolving.delete(req.id);
+    // Remove any rule that did go through, and clear the stale error.
+    await Promise.all(added.map((id) => sbx.syncRules(id).catch(() => {})));
+    hub.activity("config", req.agentId, `Couldn't allow ${req.domain} (${failure.slice(0, 160)}). The request is still open: try again or deny it.`);
+    return;
   }
+
+  settle(req, "allowed");
+  hub.activity("config", req.agentId, `You allowed ${req.domain} for ${decision === "everyone" ? "every agent" : who}`);
+  planner.notify(req.agentId, `The user allowed ${req.domain} for your sandbox. Try the request again.`);
+  // Other agents waiting on the same domain are covered too.
+  if (decision === "everyone")
+    for (const other of hub.snap.accessRequests ?? [])
+      if (other.status === "pending" && other.domain === req.domain && other.id !== req.id) {
+        settle(other, "allowed");
+        planner.notify(other.agentId, `The user allowed ${req.domain} for your sandbox. Try the request again.`);
+      }
 }

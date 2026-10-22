@@ -94,7 +94,8 @@ export class Hub {
     if (!s) return;
     const open = this.pendingAccess(id);
     if (open && patch.state !== undefined && patch.state !== "needs-input") {
-      this.held.set(id, { state: patch.state, note: patch.note ?? s.note });
+      // A patch without a note keeps the note from before the request, not the "Asking" one.
+      this.held.set(id, { state: patch.state, note: patch.note !== undefined ? patch.note : (this.held.get(id)?.note ?? null) });
       patch = { ...patch, state: "needs-input", note: `Asking: access to ${open.domain}` };
     }
     if (patch.state !== undefined && patch.state !== s.state) s.stateSince = now();
