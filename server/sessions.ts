@@ -5,7 +5,7 @@
 import { spawn as spawnPty, type IPty } from "@lydell/node-pty";
 import { existsSync, rmSync } from "node:fs";
 import { resolve, sep } from "node:path";
-import type { SetupCheckId, WorkspaceInfo } from "../src/data/types";
+import type { AgentCli, SetupCheckId, WorkspaceInfo } from "../src/data/types";
 import { adapters, localBinary } from "./adapters";
 import type { Hub } from "./hub";
 import { sessionBackend, type LaunchSpec, type TermHandle } from "./backends";
@@ -17,6 +17,14 @@ import { POLICY_NOT_INITIALIZED, runSetupChecks } from "./setup";
 import { ensureWorkspace, workspaceFor } from "./workspace";
 
 const TERM_ENV = { ...process.env, TERM: "xterm-256color", COLORTERM: "truecolor" } as Record<string, string>;
+
+// What the agents' screens show (Claude Code and Codex).
+const BUSY = /esc to interrupt/i; // the footer while a turn runs
+// A question or permission prompt (Claude Code's wording; the numbered-option line also covers Codex's).
+const DIALOG = /Enter to select|↑\/↓ to navigate|Do you want to (proceed|make this edit|create)|Would you like to|^\s*[❯›]\s*1\.\s/im;
+const PROMPT_READY = /⏵⏵|\? for shortcuts|Ask Codex to do anything/; // the input prompt is up
+const SCREEN_QUIET_MS = 4000; // only second-guess hooks after this much silence
+const STALE_WORKING_MS = 15_000; // "working" with an idle screen this long = a missed Stop
 
 export class Sessions {
   readonly backend = sessionBackend();
@@ -35,7 +43,11 @@ export class Sessions {
   envFileFor: (agentId: string) => string | null = () => null;
   /** Called when HQ reattaches to a session that was already running (e.g. after an HQ restart). */
   onSessionReattached: (agentId: string) => void = () => {};
+  /** When the agent's last hook arrived (from the inbox). */
+  lastHookAt: (agentId: string) => number = () => 0;
   private polling: NodeJS.Timeout | null = null;
+  /** Consecutive polls that saw a "working" agent's screen sitting idle. */
+  private idleScreens = new Map<string, number>();
 
   constructor(private hub: Hub, private agentToken: string) {}
 
@@ -82,9 +94,11 @@ export class Sessions {
           hub.setSession(id, { detail: "Allowing the sandbox to reach HQ…" });
           await this.ensurePolicy();
           hub.setSession(id, { detail: "Starting sandbox…" });
-          // Size only applies when sbx creates the sandbox; an existing one keeps its size.
+          // sbx only accepts a size when it creates the sandbox; an existing (stopped) one keeps its size,
+          // and passing --cpus/--memory again makes `sbx run` fail. "Recreate sandbox" applies a new size.
           const { cpus, memoryGb } = agent.sandbox.resources;
-          const size = [...(cpus ? ["--cpus", String(cpus)] : []), ...(memoryGb ? ["--memory", `${Math.round(memoryGb * 1024)}m`] : [])];
+          const isNew = !(await this.sandboxExists(name));
+          const size = !isNew ? [] : [...(cpus ? ["--cpus", String(cpus)] : []), ...(memoryGb ? ["--memory", `${Math.round(memoryGb * 1024)}m`] : [])];
           const env = envFile ? ["--env-file", envFile] : [];
           const args = launch.args.length ? ["--", ...launch.args] : [];
           spec = { file: "sbx", args: ["run", "--name", name, ...size, ...env, launch.sbxAgent, dir, ...args], envFile: null };
@@ -170,6 +184,16 @@ export class Sessions {
       }
     }
     return done;
+  }
+
+  /** True if sbx lists a sandbox with this name (running or stopped). */
+  private async sandboxExists(name: string): Promise<boolean> {
+    const r = await run("sbx", ["ls", "--json"], { timeoutMs: 10_000 });
+    try {
+      return ((JSON.parse(r.stdout) as { sandboxes?: { name: string }[] }).sandboxes ?? []).some((s) => s.name === name);
+    } catch {
+      return false;
+    }
   }
 
   /** Waits (up to ~90s) for sbx to list the agent's sandbox — creation can take a while the first time. */
@@ -341,6 +365,7 @@ export class Sessions {
             this.onSessionReattached(agent.id);
           }
           if (agent.cli === "codex") await this.watchCodexScreen(agent.id, name);
+          await this.reconcileFromScreen(agent.id, agent.cli, name);
         } else if (st.session.state === "running") {
           this.detach(agent.id);
           this.onSessionDown(agent.id);
@@ -379,6 +404,50 @@ export class Sessions {
       if (st.note === TRUST_NOTE || st.note === "Sandbox running" || st.note === "Running locally" || st.note === "Reattached")
         this.hub.setStatus(agentId, { state: "idle", note: "Ready" });
     }
+  }
+
+  /**
+   * Hooks are the main signal, but one can be missed or arrive late (a hook
+   * that timed out, an answer with no tool call after it). When hooks have been
+   * quiet for a while, the screen says what the agent is really doing, and a
+   * wrong state would otherwise hold back queued messages.
+   */
+  private async reconcileFromScreen(agentId: string, cli: AgentCli, name: string) {
+    const st = this.hub.status(agentId);
+    if (!st || st.session.state !== "running") return;
+    const quietMs = Date.now() - this.lastHookAt(agentId);
+    if (quietMs < SCREEN_QUIET_MS) return;
+    const screen = await this.backend.screenText(name, 10);
+    if (!screen) return;
+    const busy = BUSY.test(screen);
+    const dialog = DIALOG.test(screen);
+    const set = (state: "idle" | "working" | "needs-input", note: string) => {
+      if (process.env.HQ_DEBUG) log.info(`screen ${agentId}: ${st.state} → ${state} (${note})`);
+      this.hub.setStatus(agentId, { state, note });
+    };
+
+    if (st.state === "needs-input") {
+      if (dialog || st.note?.includes("Codex's folder")) return; // still waiting (Codex trust is watched separately)
+      this.idleScreens.delete(agentId);
+      if (busy) return set("working", "Continuing after your answer");
+      // Claude Code's prompts are known, so no prompt on screen means it was answered. For Codex, wait for a clear sign.
+      if (cli === "claude") set("idle", "Waiting for you");
+      return;
+    }
+    if (dialog) return set("needs-input", "Asking: answer the question in the terminal");
+    if (st.state === "working" && !busy && cli === "claude") {
+      // Twice in a row, so a gap between two steps isn't mistaken for the end of the turn.
+      const n = (this.idleScreens.get(agentId) ?? 0) + 1;
+      this.idleScreens.set(agentId, n);
+      if (n >= 2 && quietMs >= STALE_WORKING_MS) {
+        this.idleScreens.delete(agentId);
+        set("idle", "Finished — ready for the next instruction");
+      }
+      return;
+    }
+    this.idleScreens.delete(agentId);
+    // An idle agent's prompt is on screen, so typed messages will land (e.g. HQ missed SessionStart).
+    if (st.state === "idle" && !busy && PROMPT_READY.test(screen)) this.onSessionReattached(agentId);
   }
 
   // ------------------------------------------------------------ setup helper

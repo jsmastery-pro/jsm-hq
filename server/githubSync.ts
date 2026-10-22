@@ -2,12 +2,15 @@
 // comments → tell the author; passed → tell the lead; merged → task done.
 
 import type { PullRequest } from "../src/data/types";
-import { branchAgent, fetchPrs, taskIdOf, toPullRequest } from "./github";
+import { branchAgent, fetchPrs, RateLimited, taskIdOf, toPullRequest } from "./github";
 import type { Hub } from "./hub";
 import { log } from "./lib/log";
 import type { Planner } from "./planner";
 
-const POLL_MS = 20_000;
+const MIN_POLL_MS = 20_000; // never more often than this (nudges included)
+const MAX_POLL_MS = 5 * 60_000;
+const HQ_BUDGET = 1200; // GraphQL points per hour HQ may use; the rest of the 5,000 is left for the agents' gh commands
+const LOW_REMAINING = 800; // below this, poll at most every 2 minutes
 const label = { coderabbit: "CodeRabbit", greptile: "Greptile", copilot: "Copilot", human: "The reviewer", custom: "The review check" } as const;
 
 export class GitHubSync {
@@ -17,6 +20,9 @@ export class GitHubSync {
   private nudgeTimer: NodeJS.Timeout | null = null;
   private busy = false;
   private lastError: string | null = null;
+  private lastFetch = 0;
+  private interval = MIN_POLL_MS;
+  private pausedUntil = 0;
 
   constructor(private hub: Hub, private planner: Planner, private repo: string | null) {}
 
@@ -25,8 +31,7 @@ export class GitHubSync {
       log.warn("No GitHub remote: PRs and reviews are off.");
       return;
     }
-    void this.refresh();
-    this.timer = setInterval(() => void this.refresh(), POLL_MS);
+    void this.tick();
     // Check sooner when an agent finishes a turn (it may have run `gh pr create`)
     // or reports a PR with set_my_status in-review.
     let reviewCfg = JSON.stringify(this.hub.snap.config.workflow.review);
@@ -44,24 +49,43 @@ export class GitHubSync {
   }
 
   stop() {
-    if (this.timer) clearInterval(this.timer);
+    if (this.timer) clearTimeout(this.timer);
+    if (this.nudgeTimer) clearTimeout(this.nudgeTimer);
   }
 
-  /** Refresh soon (debounced): an agent just opened a PR or finished a turn. */
+  /** One poll, then schedule the next at the current interval. */
+  private async tick() {
+    await this.refresh();
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = setTimeout(() => void this.tick(), Math.max(this.interval, this.pausedUntil - Date.now()));
+  }
+
+  /** Refresh soon (debounced): an agent just opened a PR or finished a turn. Still respects the minimum gap and any pause. */
   nudge(delayMs = 3000) {
     if (!this.repo) return;
     if (this.nudgeTimer) clearTimeout(this.nudgeTimer);
-    this.nudgeTimer = setTimeout(() => void this.refresh(), delayMs);
+    const wait = Math.max(delayMs, this.lastFetch + MIN_POLL_MS - Date.now(), this.pausedUntil - Date.now());
+    this.nudgeTimer = setTimeout(() => void this.refresh(), wait);
+  }
+
+  /** Poll often enough to stay within HQ's share of the budget; slow down when it runs low. */
+  private pace(rate: { cost: number; remaining: number } | null) {
+    if (!rate) return;
+    const forBudget = Math.ceil((Math.max(1, rate.cost) * 3_600_000) / HQ_BUDGET);
+    const low = rate.remaining < LOW_REMAINING ? 120_000 : 0;
+    this.interval = Math.min(MAX_POLL_MS, Math.max(MIN_POLL_MS, forBudget, low));
   }
 
   async refresh() {
-    if (!this.repo || this.busy) return;
+    if (!this.repo || this.busy || Date.now() < this.pausedUntil) return;
     if (!this.hub.snap.setup.checks.find((c) => c.id === "gh" && c.status === "ok")) return;
     this.busy = true;
+    this.lastFetch = Date.now();
     try {
-      const { open, merged } = await fetchPrs(this.repo);
+      const { open, merged, rate } = await fetchPrs(this.repo);
       if (this.lastError) log.info("GitHub reachable again");
       this.lastError = null;
+      this.pace(rate);
       const wf = this.hub.snap.config.workflow;
       const team = new Set(this.hub.snap.config.team.map((a) => a.id));
       const next = [...open, ...merged].map((gh) => {
@@ -85,6 +109,17 @@ export class GitHubSync {
       this.prev = new Map(next.map((p) => [p.number, p]));
       this.first = false;
     } catch (err) {
+      if (err instanceof RateLimited) {
+        this.pausedUntil = err.resetAt.getTime() + 5000;
+        const at = err.resetAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        const msg = `GitHub API rate limit reached (shared with your agents' gh commands). PR sync paused until ${at}.`;
+        if (msg !== this.lastError) {
+          log.warn(msg);
+          this.hub.activity("config", null, msg);
+        }
+        this.lastError = msg;
+        return;
+      }
       const msg = err instanceof Error ? err.message : String(err);
       if (msg !== this.lastError) log.warn(`GitHub: ${msg}`);
       this.lastError = msg;
