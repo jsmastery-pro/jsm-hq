@@ -31,7 +31,10 @@ export function ensureSkillCache(slug: string, specs: SkillSpec[]): Promise<void
     await run("git", ["init", "-q"], { cwd: dir }); // the CLI installs into the current project
     const failed: string[] = [];
     for (const spec of specs) {
-      const r = await run("npx", ["-y", "skills", "add", spec.source, "--skill", ...spec.skills, "-a", "claude-code", "codex", "-y", "--copy"], {
+      const args = ["-y", "skills", "add", spec.source, "--skill", ...spec.skills, "-a", "claude-code", "codex", "-y", "--copy"];
+      // npx is a .cmd shim on Windows, which only runs through cmd.exe.
+      const [cmd, cmdArgs] = process.platform === "win32" ? ["cmd.exe", ["/d", "/s", "/c", "npx", ...args]] : ["npx", args];
+      const r = await run(cmd, cmdArgs, {
         cwd: dir,
         timeoutMs: 180_000,
       });
@@ -41,9 +44,15 @@ export function ensureSkillCache(slug: string, specs: SkillSpec[]): Promise<void
     writeFileSync(stamp, key(specs));
   };
   // One install at a time per HQ; a second caller waits for the first.
-  const next = (installing ?? Promise.resolve()).catch(() => {}).then(run_);
-  installing = next.finally(() => {
-    if (installing === next) installing = null;
+  const next = (installing ?? Promise.resolve()).then(run_);
+  // What's kept for the next caller never rejects (an unhandled rejection would stop HQ).
+  const settled = next.then(
+    () => {},
+    () => {},
+  );
+  installing = settled;
+  void settled.then(() => {
+    if (installing === settled) installing = null;
   });
   return next;
 }

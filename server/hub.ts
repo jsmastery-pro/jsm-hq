@@ -80,9 +80,10 @@ export class Hub {
 
   /** An access request was answered: drop back to what the agent is really doing (unless another is open). */
   accessAnswered(agentId: string) {
+    // Another request from this agent is still open: keep waiting (and keep what it was doing).
+    if (this.pendingAccess(agentId)) return;
     const held = this.held.get(agentId);
     this.held.delete(agentId);
-    if (this.pendingAccess(agentId)) return;
     const s = this.status(agentId);
     if (s?.state === "needs-input" && s.note?.startsWith("Asking: access to"))
       this.setStatus(agentId, held ?? { state: "working", note: "Access answered" });
