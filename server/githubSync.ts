@@ -84,7 +84,7 @@ export class GitHubSync {
     this.busy = true;
     this.lastFetch = Date.now();
     try {
-      const { open, merged, rate } = await fetchPrs(this.repo);
+      const { open, merged, closed, rate } = await fetchPrs(this.repo);
       if (this.lastError) log.info("GitHub reachable again");
       this.lastError = null;
       this.pace(rate);
@@ -97,11 +97,13 @@ export class GitHubSync {
         const authorId = task?.ownerId ?? (fromBranch && team.has(fromBranch) ? fromBranch : "");
         return toPullRequest(gh, wf.review.tool, wf.review.enabled, task?.id ?? taskId ?? "", authorId);
       });
-      // PRs we showed as open that are now neither open nor recently merged were closed. Only
-      // trust that when the open list is complete; a full page may have left older open PRs out.
+      // PRs we showed as open that are now neither open nor recently merged were closed. A full page of
+      // open PRs may have left older ones out, so then only the recently-closed list proves it.
       const seen = new Set(next.map((p) => p.number));
       const complete = open.length < OPEN_LIMIT;
-      for (const old of this.prev.values()) if (!seen.has(old.number) && !old.merged && !old.closed) next.push(complete ? { ...old, closed: true } : old);
+      const recentlyClosed = new Set(closed);
+      for (const old of this.prev.values())
+        if (!seen.has(old.number) && !old.merged && !old.closed) next.push(complete || recentlyClosed.has(old.number) ? { ...old, closed: true } : old);
 
       for (const pr of next) {
         const old = this.prev.get(pr.number);

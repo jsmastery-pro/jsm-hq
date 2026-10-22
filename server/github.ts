@@ -27,6 +27,7 @@ const QUERY = `query($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
     open: pullRequests(states: OPEN, first: ${OPEN_LIMIT}, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { ${BASE_FIELDS} ${REVIEW_FIELDS} } }
     merged: pullRequests(states: MERGED, first: 10, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { ${BASE_FIELDS} } }
+    closed: pullRequests(states: CLOSED, first: 10, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { number } }
   }
 }`;
 
@@ -83,7 +84,7 @@ async function rateLimited(message: string): Promise<RateLimited> {
 
 const EMPTY_REVIEW = { reviews: { nodes: [] }, reviewThreads: { nodes: [] }, commits: { nodes: [] } };
 
-export async function fetchPrs(repo: string): Promise<{ open: GhPr[]; merged: GhPr[]; rate: RateLimit | null }> {
+export async function fetchPrs(repo: string): Promise<{ open: GhPr[]; merged: GhPr[]; closed: number[]; rate: RateLimit | null }> {
   const [owner, name] = repo.split("/");
   const r = await run("gh", ["api", "graphql", "-f", `query=${QUERY}`, "-F", `owner=${owner}`, "-F", `name=${name}`], { timeoutMs: 30_000 });
   if (!r.ok) {
@@ -92,7 +93,7 @@ export async function fetchPrs(repo: string): Promise<{ open: GhPr[]; merged: Gh
     throw new Error(msg);
   }
   const data = JSON.parse(r.stdout) as {
-    data?: { rateLimit?: RateLimit; repository?: { open: { nodes: GhPr[] }; merged: { nodes: Omit<GhPr, keyof typeof EMPTY_REVIEW>[] } } };
+    data?: { rateLimit?: RateLimit; repository?: { open: { nodes: GhPr[] }; merged: { nodes: Omit<GhPr, keyof typeof EMPTY_REVIEW>[] }; closed?: { nodes: { number: number }[] } } };
     errors?: { message: string; type?: string }[];
   };
   const limited = data.errors?.find((e) => e.type === "RATE_LIMITED" || /rate limit/i.test(e.message));
@@ -101,6 +102,7 @@ export async function fetchPrs(repo: string): Promise<{ open: GhPr[]; merged: Gh
   return {
     open: data.data.repository.open.nodes,
     merged: data.data.repository.merged.nodes.map((pr) => ({ ...pr, ...EMPTY_REVIEW })),
+    closed: (data.data.repository.closed?.nodes ?? []).map((n) => n.number),
     rate: data.data.rateLimit ?? null,
   };
 }
