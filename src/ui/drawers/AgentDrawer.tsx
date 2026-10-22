@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { CLI_LABEL, HUMAN_ID, type AccessRequest, type AgentConfig, type AgentStatus, type OfficeSnapshot } from "../../data/types";
 import { officeActions, useOffice } from "../../store/office";
 import { ui, type AgentTab } from "../../store/ui";
@@ -55,6 +55,7 @@ export function AgentDrawer({ id, initialTab }: { id: string; initialTab?: Agent
           onChange={setTab}
           tabs={[
             { id: "terminal", label: "Terminal" },
+            { id: "shell", label: "Shell" },
             { id: "task", label: "Task" },
             { id: "sandbox", label: "Sandbox" },
             { id: "messages", label: `Messages${unread ? ` · ${unread}` : ""}` },
@@ -68,11 +69,44 @@ export function AgentDrawer({ id, initialTab }: { id: string; initialTab?: Agent
           ) : (
             <NotRunning agent={agent} status={status} />
           ))}
+        {tab === "shell" && <ShellTab agent={agent} status={status} />}
         {tab === "task" && <TaskTab snap={snap} agent={agent} taskId={status.currentTaskId} />}
         {tab === "sandbox" && <SandboxTab snap={snap} agent={agent} />}
         {tab === "messages" && <MessagesTab snap={snap} agent={agent} />}
       </div>
     </>
+  );
+}
+
+/** A plain shell inside the agent's sandbox (Local mode: in its folder), beside the agent's own session. */
+function ShellTab({ agent, status }: { agent: AgentConfig; status: AgentStatus }) {
+  const running = status.session.state === "running";
+  const [n, setN] = useState(0); // bumps to open a fresh shell
+  useEffect(() => {
+    if (running) officeActions.openShell(agent.id);
+  }, [agent.id, running, n]);
+  if (!running)
+    return <div className="p-4 text-[14px] text-muted">Start {agent.name} first. The shell opens inside {agent.mode === "sandbox" ? "their sandbox" : "their folder"}.</div>;
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex items-center gap-2 border-b-[3px] border-ink bg-cream-2 px-3 py-1 text-[12px] text-muted">
+        <span className="min-w-0 flex-1 truncate">
+          {agent.mode === "sandbox" ? `A shell in ${agent.name}'s sandbox, beside the agent` : `Your shell in ${agent.name}'s folder`}
+        </span>
+        <button
+          className="btn px-2 text-[12px] text-ink"
+          onClick={() => {
+            officeActions.closeShell(agent.id);
+            setN((x) => x + 1);
+          }}
+        >
+          New shell
+        </button>
+      </div>
+      <div className="min-h-0 flex-1">
+        <TerminalView agentId={`shell:${agent.id}`} />
+      </div>
+    </div>
   );
 }
 

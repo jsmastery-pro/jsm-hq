@@ -56,6 +56,8 @@ export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inb
 
   const commands: Record<string, (...args: unknown[]) => unknown> = {
     sendTerminalInput: (id, data) => sessions.input(str(id, 80), str(data, 100_000)),
+    openShell: (id) => sessions.openShell(str(id, 80)),
+    closeShell: (id) => sessions.closeShell(str(id, 80)),
     resizeTerminal: (id, cols, rows) => sessions.resize(str(id, 80), num(cols), num(rows)),
     startAgent: (id) => sessions.start(str(id, 80)),
     stopAgent: (id) => sessions.stop(str(id, 80)),
