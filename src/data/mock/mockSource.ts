@@ -164,6 +164,7 @@ export function createMockSource(): OfficeDataSource {
     stopAgent(id) {
       const st = world.status(id);
       if (!st) return;
+      if (openShells.has(`shell:${id}`)) source.closeShell(id);
       sim.stopAgent(id);
       world.setStatus(id, { state: "idle", currentTaskId: null, note: "Stopped", session: { ...st.session, state: "stopped", detail: null } });
       world.activity("session", id, `${world.name(id)}'s session stopped`);
@@ -252,6 +253,7 @@ export function createMockSource(): OfficeDataSource {
     removeAgent(id) {
       const agent = world.cfg(id);
       if (!agent || agent.isLead) return;
+      if (openShells.has(`shell:${id}`)) source.closeShell(id);
       sim.stopAgent(id);
       world.snap.config.team = world.snap.config.team.filter((a) => a.id !== id);
       world.snap.agents = world.snap.agents.filter((a) => a.agentId !== id);

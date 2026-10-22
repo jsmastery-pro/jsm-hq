@@ -318,13 +318,23 @@ export class Sessions {
     const r = Math.max(5, Math.min(200, Math.floor(rows)));
     const same = this.sizes.get(id)?.cols === c && this.sizes.get(id)?.rows === r;
     this.sizes.set(id, { cols: c, rows: r });
-    const pty = id.startsWith("setup:") ? this.fixes.get(id) : id.startsWith("shell:") ? this.shells.get(id) : this.terms.get(id);
+    const current = () => (id.startsWith("setup:") ? this.fixes.get(id) : id.startsWith("shell:") ? this.shells.get(id) : this.terms.get(id));
+    const pty = current();
     if (!pty) return;
+    // Resizing a terminal that just exited throws on Windows; a throw in a timer would stop HQ.
+    const safeResize = (cs: number, rs: number) => {
+      if (current() !== pty) return;
+      try {
+        pty.resize(cs, rs);
+      } catch {
+        /* it closed in between */
+      }
+    };
     // A same-size resize doesn't redraw; nudge it so a newly opened terminal gets a full screen.
     if (same) {
-      pty.resize(c, Math.max(5, r - 1));
-      setTimeout(() => pty.resize(c, r), 60);
-    } else pty.resize(c, r);
+      safeResize(c, Math.max(5, r - 1));
+      setTimeout(() => safeResize(c, r), 60);
+    } else safeResize(c, r);
   }
 
   async openWorkspace(id: string) {
