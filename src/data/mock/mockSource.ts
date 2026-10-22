@@ -1,6 +1,7 @@
 import { agentPalette } from "../../theme/tokens";
 import type { OfficeDataSource, OfficeEvent, SimSpeed } from "../source";
-import type { AgentConfig, AgentPatch, Board, NewAgentInput, ProjectConfig, SandboxSettings, WorkflowPatch } from "../types";
+import { stackDomains } from "../stack";
+import type { AccessRequest, AgentConfig, AgentPatch, Board, NewAgentInput, ProjectConfig, SandboxSettings, WorkflowPatch } from "../types";
 import { defaultPresetId, presets, type Preset } from "./presets";
 import { Simulation } from "./simulation";
 import * as T from "./terminalScripts";
@@ -360,6 +361,35 @@ export function createMockSource(): OfficeDataSource {
       // The demo never shows the welcome screen.
     },
 
+    updateStack(stack) {
+      if (stack) world.snap.config.stack = structuredClone(stack);
+      else delete world.snap.config.stack;
+      world.configChanged();
+    },
+
+    resolveAccess(requestId, decision) {
+      const req = world.snap.accessRequests?.find((r) => r.id === requestId);
+      if (!req || req.status !== "pending") return;
+      req.status = decision === "deny" ? "denied" : "allowed";
+      world.emit({ type: "access.updated", request: { ...req } });
+      const who = world.name(req.agentId);
+      if (decision === "deny") {
+        world.activity("config", req.agentId, `You denied ${who} access to ${req.domain}`);
+        world.write(req.agentId, [{ text: `\x1b[38;2;255;0;77mhq ▸ access to ${req.domain} denied — continuing without it\x1b[0m` }]);
+      } else {
+        const ids = decision === "everyone" ? world.snap.config.team.filter((a) => a.mode === "sandbox").map((a) => a.id) : [req.agentId];
+        for (const id of ids) {
+          const a = world.cfg(id);
+          if (a && !a.sandbox.allow.includes(req.domain)) a.sandbox.allow = [...a.sandbox.allow, req.domain];
+          hostCmd(id, `sbx policy allow network --sandbox hq-mock-${id} ${req.domain} (mock)`);
+        }
+        world.configChanged();
+        syncSbx();
+        world.activity("config", req.agentId, `You allowed ${req.domain} for ${decision === "everyone" ? "every agent" : who}`);
+      }
+      if (world.status(req.agentId)?.state === "needs-input") world.setStatus(req.agentId, { state: "working", note: decision === "deny" ? "Continuing without it" : `Reading ${req.domain}` });
+    },
+
     dev: {
       presets: presets.map((p) => ({ id: p.id, label: p.label })),
       loadPreset(id) {
@@ -369,6 +399,23 @@ export function createMockSource(): OfficeDataSource {
       },
       setSpeed(multiplier: SimSpeed) {
         world.speed = multiplier;
+      },
+      simulateAccessRequest() {
+        const busy = world.snap.agents.filter((s) => s.session.state === "running" && s.state !== "needs-input" && !world.cfg(s.agentId)?.isLead);
+        const st = busy[Math.floor(Math.random() * busy.length)];
+        if (!st) return;
+        // A domain this agent can't reach yet: from the stack if any, else a common docs site.
+        const allowed = new Set(world.cfg(st.agentId)?.sandbox.allow ?? []);
+        const open = (list: string[]) => list.filter((d) => !d.startsWith("*.") && !allowed.has(d));
+        const fromStack = open(stackDomains(world.snap.config.stack).map((d) => d.domain));
+        const pool = fromStack.length ? fromStack : open(["posthog.com", "docs.stripe.com", "hono.dev", "docs.arcjet.com"]);
+        const domain = pool[Math.floor(Math.random() * pool.length)] ?? "example.com";
+        const req: AccessRequest = { id: world.id("ar"), agentId: st.agentId, domain, reason: `Read the ${domain} docs before integrating it`, at: new Date().toISOString(), status: "pending" };
+        world.snap.accessRequests = [req, ...(world.snap.accessRequests ?? [])].slice(0, 30);
+        world.emit({ type: "access.updated", request: { ...req } });
+        world.setStatus(st.agentId, { state: "needs-input", note: `Asking: access to ${domain}` });
+        world.activity("agent.needs-input", st.agentId, `${world.name(st.agentId)} needs you: access to ${domain}`);
+        world.write(st.agentId, [{ text: `\x1b[38;2;255;163;0mhq ▸ request_access ${domain} — "${req.reason}" (waiting for you)\x1b[0m` }]);
       },
     },
   };

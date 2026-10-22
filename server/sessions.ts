@@ -4,6 +4,8 @@
 
 import { spawn as spawnPty, type IPty } from "@lydell/node-pty";
 import { existsSync, rmSync } from "node:fs";
+import { stackSkills } from "../src/data/stack";
+import { hasHqSkills, prepareSkills } from "./skills";
 import { resolve, sep } from "node:path";
 import type { AgentCli, SetupCheckId, WorkspaceInfo } from "../src/data/types";
 import { adapters, localBinary } from "./adapters";
@@ -84,6 +86,12 @@ export class Sessions {
       const dir = await ensureWorkspace(agent, hub.slug, hub.repo);
       const adapter = adapters[agent.cli];
       await adapter.writeFiles(dir, agent, hub.snap.config, this.agentToken);
+      const specs = stackSkills(hub.snap.config.stack);
+      if (specs.length || hasHqSkills(hub.slug, dir)) {
+        hub.setSession(id, { detail: "Installing agent skills…" });
+        const skills = await prepareSkills(hub.slug, dir, specs);
+        if (skills.error) hub.activity("session", id, `${agent.name}: some agent skills didn't install (${skills.error.slice(0, 120)}). Starting anyway.`);
+      }
       if (!(await this.backend.exists(name))) {
         const launch = adapter.launch(agent, dir);
         const envFile = this.envFileFor(id);
@@ -443,11 +451,14 @@ export class Sessions {
       if (dialog || st.note?.includes("Codex's folder")) return; // still waiting (Codex trust is watched separately)
       this.idleScreens.delete(agentId);
       if (busy) return set("working", "Continuing after your answer");
-      // Claude Code's prompts are known, so no prompt on screen means it was answered. For Codex, wait for a clear sign.
-      if (cli === "claude") set("idle", "Waiting for you");
+      // Idle only on a positive sign: Claude Code's normal input footer is back. An unfamiliar
+      // prompt keeps "needs you", so queued messages aren't typed into it. Codex: wait for "busy".
+      if (cli === "claude" && PROMPT_READY.test(screen)) set("idle", "Waiting for you");
       return;
     }
     if (dialog) return set("needs-input", "Asking: answer the question in the terminal");
+    // A missed UserPromptSubmit: the agent is busy, so don't type into it.
+    if (st.state === "idle" && busy) return set("working", "Working");
     if (st.state === "working" && !busy && cli === "claude") {
       // Twice in a row, so a gap between two steps isn't mistaken for the end of the turn.
       const n = (this.idleScreens.get(agentId) ?? 0) + 1;

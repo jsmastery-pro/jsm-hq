@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { CLI_LABEL, HUMAN_ID, type AgentConfig, type AgentStatus, type OfficeSnapshot } from "../../data/types";
+import { CLI_LABEL, HUMAN_ID, type AccessRequest, type AgentConfig, type AgentStatus, type OfficeSnapshot } from "../../data/types";
 import { officeActions, useOffice } from "../../store/office";
 import { ui, type AgentTab } from "../../store/ui";
 import { ago, Dot, Portrait, ReviewChip, SectionTitle, StateChip, Tabs, useNow } from "../kit";
@@ -22,6 +22,7 @@ export function AgentDrawer({ id, initialTab }: { id: string; initialTab?: Agent
     );
   }
   const unread = snap.messages.filter((m) => m.toId === id).length;
+  const access = snap.accessRequests?.find((r) => r.agentId === id && r.status === "pending");
 
   return (
     <>
@@ -38,11 +39,15 @@ export function AgentDrawer({ id, initialTab }: { id: string; initialTab?: Agent
         </div>
       </DrawerHeader>
       <SessionBar agent={agent} status={status} />
-      {status.note && (
-        <div className={`border-b-[3px] border-ink px-3 py-1.5 text-[14px] ${status.state === "needs-input" ? "bg-[#ffe1ea] text-red" : "bg-cream-2"}`}>
-          {status.note}
-          {status.state === "needs-input" && <span className="ml-2 text-muted">— answer in the terminal and press Enter</span>}
-        </div>
+      {access ? (
+        <AccessCard request={access} agent={agent} />
+      ) : (
+        status.note && (
+          <div className={`border-b-[3px] border-ink px-3 py-1.5 text-[14px] ${status.state === "needs-input" ? "bg-[#ffe1ea] text-red" : "bg-cream-2"}`}>
+            {status.note}
+            {status.state === "needs-input" && <span className="ml-2 text-muted">— answer in the terminal and press Enter</span>}
+          </div>
+        )
       )}
       <div className="border-b-[3px] border-ink px-3 py-2">
         <Tabs
@@ -100,6 +105,29 @@ function ShellTab({ agent, status }: { agent: AgentConfig; status: AgentStatus }
       </div>
       <div className="min-h-0 flex-1">
         <TerminalView agentId={`shell:${agent.id}`} />
+      </div>
+    </div>
+  );
+}
+
+/** The agent asked (request_access) to reach a domain its sandbox blocks. */
+function AccessCard({ request, agent }: { request: AccessRequest; agent: AgentConfig }) {
+  return (
+    <div className="border-b-[3px] border-ink bg-[#ffe1ea] px-3 py-2">
+      <div className="text-[14px] text-red">
+        <b>{agent.name}</b> wants to reach <b className="font-term text-[17px]">{request.domain}</b>
+      </div>
+      <div className="mb-2 text-[13px] text-muted">“{request.reason}”</div>
+      <div className="flex flex-wrap gap-2">
+        <button className="btn px-2 text-[13px]" onClick={() => officeActions.resolveAccess(request.id, "agent")}>
+          Allow for {agent.name}
+        </button>
+        <button className="btn px-2 text-[13px]" onClick={() => officeActions.resolveAccess(request.id, "everyone")}>
+          Allow for everyone
+        </button>
+        <button className="btn px-2 text-[13px]" onClick={() => officeActions.resolveAccess(request.id, "deny")}>
+          Deny
+        </button>
       </div>
     </div>
   );

@@ -90,6 +90,8 @@ export function createWsSource(token: string): OfficeDataSource {
     completeWelcome: (input) => send("completeWelcome", input),
     openShell: (id) => send("openShell", id),
     closeShell: (id) => send("closeShell", id),
+    updateStack: (stack) => send("updateStack", stack),
+    resolveAccess: (requestId, decision) => send("resolveAccess", requestId, decision),
   };
   return source;
 }

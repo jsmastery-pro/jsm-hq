@@ -2,8 +2,7 @@
 // the agent is launched. Everything else (hooks → state, Team MCP, delivery)
 // is shared — Codex and Claude Code send the same hook payloads.
 
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { agentWrite } from "./lib/agentFs";
 import type { AgentCli, AgentConfig, HqConfig } from "../src/data/types";
 import { excludeFromGit, HOOK_SCRIPT, hookCommand, hookScriptFor, hqUrl, MCP_CONFIG, roleMd, writeClaudeFiles, writeHookScript } from "./agentFiles";
 import { run } from "./lib/exec";
@@ -65,9 +64,8 @@ const codex: CliAdapter = {
     // A repo that commits its own Codex config can't take HQ's without changing a tracked file.
     const tracked = await run("git", ["ls-files", "--error-unmatch", CODEX_CONFIG], { cwd: dir });
     if (tracked.ok) throw new Error(`This repo commits ${CODEX_CONFIG}, so HQ can't add its Codex settings without changing a tracked file. Use Claude Code for this agent, or remove that file from the repo.`);
-    writeFileSync(join(dir, "ROLE.md"), roleMd(agent, cfg));
-    mkdirSync(join(dir, ".codex"), { recursive: true });
-    writeFileSync(join(dir, CODEX_CONFIG), codexConfig(agent, cfg, token, dir), { mode: 0o600 });
+    agentWrite(dir, "ROLE.md", roleMd(agent, cfg));
+    agentWrite(dir, CODEX_CONFIG, codexConfig(agent, cfg, token, dir), { mode: 0o600 });
     if (hookScriptFor(agent, dir)) writeHookScript(dir);
     excludeFromGit(dir, ["ROLE.md", CODEX_CONFIG, HOOK_SCRIPT]);
   },
