@@ -65,7 +65,8 @@ export function writeHookScript(dir: string) {
   writeFileSync(join(dir, HOOK_SCRIPT), HOOK_SCRIPT_SOURCE);
 }
 
-const HOOK_EVENTS = ["SessionStart", "UserPromptSubmit", "PreToolUse", "Notification", "Stop", "SessionEnd"] as const;
+// PostToolUse: the moment a question or permission prompt is answered, the tool completes.
+const HOOK_EVENTS = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Notification", "Stop", "SessionEnd"] as const;
 
 /** URL agents use to reach HQ: through the sandbox proxy, or straight to localhost. */
 export function hqUrl(agent: AgentConfig, port: number): string {
@@ -154,7 +155,7 @@ export function writeSettings(dir: string, agent: AgentConfig, port: number, tok
     const ours: HookEntry["hooks"] = [{ type: "command", command: hookCommand(url, token, agent.id, event, script), timeout: 5 }];
     if (event === "SessionStart")
       ours.unshift({ type: "command", command: script ? `node "${script}" --print-role ${MARK_ARG}` : `cat "$CLAUDE_PROJECT_DIR/ROLE.md" 2>/dev/null || true ${MARK}` });
-    hooks[event] = [...kept, event === "PreToolUse" ? { matcher: "*", hooks: ours } : { hooks: ours }];
+    hooks[event] = [...kept, event === "PreToolUse" || event === "PostToolUse" ? { matcher: "*", hooks: ours } : { hooks: ours }];
   }
   // Let the agent use the Team MCP without a permission prompt for every call.
   const allow = new Set([...(settings.permissions?.allow ?? []), "mcp__hq"]);
