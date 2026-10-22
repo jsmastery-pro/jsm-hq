@@ -115,7 +115,7 @@ export function createMockSource(): OfficeDataSource {
     },
 
     sendTerminalInput(agentId, data) {
-      if (agentId.startsWith("shell:")) return demoShell(agentId, data);
+      if (agentId.startsWith("shell:")) return openShells.has(agentId) ? demoShell(agentId, data) : undefined;
       // Echo printable input; act on Enter.
       let buf = inputBuf.get(agentId) ?? "";
       for (const ch of data) {
@@ -344,11 +344,13 @@ export function createMockSource(): OfficeDataSource {
       const tid = `shell:${id}`;
       if (openShells.has(tid)) return;
       openShells.add(tid);
+      inputBuf.delete(tid);
       shellOut(tid, `\x1b[2m$ sbx exec -it hq-mock-${id} bash   (demo)\x1b[0m\r\n${shellPrompt(tid)}`);
     },
 
     closeShell(id) {
       openShells.delete(`shell:${id}`);
+      inputBuf.delete(`shell:${id}`);
       shellOut(`shell:${id}`, "\r\n\x1b[2m[shell closed]\x1b[0m\r\n");
     },
 

@@ -34,6 +34,7 @@ export class Sessions {
   /** "Shell" tab: a plain shell in the agent's sandbox (or folder), separate from its agent session. */
   private shells = new Map<string, IPty>();
   private closing = new WeakSet<IPty>(); // closed on purpose: no "[shell closed]" line
+  private shellGen = new Map<string, number>();
   private policyOk = false;
   /** Called whenever an agent's Claude Code session goes away (stop, restart, crash). */
   onSessionDown: (agentId: string) => void = () => {};
@@ -352,6 +353,7 @@ export class Sessions {
             const detail = (await this.backend.screenText(name, 6)) || `Exited with code ${pane.exitStatus}`;
             await this.backend.kill(name);
             this.detach(agent.id);
+            this.closeShell(agent.id);
             this.onSessionDown(agent.id);
             this.hub.setSession(agent.id, { state: "failed", detail });
             this.hub.setStatus(agent.id, { state: "idle", note: "Session ended" });
@@ -368,6 +370,7 @@ export class Sessions {
           await this.reconcileFromScreen(agent.id, agent.cli, name);
         } else if (st.session.state === "running") {
           this.detach(agent.id);
+          this.closeShell(agent.id);
           this.onSessionDown(agent.id);
           this.hub.setSession(agent.id, { state: "stopped", detail: null });
           this.hub.setStatus(agent.id, { state: "idle", note: "Stopped" });
@@ -489,35 +492,50 @@ export class Sessions {
     const st = this.hub.status(agentId);
     if (!agent || this.shells.has(id)) return;
     if (st?.session.state !== "running") return this.hub.terminal(id, "\x1b[2mStart the agent first; the shell opens inside its sandbox.\x1b[0m\r\n");
+    // Bumped by closeShell, so an open still starting when you press "New shell" is dropped.
+    const gen = (this.shellGen.get(id) ?? 0) + 1;
+    this.shellGen.set(id, gen);
     const dir = st.session.workspace ?? workspaceFor(agent, this.hub.slug);
     const win = process.platform === "win32";
-    let file: string;
-    let args: string[];
+    let pty: IPty;
     let banner: string;
-    if (agent.mode === "sandbox") {
-      const name = this.name(agentId);
-      // bash when the image has it, else sh; start in the agent's folder (same path inside the sandbox).
-      ({ file, args } = await resolveCommand("sbx", ["exec", "-it", ...(win ? [] : ["-w", dir]), name, "sh", "-c", "command -v bash >/dev/null && exec bash -l || exec sh -l"]));
-      banner = `sbx exec -it ${name} bash`;
-    } else {
-      file = win ? "powershell.exe" : process.env.SHELL || "/bin/sh";
-      args = win ? ["-NoLogo"] : ["-l"];
-      banner = `${file} in ${dir}`;
+    try {
+      let file: string;
+      let args: string[];
+      if (agent.mode === "sandbox") {
+        const name = this.name(agentId);
+        // bash when the image has it, else sh; start in the agent's folder (same path inside the sandbox).
+        ({ file, args } = await resolveCommand("sbx", ["exec", "-it", ...(win ? [] : ["-w", dir]), name, "sh", "-c", "command -v bash >/dev/null && exec bash -l || exec sh -l"]));
+        banner = `sbx exec -it ${name} bash`;
+      } else {
+        file = win ? "powershell.exe" : process.env.SHELL || "/bin/sh";
+        args = win ? ["-NoLogo"] : ["-l"];
+        banner = `${file} in ${dir}`;
+      }
+      if (this.shellGen.get(id) !== gen || this.shells.has(id) || this.hub.status(agentId)?.session.state !== "running") return;
+      const size = this.sizes.get(id) ?? { cols: 100, rows: 30 };
+      pty = spawnPty(file, args, { name: "xterm-256color", cols: size.cols, rows: size.rows, cwd: dir, env: TERM_ENV });
+    } catch (err) {
+      // e.g. sbx not on PATH: show it in the Shell tab instead of failing silently.
+      return this.hub.terminal(id, `\x1b[31mCouldn't open a shell: ${err instanceof Error ? err.message : String(err)}\x1b[0m\r\n`);
     }
-    const size = this.sizes.get(id) ?? { cols: 100, rows: 30 };
-    const pty = spawnPty(file, args, { name: "xterm-256color", cols: size.cols, rows: size.rows, cwd: dir, env: TERM_ENV });
     this.shells.set(id, pty);
     this.hub.terminal(id, `\x1b[2m$ ${banner}\x1b[0m\r\n`);
+    const startedAt = Date.now();
     pty.onData((d) => this.hub.terminal(id, d));
     pty.onExit(({ exitCode }) => {
       if (this.shells.get(id) === pty) this.shells.delete(id);
       if (this.closing.has(pty)) return;
+      // Failing right away usually means the command itself couldn't run (e.g. sbx not installed or on PATH).
+      if (exitCode && Date.now() - startedAt < 2500)
+        return this.hub.terminal(id, `\r\n\x1b[31m[couldn't start the shell (exit ${exitCode}). ${agent.mode === "sandbox" ? "Check that sbx is installed and you're signed in (sbx login)." : "Check your shell."}]\x1b[0m\r\n`);
       this.hub.terminal(id, `\r\n\x1b[2m[shell closed${exitCode ? ` (exit ${exitCode})` : ""}. Press "New shell" to open another.]\x1b[0m\r\n`);
     });
   }
 
   closeShell(agentId: string) {
     const id = `shell:${agentId}`;
+    this.shellGen.set(id, (this.shellGen.get(id) ?? 0) + 1);
     const pty = this.shells.get(id);
     if (!pty) return;
     this.closing.add(pty);
