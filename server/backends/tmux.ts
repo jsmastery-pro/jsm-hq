@@ -16,7 +16,9 @@ const q = (s: string) => (/^[A-Za-z0-9_\-.,:/=@%+]+$/.test(s) ? s : shq(s));
  * (no $-expansion, spaces kept; comments and blank lines skipped). HQ itself never reads the file.
  */
 export const loadEnvFile = (quotedPath: string) =>
-  `while IFS= read -r l || [ -n "$l" ]; do case "$l" in [A-Za-z_]*=*) export "$l";; esac; done < ${quotedPath}`;
+  // CRLF files: drop the \r. Lines whose key isn't a valid name are skipped (export would stop the shell).
+  `cr=$(printf '\\r'); while IFS= read -r l || [ -n "$l" ]; do l=\${l%"$cr"}; k=\${l%%=*}; ` +
+  `case "$l" in *=*) case "$k" in ""|[!A-Za-z_]*|*[!A-Za-z0-9_]*) ;; *) export "$l";; esac;; esac; done < ${quotedPath}`;
 
 /** The shell line tmux runs. Local mode loads the env file into that shell. */
 export function shellCommand(spec: LaunchSpec): string {
