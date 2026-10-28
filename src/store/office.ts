@@ -176,6 +176,7 @@ export const officeActions = {
   setProxy: (url: string | null) => source.setProxy(url),
   openEnvFile: (id: string) => source.openEnvFile(id),
   refreshSbx: () => source.refreshSbx(),
+  answerApproval: (agentId: string, approvalId: string, decision: "allow" | "dismiss") => source.answerApproval(agentId, approvalId, decision),
   updateWorkflow: source.updateWorkflow.bind(source),
   updateProject: source.updateProject.bind(source),
   createBoard: source.createBoard.bind(source),

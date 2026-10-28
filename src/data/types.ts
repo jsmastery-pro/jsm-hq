@@ -248,6 +248,14 @@ export interface SbxAgentState {
   keys: string[]; // service keys scoped to this sandbox
   envFile: { path: string; exists: boolean };
   syncError: string | null;
+  /** Requests the sandbox blocked, waiting in sbx's approval queue (`sbx policy approval ls`). */
+  approvals: SbxApproval[];
+}
+
+export interface SbxApproval {
+  id: string; // sbx's approval id
+  host: string; // "mcp.notion.com" (port dropped for 443/80)
+  detail: string;
 }
 
 /** What sbx actually has on this machine (read back, not saved settings). */

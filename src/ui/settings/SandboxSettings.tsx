@@ -160,8 +160,8 @@ export function SandboxSettingsTab({ initialAgentId }: { initialAgentId?: string
       <section className="border-[3px] border-ink bg-white p-3">
         <SectionTitle>App variables (env file)</SectionTitle>
         <p className="mb-2 text-[13px] text-muted">
-          For values your app needs to run and test (DATABASE_URL, STRIPE_KEY…). One <code className="font-term text-[15px]">KEY=value</code> per line. HQ never reads or commits this file. It's
-          passed to the agent when its session starts.
+          For values your app needs to run and test (DATABASE_URL, STRIPE_KEY…). One <code className="font-term text-[15px]">KEY=value</code> per line. HQ never reads or commits this file. When the agent starts, the values become
+          environment variables in its session and in its Shell tab — not a .env file in the project. Restart the agent after editing.
         </p>
         <div className="flex items-center gap-2">
           <code className="min-w-0 flex-1 truncate border-2 border-ink bg-cream px-2 py-0.5 font-term text-[16px]" title={state?.envFile.path}>

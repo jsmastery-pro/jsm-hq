@@ -129,7 +129,7 @@ function AgentRow({ agent, expanded, onToggle, onRemove }: { agent: AgentConfig;
             </Field>
           </div>
           <div className="col-span-2">
-            <Field label="ROLE.md" hint="Who this agent is. HQ writes it into the agent's folder (never committed) and loads it when the session starts.">
+            <Field label="ROLE.md" hint="Who this agent is. HQ adds the team, rules and tools, writes it to .jsmhq-role.md in the agent's folder (never committed) and loads it when the session starts. A ROLE.md the folder already has is included too, never overwritten.">
               <CommitInput multiline className="field h-[120px] resize-y font-term text-[17px] leading-tight" value={agent.roleMd} onCommit={(v) => set({ roleMd: v })} />
             </Field>
           </div>

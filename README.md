@@ -70,13 +70,15 @@ Run `npx @therealjsmastery/jsm-hq` in PowerShell or Windows Terminal, not in WSL
 
 ## How it works
 
-- **Workspaces.** Each agent gets a full clone of your repo at `~/.jsmhq/<project>/<agent>/`. HQ writes the agent's `ROLE.md`, hooks and MCP config there and excludes them from git.
+- **Workspaces.** Each agent gets a full clone of your repo at `~/.jsmhq/<project>/<agent>/`. HQ writes the agent's role (`.jsmhq-role.md`: the ROLE.md text from Settings → Team plus the team, rules and tools), hooks and MCP config there and excludes them from git. If the folder has its own `ROLE.md`, it's included, never overwritten.
 - **Sessions.** On macOS and Linux each agent runs in a tmux session (`hq-<project>-<agent>`) inside its sandbox. Its live terminal is in the agent's drawer, and you can attach from any terminal with `tmux attach -t hq-<project>-<agent>`. On Windows, HQ runs the agents itself.
 - **Team MCP.** Agents talk to each other and to HQ through an MCP server called `hq`. The lead creates boards and tasks and assigns them; anyone can send a message. HQ delivers it right away if the agent is idle, or when its current turn ends if it's busy.
 - **GitHub.** HQ reads PRs, checks and review comments through your `gh` login (every ~20 seconds). It matches PRs to tasks by `[TASK-ID]` in the title, tells the author about review comments, tells the lead when a PR passes and marks the task done when you merge. **HQ never merges.**
 - **Sandbox settings** (Settings → Sandbox) go straight to `sbx`: CPU and memory, allowed and blocked domains, service keys, an env file for app variables, and the upstream proxy. HQ never stores key values, never reads your env files and only removes rules it added.
 - **Stack (optional).** Settings → Stack (or the welcome) says what the project uses: frameworks, and tools for auth, payments, database, analytics and security, or your own under "Other". Agents get it in their ROLE.md, the tools' agent skills are installed into their folders (`.claude/skills`, `.agents/skills`, git-excluded), and you can allow the tools' docs and API domains for every sandbox in one click. Skip it and nothing changes.
 - **Access requests.** Sandboxes block most websites. When an agent needs one (docs or an API), it asks with the `request_access` tool instead of working around it. It turns red, and its drawer shows **Allow for this agent / Allow for everyone / Deny**. Allow adds a rule for that sandbox only; the base policy is never touched.
+- **Blocked requests.** HQ also reads sbx's queue of everything a sandbox blocked (`sbx policy approval ls`), even when the agent never asked: the agent's card shows "N blocked", and its drawer lists them with **Allow / Dismiss**. Allow adds a rule for that sandbox only.
+- **App variables** (Settings → Sandbox → App variables) become environment variables in the agent's session and its Shell tab, not a `.env` file in the project. Agents are told they exist (names only). HQ never reads the file.
 - **Files in your repo.** `.jsmhq/config.json` (team and workflow) and `.jsmhq/plan.json` (boards and tasks) are safe to commit. Turn on **Settings → Project → Export plan** to also get a readable `docs/plan.md`.
 
 ## Troubleshooting

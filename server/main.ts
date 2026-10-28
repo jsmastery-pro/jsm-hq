@@ -76,6 +76,7 @@ async function main() {
     commands: makeCommands(hub, sessions, planner, inbox, sbx),
   });
   sessions.startPolling();
+  sbx.startApprovalPolling();
   const github = new GitHubSync(hub, planner, repo.github);
   github.start();
 
@@ -91,6 +92,7 @@ async function main() {
   const quit = () => {
     log.info(sessions.backend.persistent ? "stopping HQ — agent sessions keep running in tmux" : "stopping HQ and its agents — sandboxes and folders are kept");
     sessions.shutdown();
+    sbx.stopApprovalPolling();
     github.stop();
     process.exit(0);
   };

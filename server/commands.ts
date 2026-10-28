@@ -189,6 +189,10 @@ export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inb
       await sbx.refresh();
     },
     refreshSbx: () => sbx.refresh(),
+    answerApproval: (agentId, approvalId, decision) => {
+      const d = decision === "allow" || decision === "dismiss" ? decision : null;
+      if (d) return sbx.answerApproval(str(agentId, 80), str(approvalId, 120), d);
+    },
 
     /** Saves the project's stack (sanitised against the catalog). The agents get it in ROLE.md on their next start. */
     updateStack: (raw) => {

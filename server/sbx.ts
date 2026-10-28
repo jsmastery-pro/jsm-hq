@@ -6,6 +6,7 @@ import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { BasePolicy, SbxAgentState, SbxRule, SbxState } from "../src/data/types";
 import type { Hub } from "./hub";
+import { parseCliJson } from "./lib/json";
 import { run } from "./lib/exec";
 import { log } from "./lib/log";
 import { projectHome, sessionName } from "./paths";
@@ -31,7 +32,7 @@ export class Sbx {
 
   constructor(private hub: Hub) {
     this.ownedFile = join(projectHome(hub.slug), "sbx-owned.json");
-    this.owned = existsSync(this.ownedFile) ? (JSON.parse(readFileSync(this.ownedFile, "utf8")) as Record<string, string[]>) : {};
+    this.owned = (existsSync(this.ownedFile) && parseCliJson<Record<string, string[]>>(readFileSync(this.ownedFile, "utf8"))) || {};
     this.state = { basePolicy: "unknown", proxy: null, globalKeys: [], agents: {}, checkedAt: new Date().toISOString() };
   }
 
@@ -59,7 +60,7 @@ export class Sbx {
     const r = await run("sbx", ["policy", "ls", "--json", "--type", "network"], { timeoutMs: 15_000 });
     if (!r.ok) return [];
     try {
-      return ((JSON.parse(r.stdout) as { rules?: RawRule[] }).rules ?? []).filter((x) => x.resource_type === "network" && x.status !== "inactive");
+      return (parseCliJson<{ rules?: RawRule[] }>(r.stdout)?.rules ?? []).filter((x) => x.resource_type === "network" && x.status !== "inactive");
     } catch {
       return [];
     }
@@ -87,7 +88,7 @@ export class Sbx {
     ]);
     let secrets: { scope: string; type: string; name: string }[] = [];
     try {
-      secrets = (JSON.parse(keysOut.stdout) as { secrets?: typeof secrets }).secrets ?? [];
+      secrets = parseCliJson<{ secrets?: typeof secrets }>(keysOut.stdout)?.secrets ?? [];
     } catch {
       /* sbx down */
     }
@@ -113,13 +114,101 @@ export class Sbx {
         keys: secrets.filter((s) => s.type === "service" && (s.scope === name || s.scope === `sandbox:${name}`)).map((s) => s.name),
         envFile: { path: this.envFile(a.id), exists: existsSync(this.envFile(a.id)) },
         syncError: prevErrors[a.id]?.syncError ?? null,
+        approvals: prevErrors[a.id]?.approvals ?? [],
       };
     }
     this.publish();
   }
 
   private emptyAgent(agentId: string): SbxAgentState {
-    return { rules: [], keys: [], envFile: { path: this.envFile(agentId), exists: existsSync(this.envFile(agentId)) }, syncError: null };
+    return { rules: [], keys: [], envFile: { path: this.envFile(agentId), exists: existsSync(this.envFile(agentId)) }, syncError: null, approvals: [] };
+  }
+
+  // ------------------------------------------------------------ approvals
+
+  private seenApprovals = new Set<string>();
+  private approvalTimer: NodeJS.Timeout | null = null;
+
+  /** sbx's queue of blocked requests. It has no JSON output, so the table is read by its header's columns. */
+  private async readApprovals(): Promise<{ id: string; sandbox: string; title: string; detail: string }[] | null> {
+    const r = await run("sbx", ["policy", "approval", "ls"], { timeoutMs: 10_000 });
+    if (!r.ok) return null;
+    const lines = r.stdout.split("\n").filter((l) => l.trim());
+    const head = lines.findIndex((l) => /^APPROVAL\s+SANDBOX\s+TITLE\s+DETAIL/.test(l));
+    if (head === -1) return lines.length ? null : [];
+    const at = ["APPROVAL", "SANDBOX", "TITLE", "DETAIL", "OPTIONS"].map((c) => lines[head].indexOf(c));
+    const cell = (l: string, i: number) => l.slice(at[i], at[i + 1] > 0 ? at[i + 1] : undefined).trim();
+    return lines
+      .slice(head + 1)
+      .map((l) => ({ id: cell(l, 0), sandbox: cell(l, 1), title: cell(l, 2), detail: cell(l, 3) }))
+      .filter((a) => /^network:\S+$/.test(a.id));
+  }
+
+  /** Re-reads the approval queue and shows each HQ agent's blocked requests (new ones once in the activity feed). */
+  async refreshApprovals() {
+    if (!this.hub.snap.setup.sandboxReady) return;
+    const all = await this.readApprovals();
+    if (!all) return;
+    let changed = false;
+    const fresh: { agentId: string; host: string }[] = [];
+    for (const a of this.hub.snap.config.team) {
+      const name = this.name(a.id);
+      const list = all
+        .filter((x) => x.sandbox === name)
+        .map((x) => ({ id: x.id, host: x.title.replace(/:(443|80)$/, ""), detail: x.detail.replace(/^Protocol: \S+ Resource type: \S+ /, "") }));
+      const st = (this.state.agents[a.id] ??= this.emptyAgent(a.id));
+      if (JSON.stringify(st.approvals) !== JSON.stringify(list)) {
+        st.approvals = list;
+        changed = true;
+      }
+      for (const x of list) if (!this.seenApprovals.has(x.id)) (this.seenApprovals.add(x.id), fresh.push({ agentId: a.id, host: x.host }));
+    }
+    if (changed) this.publish();
+    const byAgent = new Map<string, string[]>();
+    for (const f of fresh) byAgent.set(f.agentId, [...(byAgent.get(f.agentId) ?? []), f.host]);
+    for (const [id, hosts] of byAgent)
+      this.hub.activity("agent.needs-input", id, `${this.hub.name(id)}'s sandbox blocked ${hosts.slice(0, 3).join(", ")}${hosts.length > 3 ? ` and ${hosts.length - 3} more` : ""}. Allow or dismiss in the agent's drawer.`);
+  }
+
+  startApprovalPolling(ms = 5000) {
+    if (this.approvalTimer) return;
+    const tick = () => void this.refreshApprovals().catch((e) => log.warn("approvals:", e));
+    tick();
+    this.approvalTimer = setInterval(tick, ms);
+  }
+
+  stopApprovalPolling() {
+    if (this.approvalTimer) clearInterval(this.approvalTimer);
+    this.approvalTimer = null;
+  }
+
+  /**
+   * Answers blocked requests. Allow adds an HQ-owned allow rule for the host (shown and removable in
+   * Settings → Sandbox) and clears every queued request for it; Dismiss just clears them.
+   */
+  async answerApproval(agentId: string, approvalId: string | "all", decision: "allow" | "dismiss") {
+    const st = this.state.agents[agentId];
+    const target = approvalId === "all" ? null : st?.approvals.find((a) => a.id === approvalId);
+    if (!st || (approvalId !== "all" && !target)) return;
+    const hosts = decision === "allow" && target ? [target.host] : [];
+    if (hosts.length) {
+      const agent = this.hub.cfg(agentId);
+      if (agent && !agent.sandbox.allow.includes(target!.host)) {
+        agent.sandbox.allow = [...agent.sandbox.allow, target!.host];
+        this.hub.configChanged();
+      }
+      await this.syncRules(agentId);
+      const err = this.state.agents[agentId]?.syncError;
+      if (err?.includes(target!.host)) {
+        this.hub.activity("config", agentId, `Couldn't allow ${target!.host}: ${err.slice(0, 160)}`);
+        return;
+      }
+    }
+    // Clear the queue entries this answer covers (all of them, or every one for that host).
+    const clear = st.approvals.filter((a) => approvalId === "all" || a.host === target!.host);
+    for (const a of clear) await run("sbx", ["policy", "approval", "respond", a.id, "--option", "dismiss"], { timeoutMs: 10_000 });
+    if (decision === "allow" && target) this.hub.activity("config", agentId, `You allowed ${target.host} for ${this.hub.name(agentId)}'s sandbox`);
+    await this.refreshApprovals();
   }
 
   // ------------------------------------------------------------ apply
@@ -128,7 +217,7 @@ export class Sbx {
   async exists(agentId: string): Promise<boolean> {
     const r = await run("sbx", ["ls", "--json"], { timeoutMs: 10_000 });
     try {
-      return ((JSON.parse(r.stdout) as { sandboxes?: { name: string }[] }).sandboxes ?? []).some((s) => s.name === this.name(agentId));
+      return (parseCliJson<{ sandboxes?: { name: string }[] }>(r.stdout)?.sandboxes ?? []).some((s) => s.name === this.name(agentId));
     } catch {
       return false;
     }

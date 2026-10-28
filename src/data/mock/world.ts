@@ -68,6 +68,10 @@ export function mockSbx(team: AgentConfig[], project: string): SbxState {
       keys: a.isLead ? [] : ["openai"],
       envFile: { path: `~/.jsmhq/${slug(project)}/${a.id}.env`, exists: !a.isLead },
       syncError: null,
+      // Demo: the first worker's sandbox blocked a few things (claude.ai connectors and a docs site).
+      approvals: !a.isLead && team.filter((t) => !t.isLead)[0]?.id === a.id
+        ? ["mcp.notion.com", "mcp.figma.com", "docs.arcjet.com"].map((host, i) => ({ id: `network:demo-${a.id}-${i}`, host, detail: "no matching allow rule (default deny)" }))
+        : [],
     };
   }
   return { basePolicy: "balanced", proxy: null, globalKeys: ["anthropic", "github"], agents, checkedAt: now() };

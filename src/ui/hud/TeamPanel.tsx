@@ -9,6 +9,7 @@ function AgentCard({ a, focused, n, now }: { a: AgentView; focused: boolean; n: 
   const task = a.status.currentTaskId ? snap?.tasks.find((t) => t.id === a.status.currentTaskId) : null;
   const st = stateStyle[a.status.state];
   const needs = a.status.state === "needs-input";
+  const blocked = useOffice((s) => s.snap?.sbx.agents[a.config.id]?.approvals?.length ?? 0);
   return (
     <button
       className={`panel relative grid w-full cursor-pointer grid-cols-[40px_1fr] gap-x-2.5 gap-y-1 px-2.5 pb-2.5 pt-2 text-left transition-transform hover:-translate-x-px hover:-translate-y-px ${needs ? "outline-[3px] outline-red" : ""}`}
@@ -31,6 +32,11 @@ function AgentCard({ a, focused, n, now }: { a: AgentView; focused: boolean; n: 
         <StateChip state={a.status.state} />
         <span className="font-term text-[16px] text-muted">{ago(a.status.stateSince, now)}</span>
         {a.config.mode === "local" && <span className="chip text-[11px]">local</span>}
+        {blocked > 0 && (
+          <span className="chip text-[11px]" style={{ background: "#fff1d6" }} title="Requests the sandbox blocked. Open the agent to allow or dismiss them.">
+            {blocked} blocked
+          </span>
+        )}
       </div>
       <div className={`col-span-2 mt-1 truncate text-[13px] ${task || needs ? "" : "text-muted"}`}>
         {needs ? (
