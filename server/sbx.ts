@@ -152,7 +152,6 @@ export class Sbx {
       .filter((a) => /^network:\S+$/.test(a.id));
   }
 
-  /** Re-reads the approval queue and shows each HQ agent's blocked requests (new ones once in the activity feed). */
   private approvalReads: Promise<void> = Promise.resolve();
   private approvalReadsPending = 0;
 
@@ -164,6 +163,7 @@ export class Sbx {
     return next;
   }
 
+  /** Re-reads the approval queue and shows each HQ agent's blocked requests (new ones once in the activity feed). */
   private async readAndShowApprovals() {
     if (!this.hub.snap.setup.sandboxReady) return;
     const all = await this.readApprovals();

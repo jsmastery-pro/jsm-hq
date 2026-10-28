@@ -81,10 +81,10 @@ async function checkSbxLogin(sbxOk: boolean): Promise<Check> {
   if (!sbxOk) return { ...base, status: "missing", detail: "Waiting for sbx.", fix: null };
   const r = await run("sbx", ["ls", "--json"], { timeoutMs: 10_000 });
   const list = r.ok ? sandboxList<unknown>(r.stdout) : null;
-  if (r.ok && !list) return { ...base, status: "warning", detail: "Signed in, but sbx's sandbox list couldn't be read. Press Check again.", fix: null };
+  // The command worked, so you're signed in; an unreadable list only loses the count (never block Start on it).
   if (r.ok) {
-    const n = list?.length ?? 0;
-    return { ...base, status: "ok", detail: `Signed in · ${n} sandbox${n === 1 ? "" : "es"} on this machine`, fix: null };
+    const n = list?.length;
+    return { ...base, status: "ok", detail: n === undefined ? "Signed in" : `Signed in · ${n} sandbox${n === 1 ? "" : "es"} on this machine`, fix: null };
   }
   const msg = (r.stderr || r.stdout).trim();
   const loggedOut = /log ?in|sign ?in|unauthori[sz]ed|not authenticated/i.test(msg);
