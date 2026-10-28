@@ -65,14 +65,13 @@ export class Sbx {
 
   // ------------------------------------------------------------ read back
 
-  private async rules(): Promise<RawRule[]> {
+  /** Network rules in effect, or null when sbx's list couldn't be read (not the same as "no rules"). */
+  private async rules(): Promise<RawRule[] | null> {
     const r = await run("sbx", ["policy", "ls", "--json", "--type", "network"], { timeoutMs: 15_000 });
-    if (!r.ok) return [];
-    try {
-      return (parseCliJson<{ rules?: RawRule[] }>(r.stdout)?.rules ?? []).filter((x) => x.resource_type === "network" && x.status !== "inactive");
-    } catch {
-      return [];
-    }
+    if (!r.ok) return null;
+    const data = parseCliJson<{ rules?: RawRule[] }>(r.stdout);
+    if (!data) return null;
+    return (data.rules ?? []).filter((x) => x.resource_type === "network" && x.status !== "inactive");
   }
 
   private async basePolicy(): Promise<BasePolicy> {
@@ -90,7 +89,7 @@ export class Sbx {
       return this.publish();
     }
     const [rules, keysOut, proxyOut, base] = await Promise.all([
-      this.rules(),
+      this.rules().then((list) => list ?? []),
       run("sbx", ["secret", "ls", "--json"], { timeoutMs: 15_000 }),
       run("sbx", ["settings", "get", "proxy.sandbox"], { timeoutMs: 10_000 }),
       this.basePolicy(),
@@ -259,7 +258,7 @@ export class Sbx {
           this.hub.configChanged();
           await this.syncRules(agentId);
         }
-        const why = err?.includes(target.host) ? err.slice(0, 160) : agent.mode !== "sandbox" ? `${who} isn't in Sandbox mode` : "sbx didn't apply the rule";
+        const why = err ? err.slice(0, 160) : agent.mode !== "sandbox" ? `${who} isn't in Sandbox mode` : "sbx didn't apply the rule";
         this.hub.activity("config", agentId, `Couldn't allow ${target.host}: ${why}. The request is still listed.`);
         return;
       }
@@ -293,7 +292,16 @@ export class Sbx {
     const name = this.name(agentId);
     const want = new Set([...agent.sandbox.allow.map((r) => key("allow", r)), ...agent.sandbox.deny.map((r) => key("deny", r))]);
     const owned = new Set(this.owned[name] ?? []);
-    const rules = (await this.rules()).filter((r) => r.applies_to === `sandbox:${name}`);
+    const all = await this.rules();
+    if (!all) {
+      // Can't tell what's there: change nothing, and keep the record of rules HQ added, so they can
+      // still be removed later.
+      log.warn(`sbx rules for ${name}: couldn't read sbx's rule list; nothing changed`);
+      (this.state.agents[agentId] ??= this.emptyAgent(agentId)).syncError = "Couldn't read sbx's rules; nothing was changed. Try again.";
+      this.publish();
+      return;
+    }
+    const rules = all.filter((r) => r.applies_to === `sandbox:${name}`);
     const have = new Set(rules.flatMap((r) => r.resources.map((x) => key(r.decision, x))));
     const errors: string[] = [];
 
