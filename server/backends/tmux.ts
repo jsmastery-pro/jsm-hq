@@ -17,7 +17,8 @@ const q = (s: string) => (/^[A-Za-z0-9_\-.,:/=@%+]+$/.test(s) ? s : shq(s));
  */
 export const loadEnvFile = (quotedPath: string) =>
   // CRLF files: drop the \r. Lines whose key isn't a valid name are skipped (export would stop the shell).
-  `cr=$(printf '\\r'); while IFS= read -r l || [ -n "$l" ]; do l=\${l%"$cr"}; k=\${l%%=*}; ` +
+  // (The CR is computed per line, so a variable in the file can't change it.)
+  `while IFS= read -r l || [ -n "$l" ]; do l=\${l%"$(printf '\\r')"}; k=\${l%%=*}; ` +
   `case "$l" in *=*) case "$k" in ""|[!A-Za-z_]*|*[!A-Za-z0-9_]*) ;; *) export "$l";; esac;; esac; done < ${quotedPath}`;
 
 /** The shell line tmux runs. Local mode loads the env file into that shell. */
