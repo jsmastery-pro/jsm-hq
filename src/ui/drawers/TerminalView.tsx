@@ -54,6 +54,14 @@ export function TerminalView({ agentId, autoFocus = true }: { agentId: string; a
       term.write(readTerminal(agentId));
       unsub = subscribeTerminal(agentId, (data) => term.write(data));
       term.onData((data) => officeActions.sendTerminalInput(agentId, data));
+      // Shift+Enter: xterm.js sends a plain Enter (\r), which submits. Send Alt+Enter (ESC \r)
+      // instead, which Claude Code and Codex read as "new line".
+      term.attachCustomKeyEventHandler((e) => {
+        if (e.key !== "Enter" || !e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return true;
+        if (e.type === "keydown") officeActions.sendTerminalInput(agentId, "\x1b\r");
+        e.preventDefault();
+        return false;
+      });
       ro = new ResizeObserver(() => {
         try {
           fit.fit();
