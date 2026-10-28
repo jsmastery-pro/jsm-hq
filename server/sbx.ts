@@ -167,6 +167,7 @@ export class Sbx {
         .map((x) => ({
           id: x.id,
           host: approvalHost(x.title),
+          title: x.title.trim(),
           detail: x.detail.replace(/^Protocol: \S+ Resource type: \S+ /, ""),
           hostWide: approvalHost(x.title) === x.title.trim().toLowerCase(),
         }));

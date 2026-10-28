@@ -139,8 +139,8 @@ function BlockedRequests({ agent }: { agent: AgentConfig }) {
       <ul className="mt-1">
         {shown.map((a) => (
           <li key={a.id} className="flex items-center gap-2 py-0.5">
-            <span className="min-w-0 flex-1 truncate font-term text-[16px]" title={a.detail}>
-              {a.host}
+            <span className="min-w-0 flex-1 truncate font-term text-[16px]" title={`${a.title ?? a.host} — ${a.detail}`}>
+              {a.title ?? a.host}
             </span>
             <button className="btn px-1.5 text-[11px]" disabled={busy} onClick={() => act(a.id, "allow")}>
               Allow

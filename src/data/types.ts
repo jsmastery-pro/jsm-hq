@@ -255,6 +255,8 @@ export interface SbxAgentState {
 export interface SbxApproval {
   id: string; // sbx's approval id
   host: string; // "mcp.notion.com:443"
+  /** sbx's title as is, e.g. "GET api.example.com:443/v1/data" (shown, so different requests can be told apart). */
+  title?: string;
   detail: string;
   /** False when sbx's entry is narrower than host:port (e.g. one HTTP method and path). */
   hostWide?: boolean;
