@@ -260,6 +260,8 @@ export interface SbxApproval {
   detail: string;
   /** False when sbx's entry is narrower than host:port (e.g. one HTTP method and path). */
   hostWide?: boolean;
+  /** "TCP" or "UDP" from sbx's detail. HQ's allow rules are TCP, so others are answered through sbx. */
+  protocol?: string;
 }
 
 /** What sbx actually has on this machine (read back, not saved settings). */

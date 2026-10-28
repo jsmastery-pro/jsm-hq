@@ -180,6 +180,7 @@ export class Sbx {
           title: x.title.trim(),
           detail: x.detail.replace(/^Protocol: \S+ Resource type: \S+ /, ""),
           hostWide: approvalHost(x.title) === x.title.trim().toLowerCase(),
+          protocol: x.detail.match(/Protocol:\s*(\S+)/i)?.[1]?.toUpperCase(),
         }));
       const st = (this.state.agents[a.id] ??= this.emptyAgent(a.id));
       if (JSON.stringify(st.approvals) !== JSON.stringify(list)) {
@@ -225,17 +226,23 @@ export class Sbx {
     }
   }
 
+  private async respondApproval(id: string, option: "allow" | "dismiss"): Promise<boolean> {
+    return (await run("sbx", ["policy", "approval", "respond", id, "--option", option], { timeoutMs: 10_000 })).ok;
+  }
+
   private async answer(agentId: string, approvalId: string | "all", decision: "allow" | "dismiss") {
     const list = [...(this.state.agents[agentId]?.approvals ?? [])];
     const target = approvalId === "all" ? null : list.find((a) => a.id === approvalId);
     if (approvalId !== "all" && !target) return;
-    const respond = async (id: string, option: "allow" | "dismiss") => (await run("sbx", ["policy", "approval", "respond", id, "--option", option], { timeoutMs: 10_000 })).ok;
+    const respond = (id: string, option: "allow" | "dismiss") => this.respondApproval(id, option);
 
     if (decision === "allow" && target) {
       const who = this.hub.name(agentId);
       // Blocked by an organization policy (a local rule wouldn't apply), or narrower than host:port
       // (a rule would allow more than was asked): answer sbx's own approval, which keeps its scope.
-      if (/required by policy|organi[sz]ation/i.test(target.detail) || target.hostWide === false) {
+      // Same for anything but TCP (sbx rules are TCP; a UDP request would stay blocked).
+      const tcp = !target.protocol || target.protocol === "TCP";
+      if (/required by policy|organi[sz]ation/i.test(target.detail) || target.hostWide === false || !tcp) {
         if (await respond(target.id, "allow")) this.hub.activity("config", agentId, `You approved ${target.host} for ${who}'s sandbox`);
         else this.hub.activity("config", agentId, `Couldn't approve ${target.host}: sbx refused it.`);
         return this.refreshApprovals();
@@ -262,7 +269,8 @@ export class Sbx {
         this.hub.activity("config", agentId, `Couldn't allow ${target.host}: ${why}. The request is still listed.`);
         return;
       }
-      for (const a of list.filter((x) => x.host === target.host)) await respond(a.id, "dismiss");
+      // The rule covers TCP to that host:port: clear those entries only (a UDP one stays listed).
+      for (const a of list.filter((x) => x.host === target.host && (!x.protocol || x.protocol === "TCP") && x.hostWide !== false)) await respond(a.id, "dismiss");
       this.hub.activity("config", agentId, `You allowed ${target.host} for ${who}'s sandbox`);
     } else {
       for (const a of approvalId === "all" ? list : [target!]) await respond(a.id, "dismiss");
