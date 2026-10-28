@@ -154,7 +154,18 @@ export class Sbx {
   }
 
   /** Re-reads the approval queue and shows each HQ agent's blocked requests (new ones once in the activity feed). */
-  async refreshApprovals() {
+  private approvalReads: Promise<void> = Promise.resolve();
+  private approvalReadsPending = 0;
+
+  /** Reads run one at a time, in order, so an older, slower read can't overwrite a newer one. */
+  refreshApprovals(): Promise<void> {
+    this.approvalReadsPending++;
+    const next = this.approvalReads.then(() => this.readAndShowApprovals());
+    this.approvalReads = next.catch(() => {}).finally(() => this.approvalReadsPending--);
+    return next;
+  }
+
+  private async readAndShowApprovals() {
     if (!this.hub.snap.setup.sandboxReady) return;
     const all = await this.readApprovals();
     if (!all) return;
@@ -187,7 +198,8 @@ export class Sbx {
 
   startApprovalPolling(ms = 5000) {
     if (this.approvalTimer) return;
-    const tick = () => void this.refreshApprovals().catch((e) => log.warn("approvals:", e));
+    // Skip a tick while a read is still queued or running.
+    const tick = () => void (this.approvalReadsPending ? Promise.resolve() : this.refreshApprovals()).catch((e) => log.warn("approvals:", e));
     tick();
     this.approvalTimer = setInterval(tick, ms);
   }
@@ -237,14 +249,18 @@ export class Sbx {
         this.hub.configChanged();
       }
       await this.syncRules(agentId);
+      // Success only when sbx now lists the rule for this sandbox (syncRules skips a Local-mode agent
+      // or a missing sandbox without an error).
       const err = this.state.agents[agentId]?.syncError;
-      if (err?.includes(target.host)) {
+      const applied = this.state.agents[agentId]?.rules.some((r) => r.decision === "allow" && r.resources.includes(target.host));
+      if (!applied || err?.includes(target.host)) {
         if (added) {
           agent.sandbox.allow = agent.sandbox.allow.filter((h) => h !== target.host);
           this.hub.configChanged();
           await this.syncRules(agentId);
         }
-        this.hub.activity("config", agentId, `Couldn't allow ${target.host}: ${err.slice(0, 160)}`);
+        const why = err?.includes(target.host) ? err.slice(0, 160) : agent.mode !== "sandbox" ? `${who} isn't in Sandbox mode` : "sbx didn't apply the rule";
+        this.hub.activity("config", agentId, `Couldn't allow ${target.host}: ${why}. The request is still listed.`);
         return;
       }
       for (const a of list.filter((x) => x.host === target.host)) await respond(a.id, "dismiss");
