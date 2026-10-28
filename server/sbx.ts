@@ -6,7 +6,7 @@ import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { BasePolicy, SbxAgentState, SbxRule, SbxState } from "../src/data/types";
 import type { Hub } from "./hub";
-import { parseCliJson } from "./lib/json";
+import { parseCliJson, sandboxList } from "./lib/json";
 import { run } from "./lib/exec";
 import { log } from "./lib/log";
 import { projectHome, sessionName } from "./paths";
@@ -164,7 +164,12 @@ export class Sbx {
       const name = this.name(a.id);
       const list = all
         .filter((x) => x.sandbox === name)
-        .map((x) => ({ id: x.id, host: approvalHost(x.title), detail: x.detail.replace(/^Protocol: \S+ Resource type: \S+ /, "") }));
+        .map((x) => ({
+          id: x.id,
+          host: approvalHost(x.title),
+          detail: x.detail.replace(/^Protocol: \S+ Resource type: \S+ /, ""),
+          hostWide: approvalHost(x.title) === x.title.trim().toLowerCase(),
+        }));
       const st = (this.state.agents[a.id] ??= this.emptyAgent(a.id));
       if (JSON.stringify(st.approvals) !== JSON.stringify(list)) {
         st.approvals = list;
@@ -216,10 +221,11 @@ export class Sbx {
 
     if (decision === "allow" && target) {
       const who = this.hub.name(agentId);
-      // Blocked by an organization policy: a local rule wouldn't apply, so answer sbx's approval itself.
-      if (/required by policy|organi[sz]ation/i.test(target.detail)) {
+      // Blocked by an organization policy (a local rule wouldn't apply), or narrower than host:port
+      // (a rule would allow more than was asked): answer sbx's own approval, which keeps its scope.
+      if (/required by policy|organi[sz]ation/i.test(target.detail) || target.hostWide === false) {
         if (await respond(target.id, "allow")) this.hub.activity("config", agentId, `You approved ${target.host} for ${who}'s sandbox`);
-        else this.hub.activity("config", agentId, `Couldn't approve ${target.host}: sbx refused it (organization policy).`);
+        else this.hub.activity("config", agentId, `Couldn't approve ${target.host}: sbx refused it.`);
         return this.refreshApprovals();
       }
       const agent = this.hub.cfg(agentId);
@@ -254,7 +260,7 @@ export class Sbx {
   async exists(agentId: string): Promise<boolean> {
     const r = await run("sbx", ["ls", "--json"], { timeoutMs: 10_000 });
     try {
-      return (parseCliJson<{ sandboxes?: { name: string }[] }>(r.stdout)?.sandboxes ?? []).some((s) => s.name === this.name(agentId));
+      return (sandboxList(r.stdout) ?? []).some((s) => s.name === this.name(agentId));
     } catch {
       return false;
     }

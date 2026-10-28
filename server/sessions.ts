@@ -13,7 +13,7 @@ import type { Hub } from "./hub";
 import { sessionBackend, type LaunchSpec, type TermHandle } from "./backends";
 import { resolveCommand } from "./backends/pty";
 import { loadEnvFile } from "./backends/tmux";
-import { parseCliJson } from "./lib/json";
+import { sandboxList } from "./lib/json";
 import { run } from "./lib/exec";
 import { log } from "./lib/log";
 import { projectHome, sessionName } from "./paths";
@@ -166,7 +166,7 @@ export class Sessions {
     const ls = await run("sbx", ["ls", "--json"], { timeoutMs: 10_000 });
     let sandboxExists = false;
     try {
-      sandboxExists = ls.ok && (parseCliJson<{ sandboxes?: { name: string }[] }>(ls.stdout)?.sandboxes ?? []).some((s) => s.name === name);
+      sandboxExists = ls.ok && (sandboxList(ls.stdout) ?? []).some((s) => s.name === name);
     } catch {
       /* sbx unavailable */
     }
@@ -203,7 +203,7 @@ export class Sessions {
   private async sandboxExists(name: string): Promise<boolean> {
     const r = await run("sbx", ["ls", "--json"], { timeoutMs: 10_000 });
     try {
-      return (parseCliJson<{ sandboxes?: { name: string }[] }>(r.stdout)?.sandboxes ?? []).some((s) => s.name === name);
+      return (sandboxList(r.stdout) ?? []).some((s) => s.name === name);
     } catch {
       return false;
     }
@@ -214,7 +214,7 @@ export class Sessions {
     for (let i = 0; i < 45; i++) {
       const r = await run("sbx", ["ls", "--json"], { timeoutMs: 10_000 });
       try {
-        if ((parseCliJson<{ sandboxes?: { name: string }[] }>(r.stdout)?.sandboxes ?? []).some((s) => s.name === this.name(id))) return true;
+        if ((sandboxList(r.stdout) ?? []).some((s) => s.name === this.name(id))) return true;
       } catch {
         /* keep waiting */
       }
@@ -246,7 +246,7 @@ export class Sessions {
     if (!r.ok) return;
     let list: { name: string; cpus?: number; memory_mib?: number }[] = [];
     try {
-      list = parseCliJson<{ sandboxes?: typeof list }>(r.stdout)?.sandboxes ?? [];
+      list = sandboxList<(typeof list)[number]>(r.stdout) ?? [];
     } catch {
       return;
     }

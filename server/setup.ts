@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { arch, cpus, platform, release, totalmem } from "node:os";
 import type { AgentConfig, SetupCheck, SetupFix, SetupState } from "../src/data/types";
 import { usesTmux } from "./backends";
-import { parseCliJson } from "./lib/json";
+import { parseCliJson, sandboxList } from "./lib/json";
 import { has, run } from "./lib/exec";
 import type { RepoInfo } from "./repo";
 
@@ -80,10 +80,10 @@ async function checkSbxLogin(sbxOk: boolean): Promise<Check> {
   const base = { id: "sbx-login" as const, label: "Signed in to Docker", neededFor: "sandbox" as const };
   if (!sbxOk) return { ...base, status: "missing", detail: "Waiting for sbx.", fix: null };
   const r = await run("sbx", ["ls", "--json"], { timeoutMs: 10_000 });
-  const list = r.ok ? parseCliJson<{ sandboxes?: unknown[] }>(r.stdout) : null;
+  const list = r.ok ? sandboxList<unknown>(r.stdout) : null;
   if (r.ok && !list) return { ...base, status: "warning", detail: "Signed in, but sbx's sandbox list couldn't be read. Press Check again.", fix: null };
   if (r.ok) {
-    const n = list?.sandboxes?.length ?? 0;
+    const n = list?.length ?? 0;
     return { ...base, status: "ok", detail: `Signed in · ${n} sandbox${n === 1 ? "" : "es"} on this machine`, fix: null };
   }
   const msg = (r.stderr || r.stdout).trim();

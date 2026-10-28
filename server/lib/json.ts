@@ -16,3 +16,13 @@ export function parseCliJson<T>(text: string): T | null {
     return null;
   }
 }
+
+/**
+ * The sandboxes from `sbx ls --json`. sbx ≤ 0.47 wraps them ({ "sandboxes": [...] }); newer
+ * versions print the array itself. Null when the output can't be read at all.
+ */
+export function sandboxList<T = { name: string }>(text: string): T[] | null {
+  const data = parseCliJson<T[] | { sandboxes?: T[] }>(text);
+  if (data === null) return null;
+  return Array.isArray(data) ? data : (data.sandboxes ?? []);
+}

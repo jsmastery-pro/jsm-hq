@@ -254,8 +254,10 @@ export interface SbxAgentState {
 
 export interface SbxApproval {
   id: string; // sbx's approval id
-  host: string; // "mcp.notion.com" (port dropped for 443/80)
+  host: string; // "mcp.notion.com:443"
   detail: string;
+  /** False when sbx's entry is narrower than host:port (e.g. one HTTP method and path). */
+  hostWide?: boolean;
 }
 
 /** What sbx actually has on this machine (read back, not saved settings). */
