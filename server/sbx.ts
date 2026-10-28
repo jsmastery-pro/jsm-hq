@@ -25,6 +25,15 @@ interface RawRule {
 
 const key = (decision: string, resource: string) => `${decision} ${resource}`;
 
+/**
+ * The resource an approval is for, as an allow rule: "mcp.notion.com:443". The port is kept so Allow
+ * opens exactly what was blocked. HTTP-style titles ("GET host:443/path") keep only host:port.
+ */
+export function approvalHost(title: string): string {
+  const m = title.trim().match(/^(?:[A-Z]+\s+)?(?:[a-z]+:\/\/)?([^/\s?#]+)/);
+  return (m?.[1] ?? title.trim()).toLowerCase();
+}
+
 export class Sbx {
   state: SbxState;
   private ownedFile: string;
@@ -155,7 +164,7 @@ export class Sbx {
       const name = this.name(a.id);
       const list = all
         .filter((x) => x.sandbox === name)
-        .map((x) => ({ id: x.id, host: x.title.replace(/:(443|80)$/, ""), detail: x.detail.replace(/^Protocol: \S+ Resource type: \S+ /, "") }));
+        .map((x) => ({ id: x.id, host: approvalHost(x.title), detail: x.detail.replace(/^Protocol: \S+ Resource type: \S+ /, "") }));
       const st = (this.state.agents[a.id] ??= this.emptyAgent(a.id));
       if (JSON.stringify(st.approvals) !== JSON.stringify(list)) {
         st.approvals = list;
@@ -182,32 +191,60 @@ export class Sbx {
     this.approvalTimer = null;
   }
 
+  private answering = new Set<string>(); // agents with an answer in flight
+
   /**
-   * Answers blocked requests. Allow adds an HQ-owned allow rule for the host (shown and removable in
-   * Settings → Sandbox) and clears every queued request for it; Dismiss just clears them.
+   * Answers blocked requests. Allow adds an HQ-owned allow rule for exactly that host:port (shown and
+   * removable in Settings → Sandbox) and clears every queued request for it; Dismiss clears only the one
+   * (or all with "all"). One answer per agent at a time; a second click meanwhile is ignored.
    */
   async answerApproval(agentId: string, approvalId: string | "all", decision: "allow" | "dismiss") {
-    const st = this.state.agents[agentId];
-    const target = approvalId === "all" ? null : st?.approvals.find((a) => a.id === approvalId);
-    if (!st || (approvalId !== "all" && !target)) return;
-    const hosts = decision === "allow" && target ? [target.host] : [];
-    if (hosts.length) {
+    if (this.answering.has(agentId)) return;
+    this.answering.add(agentId);
+    try {
+      await this.answer(agentId, approvalId, decision);
+    } finally {
+      this.answering.delete(agentId);
+    }
+  }
+
+  private async answer(agentId: string, approvalId: string | "all", decision: "allow" | "dismiss") {
+    const list = [...(this.state.agents[agentId]?.approvals ?? [])];
+    const target = approvalId === "all" ? null : list.find((a) => a.id === approvalId);
+    if (approvalId !== "all" && !target) return;
+    const respond = async (id: string, option: "allow" | "dismiss") => (await run("sbx", ["policy", "approval", "respond", id, "--option", option], { timeoutMs: 10_000 })).ok;
+
+    if (decision === "allow" && target) {
+      const who = this.hub.name(agentId);
+      // Blocked by an organization policy: a local rule wouldn't apply, so answer sbx's approval itself.
+      if (/required by policy|organi[sz]ation/i.test(target.detail)) {
+        if (await respond(target.id, "allow")) this.hub.activity("config", agentId, `You approved ${target.host} for ${who}'s sandbox`);
+        else this.hub.activity("config", agentId, `Couldn't approve ${target.host}: sbx refused it (organization policy).`);
+        return this.refreshApprovals();
+      }
       const agent = this.hub.cfg(agentId);
-      if (agent && !agent.sandbox.allow.includes(target!.host)) {
-        agent.sandbox.allow = [...agent.sandbox.allow, target!.host];
+      if (!agent) return;
+      const added = !agent.sandbox.allow.includes(target.host);
+      if (added) {
+        agent.sandbox.allow = [...agent.sandbox.allow, target.host];
         this.hub.configChanged();
       }
       await this.syncRules(agentId);
       const err = this.state.agents[agentId]?.syncError;
-      if (err?.includes(target!.host)) {
-        this.hub.activity("config", agentId, `Couldn't allow ${target!.host}: ${err.slice(0, 160)}`);
+      if (err?.includes(target.host)) {
+        if (added) {
+          agent.sandbox.allow = agent.sandbox.allow.filter((h) => h !== target.host);
+          this.hub.configChanged();
+          await this.syncRules(agentId);
+        }
+        this.hub.activity("config", agentId, `Couldn't allow ${target.host}: ${err.slice(0, 160)}`);
         return;
       }
+      for (const a of list.filter((x) => x.host === target.host)) await respond(a.id, "dismiss");
+      this.hub.activity("config", agentId, `You allowed ${target.host} for ${who}'s sandbox`);
+    } else {
+      for (const a of approvalId === "all" ? list : [target!]) await respond(a.id, "dismiss");
     }
-    // Clear the queue entries this answer covers (all of them, or every one for that host).
-    const clear = st.approvals.filter((a) => approvalId === "all" || a.host === target!.host);
-    for (const a of clear) await run("sbx", ["policy", "approval", "respond", a.id, "--option", "dismiss"], { timeoutMs: 10_000 });
-    if (decision === "allow" && target) this.hub.activity("config", agentId, `You allowed ${target.host} for ${this.hub.name(agentId)}'s sandbox`);
     await this.refreshApprovals();
   }
 

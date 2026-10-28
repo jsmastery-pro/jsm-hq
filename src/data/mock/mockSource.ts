@@ -318,7 +318,7 @@ export function createMockSource(): OfficeDataSource {
         world.configChanged();
         world.activity("config", agentId, `You allowed ${target.host} for ${world.name(agentId)}'s sandbox`);
       }
-      st.approvals = st.approvals.filter((a) => approvalId !== "all" && a.host !== target?.host);
+      st.approvals = approvalId === "all" ? [] : st.approvals.filter((a) => (decision === "allow" ? a.host !== target?.host : a.id !== approvalId));
       syncSbx();
     },
 

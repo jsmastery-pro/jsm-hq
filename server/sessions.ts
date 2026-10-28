@@ -12,6 +12,7 @@ import { adapters, localBinary } from "./adapters";
 import type { Hub } from "./hub";
 import { sessionBackend, type LaunchSpec, type TermHandle } from "./backends";
 import { resolveCommand } from "./backends/pty";
+import { loadEnvFile } from "./backends/tmux";
 import { parseCliJson } from "./lib/json";
 import { run } from "./lib/exec";
 import { log } from "./lib/log";
@@ -538,7 +539,7 @@ export class Sessions {
         const env = win ? null : this.envFileFor(agentId);
         file = win ? "powershell.exe" : env ? "/bin/sh" : sh;
         // Load the env file into the shell (HQ itself never reads it), then hand over to your shell.
-        args = win ? ["-NoLogo"] : env ? ["-c", 'set -a && . "$1" && set +a && exec "$2" -l', "sh", env, sh] : ["-l"];
+        args = win ? ["-NoLogo"] : env ? ["-c", `${loadEnvFile('"$1"')}; exec "$2" -l`, "sh", env, sh] : ["-l"];
         banner = `${sh} in ${dir}`;
       }
       if (this.shellGen.get(id) !== gen || this.shells.has(id) || this.hub.status(agentId)?.session.state !== "running") return;

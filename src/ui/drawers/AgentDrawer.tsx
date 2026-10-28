@@ -49,7 +49,7 @@ export function AgentDrawer({ id, initialTab }: { id: string; initialTab?: Agent
           </div>
         )
       )}
-      {agent.mode === "sandbox" && <BlockedRequests agent={agent} />}
+      <BlockedRequests agent={agent} />
       <div className="border-b-[3px] border-ink px-3 py-2">
         <Tabs
           value={tab}
@@ -115,7 +115,16 @@ function ShellTab({ agent, status }: { agent: AgentConfig; status: AgentStatus }
 function BlockedRequests({ agent }: { agent: AgentConfig }) {
   const approvals = useOffice((s) => s.snap?.sbx.agents[agent.id]?.approvals) ?? [];
   const [open, setOpen] = useState(false);
+  // Buttons stay disabled from a click until HQ sends the updated list.
+  const [busy, setBusy] = useState(false);
+  const listKey = approvals.map((a) => a.id).join(",");
+  useEffect(() => setBusy(false), [listKey]);
   if (!approvals.length) return null;
+  const act = (id: string, decision: "allow" | "dismiss") => {
+    setBusy(true);
+    officeActions.answerApproval(agent.id, id, decision);
+    window.setTimeout(() => setBusy(false), 15_000); // in case nothing changes (e.g. sbx refused)
+  };
   const shown = open ? approvals : approvals.slice(0, 3);
   return (
     <div className="border-b-[3px] border-ink bg-[#fff1d6] px-3 py-1.5 text-[13px]">
@@ -123,7 +132,7 @@ function BlockedRequests({ agent }: { agent: AgentConfig }) {
         <b className="flex-1">
           Blocked by the sandbox · {approvals.length}
         </b>
-        <button className="text-[12px] underline" onClick={() => officeActions.answerApproval(agent.id, "all", "dismiss")}>
+        <button className="text-[12px] underline disabled:opacity-50" disabled={busy} onClick={() => act("all", "dismiss")}>
           Dismiss all
         </button>
       </div>
@@ -133,10 +142,10 @@ function BlockedRequests({ agent }: { agent: AgentConfig }) {
             <span className="min-w-0 flex-1 truncate font-term text-[16px]" title={a.detail}>
               {a.host}
             </span>
-            <button className="btn px-1.5 text-[11px]" onClick={() => officeActions.answerApproval(agent.id, a.id, "allow")}>
+            <button className="btn px-1.5 text-[11px]" disabled={busy} onClick={() => act(a.id, "allow")}>
               Allow
             </button>
-            <button className="btn px-1.5 text-[11px]" onClick={() => officeActions.answerApproval(agent.id, a.id, "dismiss")}>
+            <button className="btn px-1.5 text-[11px]" disabled={busy} onClick={() => act(a.id, "dismiss")}>
               Dismiss
             </button>
           </li>
