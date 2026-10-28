@@ -12,6 +12,8 @@ import { adapters, localBinary } from "./adapters";
 import type { Hub } from "./hub";
 import { sessionBackend, type LaunchSpec, type TermHandle } from "./backends";
 import { resolveCommand } from "./backends/pty";
+import { loadEnvFile } from "./backends/tmux";
+import { sandboxList } from "./lib/json";
 import { run } from "./lib/exec";
 import { log } from "./lib/log";
 import { projectHome, sessionName } from "./paths";
@@ -85,7 +87,9 @@ export class Sessions {
       hub.setSession(id, { state: "starting", detail: "Preparing folder…", workspace: workspaceFor(agent, hub.slug) });
       const dir = await ensureWorkspace(agent, hub.slug, hub.repo);
       const adapter = adapters[agent.cli];
-      await adapter.writeFiles(dir, agent, hub.snap.config, this.agentToken);
+      // App variables reach the agent in sandbox mode and in Local mode with tmux (not Local on Windows).
+      const hasEnvFile = !!this.envFileFor(id) && (agent.mode === "sandbox" || this.backend.persistent);
+      await adapter.writeFiles(dir, agent, hub.snap.config, this.agentToken, { hasEnvFile });
       const specs = stackSkills(hub.snap.config.stack);
       if (specs.length || hasHqSkills(hub.slug, dir)) {
         hub.setSession(id, { detail: "Installing agent skills…" });
@@ -162,7 +166,7 @@ export class Sessions {
     const ls = await run("sbx", ["ls", "--json"], { timeoutMs: 10_000 });
     let sandboxExists = false;
     try {
-      sandboxExists = ls.ok && ((JSON.parse(ls.stdout) as { sandboxes?: { name: string }[] }).sandboxes ?? []).some((s) => s.name === name);
+      sandboxExists = ls.ok && (sandboxList(ls.stdout) ?? []).some((s) => s.name === name);
     } catch {
       /* sbx unavailable */
     }
@@ -199,7 +203,7 @@ export class Sessions {
   private async sandboxExists(name: string): Promise<boolean> {
     const r = await run("sbx", ["ls", "--json"], { timeoutMs: 10_000 });
     try {
-      return ((JSON.parse(r.stdout) as { sandboxes?: { name: string }[] }).sandboxes ?? []).some((s) => s.name === name);
+      return (sandboxList(r.stdout) ?? []).some((s) => s.name === name);
     } catch {
       return false;
     }
@@ -210,7 +214,7 @@ export class Sessions {
     for (let i = 0; i < 45; i++) {
       const r = await run("sbx", ["ls", "--json"], { timeoutMs: 10_000 });
       try {
-        if (((JSON.parse(r.stdout) as { sandboxes?: { name: string }[] }).sandboxes ?? []).some((s) => s.name === this.name(id))) return true;
+        if ((sandboxList(r.stdout) ?? []).some((s) => s.name === this.name(id))) return true;
       } catch {
         /* keep waiting */
       }
@@ -242,7 +246,7 @@ export class Sessions {
     if (!r.ok) return;
     let list: { name: string; cpus?: number; memory_mib?: number }[] = [];
     try {
-      list = (JSON.parse(r.stdout) as { sandboxes?: typeof list }).sandboxes ?? [];
+      list = sandboxList<(typeof list)[number]>(r.stdout) ?? [];
     } catch {
       return;
     }
@@ -526,12 +530,17 @@ export class Sessions {
       if (agent.mode === "sandbox") {
         const name = this.name(agentId);
         // bash when the image has it, else sh; start in the agent's folder (same path inside the sandbox).
-        ({ file, args } = await resolveCommand("sbx", ["exec", "-it", ...(win ? [] : ["-w", dir]), name, "sh", "-c", "command -v bash >/dev/null && exec bash -l || exec sh -l"]));
+        // The agent's app variables too, so what you check here matches what the agent sees.
+        const env = this.envFileFor(agentId);
+        ({ file, args } = await resolveCommand("sbx", ["exec", "-it", ...(env ? ["--env-file", env] : []), ...(win ? [] : ["-w", dir]), name, "sh", "-c", "command -v bash >/dev/null && exec bash -l || exec sh -l"]));
         banner = `sbx exec -it ${name} bash`;
       } else {
-        file = win ? "powershell.exe" : process.env.SHELL || "/bin/sh";
-        args = win ? ["-NoLogo"] : ["-l"];
-        banner = `${file} in ${dir}`;
+        const sh = process.env.SHELL || "/bin/sh";
+        const env = win ? null : this.envFileFor(agentId);
+        file = win ? "powershell.exe" : env ? "/bin/sh" : sh;
+        // Load the env file into the shell (HQ itself never reads it), then hand over to your shell.
+        args = win ? ["-NoLogo"] : env ? ["-c", `${loadEnvFile('"$1"')}; exec "$2" -l`, "sh", env, sh] : ["-l"];
+        banner = `${sh} in ${dir}`;
       }
       if (this.shellGen.get(id) !== gen || this.shells.has(id) || this.hub.status(agentId)?.session.state !== "running") return;
       const size = this.sizes.get(id) ?? { cols: 100, rows: 30 };

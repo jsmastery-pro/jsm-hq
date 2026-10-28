@@ -11,9 +11,21 @@ const TERM_ENV = { ...process.env, TERM: "xterm-256color", COLORTERM: "truecolor
 /** Quotes for a POSIX shell only when needed, so simple commands stay readable. */
 const q = (s: string) => (/^[A-Za-z0-9_\-.,:/=@%+]+$/.test(s) ? s : shq(s));
 
+/**
+ * Shell code that exports each KEY=value line of an env file literally, like `sbx --env-file`
+ * (no $-expansion, spaces kept; comments and blank lines skipped). HQ itself never reads the file.
+ */
+export const loadEnvFile = (quotedPath: string) =>
+  // CRLF files: drop the \r. Lines whose key isn't a valid name are skipped (export would stop the shell).
+  // Scratch names are unlikely to clash with app variables and are unset afterwards; the CR is
+  // computed per line, so nothing in the file can change it.
+  `while IFS= read -r __jsmhq_l || [ -n "$__jsmhq_l" ]; do __jsmhq_l=\${__jsmhq_l%"$(printf '\\r')"}; __jsmhq_k=\${__jsmhq_l%%=*}; ` +
+  `case "$__jsmhq_l" in *=*) case "$__jsmhq_k" in ""|[!A-Za-z_]*|*[!A-Za-z0-9_]*) ;; *) export "$__jsmhq_l";; esac;; esac; done < ${quotedPath}; ` +
+  `unset __jsmhq_l __jsmhq_k`;
+
 /** The shell line tmux runs. Local mode loads the env file into that shell. */
 export function shellCommand(spec: LaunchSpec): string {
-  const load = spec.envFile ? `set -a && . ${shq(spec.envFile)} && set +a && ` : "";
+  const load = spec.envFile ? `${loadEnvFile(shq(spec.envFile))} && ` : "";
   return load + [spec.file, ...spec.args].map(q).join(" ");
 }
 

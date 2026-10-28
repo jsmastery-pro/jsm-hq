@@ -49,6 +49,7 @@ export function AgentDrawer({ id, initialTab }: { id: string; initialTab?: Agent
           </div>
         )
       )}
+      <BlockedRequests agent={agent} />
       <div className="border-b-[3px] border-ink px-3 py-2">
         <Tabs
           value={tab}
@@ -106,6 +107,55 @@ function ShellTab({ agent, status }: { agent: AgentConfig; status: AgentStatus }
       <div className="min-h-0 flex-1">
         <TerminalView agentId={`shell:${agent.id}`} />
       </div>
+    </div>
+  );
+}
+
+/** Requests this agent's sandbox blocked (sbx's approval queue), even ones the agent never asked about. */
+function BlockedRequests({ agent }: { agent: AgentConfig }) {
+  const approvals = useOffice((s) => s.snap?.sbx.agents[agent.id]?.approvals) ?? [];
+  const [open, setOpen] = useState(false);
+  // Buttons stay disabled from a click until HQ sends the updated list.
+  const [busy, setBusy] = useState(false);
+  const listKey = approvals.map((a) => a.id).join(",");
+  useEffect(() => setBusy(false), [listKey]);
+  if (!approvals.length) return null;
+  const act = (id: string, decision: "allow" | "dismiss") => {
+    setBusy(true);
+    officeActions.answerApproval(agent.id, id, decision);
+    window.setTimeout(() => setBusy(false), 15_000); // in case nothing changes (e.g. sbx refused)
+  };
+  const shown = open ? approvals : approvals.slice(0, 3);
+  return (
+    <div className="border-b-[3px] border-ink bg-[#fff1d6] px-3 py-1.5 text-[13px]">
+      <div className="flex items-center gap-2">
+        <b className="flex-1">
+          Blocked by the sandbox · {approvals.length}
+        </b>
+        <button className="text-[12px] underline disabled:opacity-50" disabled={busy} onClick={() => act("all", "dismiss")}>
+          Dismiss all
+        </button>
+      </div>
+      <ul className="mt-1">
+        {shown.map((a) => (
+          <li key={a.id} className="flex items-center gap-2 py-0.5">
+            <span className="min-w-0 flex-1 truncate font-term text-[16px]" title={`${a.title ?? a.host} — ${a.detail}`}>
+              {a.title ?? a.host}
+            </span>
+            <button className="btn px-1.5 text-[11px]" disabled={busy} onClick={() => act(a.id, "allow")}>
+              Allow
+            </button>
+            <button className="btn px-1.5 text-[11px]" disabled={busy} onClick={() => act(a.id, "dismiss")}>
+              Dismiss
+            </button>
+          </li>
+        ))}
+      </ul>
+      {approvals.length > 3 && (
+        <button className="text-[12px] underline" onClick={() => setOpen(!open)}>
+          {open ? "Show fewer" : `Show all ${approvals.length}`}
+        </button>
+      )}
     </div>
   );
 }

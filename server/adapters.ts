@@ -4,7 +4,7 @@
 
 import { agentWrite } from "./lib/agentFs";
 import type { AgentCli, AgentConfig, HqConfig } from "../src/data/types";
-import { excludeFromGit, HOOK_SCRIPT, hookCommand, hookScriptFor, hqUrl, MCP_CONFIG, roleMd, writeClaudeFiles, writeHookScript } from "./agentFiles";
+import { adoptRoleFile, excludeFromGit, HOOK_SCRIPT, type RoleExtras, hookCommand, hookScriptFor, hqUrl, MCP_CONFIG, roleMd, writeClaudeFiles, writeHookScript } from "./agentFiles";
 import { run } from "./lib/exec";
 
 export interface Launch {
@@ -14,15 +14,16 @@ export interface Launch {
 
 export interface CliAdapter {
   /** Writes HQ's files into the agent's folder (all git-excluded). */
-  writeFiles(dir: string, agent: AgentConfig, cfg: HqConfig, token: string): Promise<void>;
+  writeFiles(dir: string, agent: AgentConfig, cfg: HqConfig, token: string, extras?: RoleExtras): Promise<void>;
   launch(agent: AgentConfig, dir: string): Launch;
 }
 
 // ---------------------------------------------------------------- Claude Code
 
 const claude: CliAdapter = {
-  async writeFiles(dir, agent, cfg, token) {
-    writeClaudeFiles(dir, agent, cfg, token);
+  async writeFiles(dir, agent, cfg, token, extras = {}) {
+    const ownRole = await adoptRoleFile(dir);
+    writeClaudeFiles(dir, agent, cfg, token, { ...extras, ownRole });
   },
   launch(agent, dir) {
     // "Opus" / "Sonnet" / "Haiku" → Claude Code's aliases; anything else is passed as a full model id.
@@ -40,12 +41,12 @@ const CODEX_EVENTS = ["SessionStart", "UserPromptSubmit", "PreToolUse", "Permiss
 /** TOML basic string (JSON's escaping is valid TOML for these characters). */
 const t = (s: string) => JSON.stringify(s);
 
-export function codexConfig(agent: AgentConfig, cfg: HqConfig, token: string, dir: string): string {
+export function codexConfig(agent: AgentConfig, cfg: HqConfig, token: string, dir: string, extras: RoleExtras = {}): string {
   const url = hqUrl(agent, cfg.project.hqPort);
   const script = hookScriptFor(agent, dir);
   const lines = [
     "# Written by JSM HQ for this agent (git-excluded). Codex loads it once you trust this folder.",
-    `developer_instructions = ${t(roleMd(agent, cfg))}`,
+    `developer_instructions = ${t(roleMd(agent, cfg, extras))}`,
     "",
     "[features]",
     "hooks = true",
@@ -60,14 +61,15 @@ export function codexConfig(agent: AgentConfig, cfg: HqConfig, token: string, di
 }
 
 const codex: CliAdapter = {
-  async writeFiles(dir, agent, cfg, token) {
+  async writeFiles(dir, agent, cfg, token, extras = {}) {
     // A repo that commits its own Codex config can't take HQ's without changing a tracked file.
     const tracked = await run("git", ["ls-files", "--error-unmatch", CODEX_CONFIG], { cwd: dir });
     if (tracked.ok) throw new Error(`This repo commits ${CODEX_CONFIG}, so HQ can't add its Codex settings without changing a tracked file. Use Claude Code for this agent, or remove that file from the repo.`);
-    agentWrite(dir, "ROLE.md", roleMd(agent, cfg));
-    agentWrite(dir, CODEX_CONFIG, codexConfig(agent, cfg, token, dir), { mode: 0o600 });
+    // The role goes in the config (developer_instructions); the folder's own ROLE.md is included, never overwritten.
+    const ownRole = await adoptRoleFile(dir);
+    agentWrite(dir, CODEX_CONFIG, codexConfig(agent, cfg, token, dir, { ...extras, ownRole }), { mode: 0o600 });
     if (hookScriptFor(agent, dir)) writeHookScript(dir);
-    excludeFromGit(dir, ["ROLE.md", CODEX_CONFIG, HOOK_SCRIPT]);
+    excludeFromGit(dir, [CODEX_CONFIG, HOOK_SCRIPT]);
   },
   launch(agent) {
     const model = agent.model.trim() && !/^default$/i.test(agent.model.trim()) ? agent.model.trim() : null;

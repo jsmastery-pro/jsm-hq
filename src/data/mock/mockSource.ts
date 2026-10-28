@@ -56,7 +56,7 @@ export function createMockSource(): OfficeDataSource {
     const next = mockSbx(world.snap.config.team, world.snap.config.project.name);
     next.globalKeys = old.globalKeys;
     next.proxy = old.proxy;
-    for (const id of Object.keys(next.agents)) if (old.agents[id]) next.agents[id].keys = old.agents[id].keys;
+    for (const id of Object.keys(next.agents)) if (old.agents[id]) (next.agents[id].keys = old.agents[id].keys), (next.agents[id].approvals = old.agents[id].approvals);
     world.snap.sbx = next;
     world.emit({ type: "sbx.updated", sbx: structuredClone(next) });
   }
@@ -304,6 +304,21 @@ export function createMockSource(): OfficeDataSource {
     },
 
     refreshSbx() {
+      syncSbx();
+    },
+
+    answerApproval(agentId, approvalId, decision) {
+      const st = world.snap.sbx.agents[agentId];
+      const target = st?.approvals.find((a) => a.id === approvalId);
+      if (!st || (approvalId !== "all" && !target)) return;
+      if (decision === "allow" && target) {
+        const agent = world.cfg(agentId);
+        if (agent && !agent.sandbox.allow.includes(target.host)) agent.sandbox.allow = [...agent.sandbox.allow, target.host];
+        hostCmd(agentId, `sbx policy allow network --sandbox hq-mock-${agentId} ${target.host} (mock)`);
+        world.configChanged();
+        world.activity("config", agentId, `You allowed ${target.host} for ${world.name(agentId)}'s sandbox`);
+      }
+      st.approvals = approvalId === "all" ? [] : st.approvals.filter((a) => (decision === "allow" ? a.host !== target?.host : a.id !== approvalId));
       syncSbx();
     },
 

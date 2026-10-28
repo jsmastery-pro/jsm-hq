@@ -99,6 +99,8 @@ export interface OfficeDataSource {
   setProxy(url: string | null): void;
   /** Creates the agent's env file if needed and opens it in the default editor. */
   openEnvFile(agentId: string): void;
+  /** Answers requests an agent's sandbox blocked (sbx's approval queue). "all" with dismiss clears them all. */
+  answerApproval(agentId: string, approvalId: string, decision: "allow" | "dismiss"): void;
   /** Re-reads policy rules, keys and proxy from sbx. */
   refreshSbx(): void;
   updateWorkflow(patch: WorkflowPatch): void;

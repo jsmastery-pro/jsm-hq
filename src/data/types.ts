@@ -248,6 +248,20 @@ export interface SbxAgentState {
   keys: string[]; // service keys scoped to this sandbox
   envFile: { path: string; exists: boolean };
   syncError: string | null;
+  /** Requests the sandbox blocked, waiting in sbx's approval queue (`sbx policy approval ls`). */
+  approvals: SbxApproval[];
+}
+
+export interface SbxApproval {
+  id: string; // sbx's approval id
+  host: string; // "mcp.notion.com:443"
+  /** sbx's title as is, e.g. "GET api.example.com:443/v1/data" (shown, so different requests can be told apart). */
+  title?: string;
+  detail: string;
+  /** False when sbx's entry is narrower than host:port (e.g. one HTTP method and path). */
+  hostWide?: boolean;
+  /** "TCP" or "UDP" from sbx's detail. HQ's allow rules are TCP, so others are answered through sbx. */
+  protocol?: string;
 }
 
 /** What sbx actually has on this machine (read back, not saved settings). */

@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { arch, cpus, platform, release, totalmem } from "node:os";
 import type { AgentConfig, SetupCheck, SetupFix, SetupState } from "../src/data/types";
 import { usesTmux } from "./backends";
+import { parseCliJson, sandboxList } from "./lib/json";
 import { has, run } from "./lib/exec";
 import type { RepoInfo } from "./repo";
 
@@ -79,9 +80,11 @@ async function checkSbxLogin(sbxOk: boolean): Promise<Check> {
   const base = { id: "sbx-login" as const, label: "Signed in to Docker", neededFor: "sandbox" as const };
   if (!sbxOk) return { ...base, status: "missing", detail: "Waiting for sbx.", fix: null };
   const r = await run("sbx", ["ls", "--json"], { timeoutMs: 10_000 });
+  const list = r.ok ? sandboxList<unknown>(r.stdout) : null;
+  // The command worked, so you're signed in; an unreadable list only loses the count (never block Start on it).
   if (r.ok) {
-    const n = (JSON.parse(r.stdout || "{}") as { sandboxes?: unknown[] }).sandboxes?.length ?? 0;
-    return { ...base, status: "ok", detail: `Signed in · ${n} sandbox${n === 1 ? "" : "es"} on this machine`, fix: null };
+    const n = list?.length;
+    return { ...base, status: "ok", detail: n === undefined ? "Signed in" : `Signed in · ${n} sandbox${n === 1 ? "" : "es"} on this machine`, fix: null };
   }
   const msg = (r.stderr || r.stdout).trim();
   const loggedOut = /log ?in|sign ?in|unauthori[sz]ed|not authenticated/i.test(msg);
@@ -172,7 +175,7 @@ async function checkOpenAiSecret(sbxOk: boolean): Promise<Check> {
   const r = await run("sbx", ["secret", "ls", "--json"], { timeoutMs: 10_000 });
   let has = false;
   try {
-    has = ((JSON.parse(r.stdout) as { secrets?: { name: string; scope: string }[] }).secrets ?? []).some((s) => s.name === "openai" && s.scope === "global");
+    has = (parseCliJson<{ secrets?: { name: string; scope: string }[] }>(r.stdout)?.secrets ?? []).some((s) => s.name === "openai" && s.scope === "global");
   } catch {
     /* sbx down */
   }
