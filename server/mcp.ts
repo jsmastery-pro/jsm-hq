@@ -176,6 +176,25 @@ function buildServer(hub: Hub, planner: Planner, me: string): McpServer {
   );
 
   server.registerTool(
+    "ask_user",
+    {
+      description:
+        "Ask the user to do something you can't do from your sandbox: create an account, database or API key, change a setting in a dashboard (Vercel, Supabase…), or put a value in your env file. It goes to their Action items list. Give a short title and clear steps. Never include secret values; name the variable instead. HQ messages you when they've done it. For a variable you need, write: add NAME to <your name>'s App variables in HQ (Settings → Sandbox → App variables), then restart <your name>. For a site you need, use request_access instead.",
+      inputSchema: {
+        title: z.string().describe("What to do, in a few words"),
+        details: z.string().describe("The exact steps: where to go, what to create, which variable name, where to put it, and whether you need a restart. No secret values."),
+        waiting: z.boolean().optional().describe("True if you can't continue without it"),
+      },
+    },
+    guard(({ title, details, waiting }: { title: string; details: string; waiting?: boolean }) => {
+      if (!planner.actions) throw new Error("Action items aren't available.");
+      if (!details.trim()) throw new Error("Add the steps in details, so the user knows exactly what to do.");
+      const item = planner.actions.add(me, title, details, !!waiting);
+      return ok(`Added to the user's Action items (${item.id}). ${waiting ? "Wait for HQ's message, or work on something else meanwhile." : "Keep working; HQ will message you when it's done."}`);
+    }),
+  );
+
+  server.registerTool(
     "request_access",
     {
       description:

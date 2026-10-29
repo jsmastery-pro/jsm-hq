@@ -13,6 +13,7 @@ import { Hub } from "./hub";
 import { GitHubSync } from "./githubSync";
 import { Inbox } from "./inbox";
 import { Planner } from "./planner";
+import { ActionItems } from "./actionItems";
 import { Sbx } from "./sbx";
 import { SbxMcp } from "./sbxMcp";
 import { run } from "./lib/exec";
@@ -64,6 +65,7 @@ async function main() {
   void sbx.refresh();
   void mcp.refresh();
   const planner = new Planner(hub, inbox);
+  planner.actions = new ActionItems(hub, planner);
 
   const root = dirname(dirname(fileURLToPath(import.meta.url)));
   const distDir = join(root, "dist");

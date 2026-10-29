@@ -2,6 +2,7 @@ import type { StackConfig } from "./stack";
 import type {
   AccessDecision,
   AccessRequest,
+  ActionItem,
   McpState,
   NewMcpServer,
   ActivityEvent,
@@ -44,7 +45,8 @@ export type OfficeEvent =
   | { type: "activity"; event: ActivityEvent }
   | { type: "terminal.output"; agentId: string; data: string }
   | { type: "access.updated"; request: AccessRequest }
-  | { type: "mcp.updated"; mcp: McpState };
+  | { type: "mcp.updated"; mcp: McpState }
+  | { type: "action.updated"; item: ActionItem };
 
 export type SimSpeed = 1 | 2 | 4;
 
@@ -102,6 +104,9 @@ export interface OfficeDataSource {
   setProxy(url: string | null): void;
   /** Creates the agent's env file if needed and opens it in the default editor. */
   openEnvFile(agentId: string): void;
+  /** Closes an action item; HQ tells the agent (done: with your note; dismissed: continue without it). */
+  resolveActionItem(id: string, decision: "done" | "dismissed", note?: string): void;
+
   // MCP servers (Docker Sandboxes' registry)
   refreshMcp(): void;
   addMcp(input: NewMcpServer): void;

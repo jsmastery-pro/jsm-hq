@@ -1,5 +1,5 @@
 import type { SimSpeed } from "../../data/source";
-import { officeActions, useOffice } from "../../store/office";
+import { officeActions, selectAttention, useOffice } from "../../store/office";
 import { ui, useUi } from "../../store/ui";
 
 const SPEEDS: SimSpeed[] = [1, 2, 4];
@@ -22,6 +22,7 @@ export function TopBar() {
   const speed = useOffice((s) => s.speed);
   const hasDev = useOffice((s) => s.presets !== null);
   const planBoardId = useUi((s) => s.planBoardId);
+  const attention = selectAttention(snap).total;
   const debugOpen = useUi((s) => s.debugOpen);
   const live = useOffice((s) => s.live);
   if (!snap) return null;
@@ -110,6 +111,14 @@ export function TopBar() {
         </button>
       )}
       <div className="flex gap-1.5">
+        <button
+          className="btn text-[14px]"
+          style={attention ? { background: "#ffec27" } : undefined}
+          onClick={() => ui.openActions()}
+          title="Everything waiting on you"
+        >
+          Action items{attention ? ` · ${attention}` : ""}
+        </button>
         <button className="btn text-[14px]" onClick={() => ui.openBoards(planBoardId ?? undefined)}>
           Boards
         </button>

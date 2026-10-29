@@ -119,14 +119,17 @@ export function roleMd(agent: AgentConfig, cfg: HqConfig, extras: RoleExtras = {
         "set_my_status tells the lead automatically. Don't also send_message the same news.",
         "If you are blocked or need a decision, call set_my_status blocked with the reason.",
       ];
+  rules.push(
+    "When you need the user to do something outside your sandbox (create an account, database or API key, change a setting in a dashboard, put a value in your env file), call ask_user with a short title and clear steps, then keep working on what you can. Never put secret values in it; name the variable instead. Variables reach you through HQ: ask the user to add NAME to your App variables in HQ (Settings → Sandbox → App variables) and restart you; there is no env file inside your sandbox to edit.",
+  );
   // Sandboxes block most sites; the agent asks instead of working around it.
   if (agent.mode === "sandbox")
     rules.push(
       "Your sandbox blocks most websites and APIs. If a request you need is blocked (a docs page or an API: usually a 403 saying 'Approval required for <host>'), call request_access with the domain and why, then continue with other work until HQ tells you it was answered. Never work around the block.",
     );
   const tools = agent.isLead
-    ? "list_workers, get_status, list_tasks, create_board, create_task, update_task, assign_task, send_message, request_access"
-    : "get_my_task, set_my_status, list_workers, get_status, list_tasks, send_message, request_access";
+    ? "list_workers, get_status, list_tasks, create_board, create_task, update_task, assign_task, send_message, ask_user, request_access"
+    : "get_my_task, set_my_status, list_workers, get_status, list_tasks, send_message, ask_user, request_access";
   return [
     `# ${agent.name} — ${agent.role}`,
     "",

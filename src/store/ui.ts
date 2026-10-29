@@ -5,6 +5,7 @@ export type DrawerState =
   | { kind: "boards"; boardId?: string }
   | { kind: "prs" }
   | { kind: "env"; name: string }
+  | { kind: "actions" }
   | null;
 
 export type AgentTab = "terminal" | "shell" | "task" | "sandbox" | "messages";
@@ -61,6 +62,9 @@ export const ui = {
   openBoards(boardId?: string) {
     useUi.setState({ drawer: { kind: "boards", boardId } });
     ui.focus({ kind: "plan" });
+  },
+  openActions() {
+    useUi.setState({ drawer: { kind: "actions" } });
   },
   openPrs() {
     useUi.setState({ drawer: { kind: "prs" } });
