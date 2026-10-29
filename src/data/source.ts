@@ -2,6 +2,8 @@ import type { StackConfig } from "./stack";
 import type {
   AccessDecision,
   AccessRequest,
+  McpState,
+  NewMcpServer,
   ActivityEvent,
   AgentMessage,
   AgentPatch,
@@ -41,7 +43,8 @@ export type OfficeEvent =
   | { type: "message"; message: AgentMessage }
   | { type: "activity"; event: ActivityEvent }
   | { type: "terminal.output"; agentId: string; data: string }
-  | { type: "access.updated"; request: AccessRequest };
+  | { type: "access.updated"; request: AccessRequest }
+  | { type: "mcp.updated"; mcp: McpState };
 
 export type SimSpeed = 1 | 2 | 4;
 
@@ -99,6 +102,15 @@ export interface OfficeDataSource {
   setProxy(url: string | null): void;
   /** Creates the agent's env file if needed and opens it in the default editor. */
   openEnvFile(agentId: string): void;
+  // MCP servers (Docker Sandboxes' registry)
+  refreshMcp(): void;
+  addMcp(input: NewMcpServer): void;
+  /** Runs `sbx mcp auth <name>` in a visible terminal (id `setup:mcp-auth-<name>`). */
+  authMcp(name: string): void;
+  /** Unregisters a server from sbx (affects every sandbox on this machine). */
+  removeMcp(name: string): void;
+  /** Which servers an agent gets. New ones are attached right away if it's running. */
+  setAgentMcp(agentId: string, names: string[]): void;
   /** Answers requests an agent's sandbox blocked (sbx's approval queue). "all" with dismiss clears them all. */
   answerApproval(agentId: string, approvalId: string, decision: "allow" | "dismiss"): void;
   /** Re-reads policy rules, keys and proxy from sbx. */

@@ -49,6 +49,7 @@ export function newAgent(id: string, name: string, role: string, color: string, 
       : `You are ${name}, a ${role.toLowerCase()} on the team. You build the tasks assigned to you.`,
     sandbox: defaultSandbox(),
     workspacePath: null,
+    mcp: [],
   };
 }
 
@@ -72,6 +73,7 @@ export function loadConfig(repo: RepoInfo, port: number): { config: HqConfig; is
     // Older files may miss newer fields.
     for (const a of found.team) {
       a.workspacePath ??= null;
+      a.mcp ??= [];
       a.cli ??= "claude";
       a.sandbox.resources ??= { cpus: null, memoryGb: null };
       // Phase D: policy level, proxy and secret names moved to sbx itself.

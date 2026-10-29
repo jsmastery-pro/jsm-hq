@@ -44,6 +44,8 @@ export class Sessions {
   onSessionDown: (agentId: string) => void = () => {};
   /** Called once an agent's sandbox exists after Start (to apply its network rules). */
   onSandboxReady: (agentId: string) => void = () => {};
+  /** Called when an agent's sandbox is removed or recreated (what was attached to it is gone). */
+  onSandboxRemoved: (agentId: string) => void = () => {};
   /** The agent's env file, if it has one (passed with --env-file / sourced). */
   envFileFor: (agentId: string) => string | null = () => null;
   /** Called when HQ reattaches to a session that was already running (e.g. after an HQ restart). */
@@ -185,7 +187,7 @@ export class Sessions {
     await this.backend.kill(name);
     if (opts.deleteSandbox) {
       const rm = await run("sbx", ["rm", "-f", name], { timeoutMs: 60_000 });
-      if (rm.ok) done.push("sandbox");
+      if (rm.ok) (done.push("sandbox"), this.onSandboxRemoved(id));
       else if (!/not found|no such/i.test(rm.stderr)) log.warn(`sbx rm ${name}: ${rm.stderr.trim()}`);
     } else if (agent.mode === "sandbox") void run("sbx", ["stop", name], { timeoutMs: 30_000 });
     if (opts.deleteFolder && !agent.workspacePath) {
@@ -235,6 +237,7 @@ export class Sessions {
       this.hub.setSession(id, { state: "failed", detail: `sbx rm failed: ${rm.stderr.trim()}` });
       return;
     }
+    this.onSandboxRemoved(id);
     this.hub.setSession(id, { state: "stopped", detail: null });
     this.hub.activity("session", id, `Recreating ${agent.name}'s sandbox with new resources`);
     await this.start(id);
@@ -482,6 +485,21 @@ export class Sessions {
 
   async recheckSetup() {
     this.hub.setSetup(await runSetupChecks(this.hub.repo, this.hub.snap.config.team));
+  }
+
+  /** Runs a program in a terminal the browser can watch and type into (id must start with "setup:"). */
+  runTerminal(id: string, file: string, args: string[], onExit: (code: number) => void = () => {}) {
+    if (!id.startsWith("setup:") || this.fixes.has(id)) return;
+    const size = this.sizes.get(id) ?? { cols: 100, rows: 16 };
+    const pty = spawnPty(file, args, { name: "xterm-256color", cols: size.cols, rows: size.rows, cwd: this.hub.repo.root, env: TERM_ENV });
+    this.fixes.set(id, pty);
+    this.hub.terminal(id, `\x1b[2m$ ${[file, ...args].join(" ")}\x1b[0m\r\n`);
+    pty.onData((d) => this.hub.terminal(id, d));
+    pty.onExit(({ exitCode }) => {
+      this.fixes.delete(id);
+      this.hub.terminal(id, `\r\n\x1b[${exitCode === 0 ? "32m✓ Done" : `31m✗ Exited with code ${exitCode}`}\x1b[0m\r\n`);
+      onExit(exitCode);
+    });
   }
 
   /** Runs a check's fix command in a visible terminal. Only commands HQ itself suggested. */

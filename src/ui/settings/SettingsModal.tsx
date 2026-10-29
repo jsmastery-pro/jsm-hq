@@ -4,6 +4,7 @@ import { BoardsSettings } from "./BoardsSettings";
 import { ProjectSettings } from "./ProjectSettings";
 import { SandboxSettingsTab } from "./SandboxSettings";
 import { StackSettings } from "./StackSettings";
+import { McpSettings } from "./McpSettings";
 import { TeamSettings } from "./TeamSettings";
 import { WorkflowSettings } from "./WorkflowSettings";
 
@@ -11,6 +12,7 @@ const TABS: { id: SettingsTab; label: string; hint: string }[] = [
   { id: "team", label: "Team", hint: "Agents, roles, skills" },
   { id: "workflow", label: "Workflow", hint: "Review, merge, deploy" },
   { id: "stack", label: "Stack", hint: "Frameworks, tools" },
+  { id: "mcp", label: "MCP", hint: "Servers for agents" },
   { id: "sandbox", label: "Sandbox", hint: "Network, proxy, secrets" },
   { id: "boards", label: "Boards", hint: "Progress boards" },
   { id: "project", label: "Project", hint: "Repo and HQ" },
@@ -60,6 +62,7 @@ export function SettingsModal() {
             {settings.tab === "team" && <TeamSettings />}
             {settings.tab === "workflow" && <WorkflowSettings />}
             {settings.tab === "stack" && <StackSettings />}
+            {settings.tab === "mcp" && <McpSettings />}
             {settings.tab === "sandbox" && <SandboxSettingsTab initialAgentId={settings.agentId} />}
             {settings.tab === "boards" && <BoardsSettings />}
             {settings.tab === "project" && <ProjectSettings />}

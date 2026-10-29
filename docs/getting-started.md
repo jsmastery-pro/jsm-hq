@@ -127,6 +127,8 @@ Leave the terminal running while you work. On macOS and Linux, agents keep runni
 
 An agent with a red **Needs input** badge is waiting for you. Click them and answer in their terminal.
 
+To give agents MCP servers (Supabase, Stripe, your own…), use **Settings → MCP**: add the server, sign in if it asks, and tick the agents that should get it.
+
 When an agent needs a website its sandbox blocks (a tool's docs, an API), it asks instead of guessing: its drawer shows the domain and why, with **Allow for this agent / Allow for everyone / Deny**. To allow your stack's docs up front, use **Settings → Stack → Network access**.
 
 ## Something not working?

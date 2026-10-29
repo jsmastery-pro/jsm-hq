@@ -363,6 +363,23 @@ function SandboxTab({ snap, agent }: { snap: OfficeSnapshot; agent: AgentConfig 
         {row("Network", `base: ${snap.sbx.basePolicy}`)}
         {row("Allowed", sb.allow.length ? sb.allow.join(", ") : "—")}
         {row("Blocked", sb.deny.length ? sb.deny.join(", ") : "—")}
+        {row(
+          "MCP servers",
+          agent.mode !== "sandbox" ? (
+            <span className="text-muted">Sandbox mode only</span>
+          ) : (agent.mcp ?? []).length ? (
+            (agent.mcp ?? []).map((n) => (
+              <span key={n} className="chip mb-1 mr-1 font-term text-[14px]" title={(snap.mcp?.attached[agent.id] ?? []).includes(n) ? "Attached" : "Attaches on next start"}>
+                {n}
+                {(snap.mcp?.attached[agent.id] ?? []).includes(n) ? "" : " · next start"}
+              </span>
+            ))
+          ) : (
+            <button className="text-[13px] underline" onClick={() => ui.openSettings("mcp")}>
+              None — add in Settings → MCP
+            </button>
+          ),
+        )}
         {row("HQ access", <span className="font-term text-[17px]">localhost / host.docker.internal :{snap.config.project.hqPort} (added by HQ)</span>)}
         {row(
           "Service keys",

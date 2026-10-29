@@ -130,6 +130,16 @@ export class World {
       environments: [],
       messages: [],
       activity: [],
+      mcp: {
+        servers: [
+          { name: "supabase-dev", transport: "remote http", status: "ready", nextStep: null },
+          { name: "stripe", transport: "remote http", status: "needs-auth", nextStep: "sbx mcp auth stripe" },
+          { name: "trigger", transport: "local stdio", status: "ready", nextStep: null },
+        ],
+        attached: {},
+        error: null,
+        checkedAt: now(),
+      },
     };
   }
 

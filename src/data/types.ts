@@ -43,6 +43,34 @@ export interface AgentConfig {
   roleMd: string; // contents of ROLE.md
   sandbox: SandboxSettings;
   workspacePath: string | null; // an existing folder to use; null = HQ-managed clone
+  /** MCP servers (names in sbx's registry) this agent's sandbox gets. */
+  mcp?: string[];
+}
+
+/** An MCP server registered with Docker Sandboxes (`sbx mcp ls`). */
+export interface McpServer {
+  name: string;
+  transport: string; // "remote http" | "local stdio" | …
+  status: string; // "ready" | "needs-auth" | …
+  nextStep: string | null; // e.g. "sbx mcp auth arcjet"
+}
+
+export interface McpState {
+  servers: McpServer[];
+  /** Per agent: servers attached to its sandbox right now (sbx can't detach one; recreating the sandbox does). */
+  attached: Record<string, string[]>;
+  error: string | null;
+  checkedAt: string;
+}
+
+export interface NewMcpServer {
+  name: string;
+  url?: string;
+  /** Local stdio server: a program on this Mac. */
+  command?: string;
+  args?: string[];
+  /** Optional API key: sent as "Authorization: Bearer <key>", stored by sbx (never by HQ). */
+  apiKey?: string;
 }
 
 export type ReviewTool = "coderabbit" | "greptile" | "copilot" | "human" | "custom";
@@ -302,6 +330,7 @@ export interface OfficeSnapshot {
   messages: AgentMessage[]; // newest first, last 100
   activity: ActivityEvent[]; // newest first, last 50
   accessRequests?: AccessRequest[];
+  mcp?: McpState;
 }
 
 // ---------------------------------------------------------------- Inputs
