@@ -130,6 +130,25 @@ export class World {
       environments: [],
       messages: [],
       activity: [],
+      // Demo: a couple of requests from the first two workers.
+      actionItems: preset.config.team
+        .filter((a) => !a.isLead)
+        .slice(0, 2)
+        .map((a, n) => ({
+          id: `ai-demo-${n}`,
+          fromId: a.id,
+          taskId: null,
+          title: n === 0 ? "Create a Supabase dev project and add its URL to my env file" : "Add the Clerk webhook secret to Vercel (Preview)",
+          details:
+            n === 0
+              ? "1. Create a project at supabase.com (dev only).\n2. Settings → Sandbox → App variables for " + a.name + ":\n   NEXT_PUBLIC_SUPABASE_URL=<project URL>\n   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<publishable key>\n3. Restart me."
+              : "Vercel → Project → Settings → Environment Variables → add CLERK_WEBHOOK_SIGNING_SECRET for Preview.",
+          waiting: n === 0,
+          status: "open" as const,
+          note: null,
+          at: now(),
+          closedAt: null,
+        })),
       mcp: {
         servers: [
           { name: "supabase-dev", transport: "remote http", status: "ready", nextStep: null },

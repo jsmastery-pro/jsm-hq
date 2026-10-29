@@ -3,6 +3,7 @@
 
 import type { Board, Task, TaskStatus } from "../src/data/types";
 import type { Hub } from "./hub";
+import type { ActionItems } from "./actionItems";
 import type { Inbox } from "./inbox";
 
 export interface NewTask {
@@ -20,6 +21,8 @@ const now = () => new Date().toISOString();
 
 export class Planner {
   private seq = 0;
+  /** Set by main: the user's action items (Team MCP `ask_user`). */
+  actions: ActionItems | null = null;
 
   constructor(private hub: Hub, private inbox: Inbox) {}
 

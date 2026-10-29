@@ -192,6 +192,10 @@ export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inb
     },
     refreshSbx: () => sbx.refresh(),
 
+    resolveActionItem: (id, decision, note) => {
+      const d = decision === "done" || decision === "dismissed" ? decision : null;
+      if (d) planner.actions?.resolve(str(id, 40), d, typeof note === "string" ? str(note, 1000) : undefined);
+    },
     refreshMcp: () => mcp.refresh(),
     addMcp: (raw) => {
       const v = (raw ?? {}) as Partial<NewMcpServer>;

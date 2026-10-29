@@ -331,6 +331,21 @@ export interface OfficeSnapshot {
   activity: ActivityEvent[]; // newest first, last 50
   accessRequests?: AccessRequest[];
   mcp?: McpState;
+  actionItems?: ActionItem[];
+}
+
+/** Something an agent needs the user to do outside its sandbox (Team MCP `ask_user`). */
+export interface ActionItem {
+  id: string;
+  fromId: string; // agent id
+  taskId: string | null;
+  title: string;
+  details: string; // steps; never secret values
+  waiting: boolean; // the agent can't continue without it
+  status: "open" | "done" | "dismissed";
+  note: string | null; // the user's note when closing it
+  at: string;
+  closedAt: string | null;
 }
 
 // ---------------------------------------------------------------- Inputs

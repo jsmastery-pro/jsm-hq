@@ -307,6 +307,16 @@ export function createMockSource(): OfficeDataSource {
       syncSbx();
     },
 
+    resolveActionItem(id, decision, note) {
+      const item = world.snap.actionItems?.find((i) => i.id === id);
+      if (!item || item.status !== "open") return;
+      item.status = decision;
+      item.note = note?.trim() || null;
+      item.closedAt = new Date().toISOString();
+      world.emit({ type: "action.updated", item: { ...item } });
+      world.message("you", item.fromId, decision === "done" ? `Done: ${item.title}${item.note ? ` (${item.note})` : ""}` : `Dismissed: ${item.title}`);
+    },
+
     refreshMcp() {
       if (world.snap.mcp) world.emit({ type: "mcp.updated", mcp: structuredClone(world.snap.mcp) });
     },
