@@ -143,7 +143,8 @@ export class Sbx {
     if (!r.ok) return null;
     const lines = r.stdout.split("\n").filter((l) => l.trim());
     const head = lines.findIndex((l) => /^APPROVAL\s+SANDBOX\s+TITLE\s+DETAIL/.test(l));
-    if (head === -1) return lines.length ? null : [];
+    // An empty queue prints a sentence ("No pending approvals.") instead of a table.
+    if (head === -1) return lines.every((l) => /no pending approvals/i.test(l)) ? [] : null;
     const at = ["APPROVAL", "SANDBOX", "TITLE", "DETAIL", "OPTIONS"].map((c) => lines[head].indexOf(c));
     const cell = (l: string, i: number) => l.slice(at[i], at[i + 1] > 0 ? at[i + 1] : undefined).trim();
     return lines
