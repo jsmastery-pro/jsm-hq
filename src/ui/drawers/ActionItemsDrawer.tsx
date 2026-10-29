@@ -13,7 +13,10 @@ export function ActionItemsDrawer() {
   if (!snap) return null;
   const a = selectAttention(snap);
   const agent = (id: string) => snap.config.team.find((x) => x.id === id);
-  const closed = (snap.actionItems ?? []).filter((i) => i.status !== "open").slice(0, 20);
+  const closed = (snap.actionItems ?? [])
+    .filter((i) => i.status !== "open")
+    .sort((x, y) => (y.closedAt ?? "").localeCompare(x.closedAt ?? ""))
+    .slice(0, 20);
   // Waiting items first, then oldest first (what's been waiting longest).
   const open = [...a.items].sort((x, y) => Number(y.waiting) - Number(x.waiting) || x.at.localeCompare(y.at));
   const others = a.asking.length + a.access.length + a.blocked.length + a.readyPrs.length;

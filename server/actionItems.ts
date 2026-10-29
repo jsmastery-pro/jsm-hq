@@ -3,7 +3,7 @@
 // Agents add them with the Team MCP tool `ask_user`; the user closes them in HQ,
 // and HQ tells the agent so it can continue. Kept on this Mac, never committed.
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ActionItem } from "../src/data/types";
 import type { Hub } from "./hub";
@@ -31,7 +31,10 @@ export class ActionItems {
     const open = this.items.filter((i) => i.status === "open");
     const closed = this.items.filter((i) => i.status !== "open").slice(0, KEEP_CLOSED);
     this.hub.snap.actionItems = [...open, ...closed].sort((a, b) => b.at.localeCompare(a.at));
-    writeFileSync(this.file, JSON.stringify(this.hub.snap.actionItems, null, 2));
+    // Write a temp file and rename it over, so a crash mid-save can't leave a half-written list.
+    const tmp = `${this.file}.${process.pid}.tmp`;
+    writeFileSync(tmp, JSON.stringify(this.hub.snap.actionItems, null, 2));
+    renameSync(tmp, this.file);
   }
 
   add(fromId: string, title: string, details: string, waiting: boolean): ActionItem {

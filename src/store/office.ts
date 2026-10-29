@@ -237,6 +237,6 @@ export function selectAttention(snap: OfficeSnapshot | null) {
   const access = (snap.accessRequests ?? []).filter((r) => r.status === "pending");
   const asking = snap.agents.filter((a) => a.state === "needs-input" && !access.some((r) => r.agentId === a.agentId));
   const blocked = snap.config.team.map((a) => ({ agentId: a.id, count: snap.sbx.agents[a.id]?.approvals?.length ?? 0 })).filter((b) => b.count > 0);
-  const readyPrs = snap.pullRequests.filter((p) => p.review === "passed" && !p.merged && !p.closed);
+  const readyPrs = snap.pullRequests.filter((p) => p.review === "passed" && p.mergeable && !p.merged && !p.closed);
   return { items, asking, access, blocked, readyPrs, total: items.length + asking.length + access.length + blocked.length + readyPrs.length };
 }
