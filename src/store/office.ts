@@ -6,7 +6,7 @@ import { createMockSource } from "../data/mock/mockSource";
 import type { ConnectionStatus, DataPreset, OfficeDataSource, OfficeEvent, SimSpeed } from "../data/source";
 import { createWsSource } from "../data/ws/wsSource";
 import type { StackConfig } from "../data/stack";
-import type { AccessDecision, AgentConfig, AgentStatus, OfficeSnapshot, RemoveAgentOptions, SetupCheckId, WelcomeInput, WorkspaceInfo } from "../data/types";
+import type { AccessDecision, NewMcpServer, AgentConfig, AgentStatus, OfficeSnapshot, RemoveAgentOptions, SetupCheckId, WelcomeInput, WorkspaceInfo } from "../data/types";
 import { appendTerminal, clearTerminals } from "./terminal";
 
 export interface LoggedEvent {
@@ -112,6 +112,8 @@ function reduce(snap: OfficeSnapshot, e: OfficeEvent): OfficeSnapshot {
       return { ...snap, activity: [e.event, ...snap.activity].slice(0, 50) };
     case "terminal.output":
       return snap;
+    case "mcp.updated":
+      return { ...snap, mcp: e.mcp };
     case "access.updated":
       return { ...snap, accessRequests: upsert(snap.accessRequests ?? [], e.request, (r) => r.id === e.request.id) };
   }
@@ -183,6 +185,11 @@ export const officeActions = {
   updateBoard: source.updateBoard.bind(source),
   completeWelcome: (input: WelcomeInput) => source.completeWelcome(input),
   updateStack: (stack: StackConfig | null) => source.updateStack(stack),
+  refreshMcp: () => source.refreshMcp(),
+  addMcp: (input: NewMcpServer) => source.addMcp(input),
+  authMcp: (name: string) => source.authMcp(name),
+  removeMcp: (name: string) => source.removeMcp(name),
+  setAgentMcp: (agentId: string, names: string[]) => source.setAgentMcp(agentId, names),
   resolveAccess: (requestId: string, decision: AccessDecision) => source.resolveAccess(requestId, decision),
   simulateAccessRequest: () => source.dev?.simulateAccessRequest(),
   setSpeed(speed: SimSpeed) {

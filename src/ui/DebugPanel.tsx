@@ -44,6 +44,7 @@ function summary(e: OfficeEvent): string {
     case "message": return `${e.message.fromId} → ${e.message.toId}`;
     case "activity": return e.event.text;
     case "terminal.output": return `${e.agentId} +${e.data.length}`;
+    case "mcp.updated": return `${e.mcp.servers.length} MCP servers`;
     case "access.updated": return `${e.request.agentId} ${e.request.domain} ${e.request.status}`;
   }
 }

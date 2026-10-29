@@ -1,6 +1,6 @@
 // Browser commands → server actions. Names match OfficeDataSource methods.
 
-import { SERVICE_KEYS, type AgentCli, type AgentConfig, type AgentPatch, type ReviewTool, type WelcomeInput, type Board, type NewAgentInput, type ProjectConfig, type RemoveAgentOptions, type SandboxSettings, type SetupCheckId, type WorkflowPatch } from "../src/data/types";
+import { SERVICE_KEYS, type AgentCli, type AgentConfig, type AgentPatch, type ReviewTool, type WelcomeInput, type NewMcpServer, type Board, type NewAgentInput, type ProjectConfig, type RemoveAgentOptions, type SandboxSettings, type SetupCheckId, type WorkflowPatch } from "../src/data/types";
 import { STACK_CATEGORIES, stackSkills, stackTool, type StackChoice, type StackConfig } from "../src/data/stack";
 import { resolveAccess } from "./access";
 import { ensureSkillCache } from "./skills";
@@ -10,6 +10,7 @@ import { Hub } from "./hub";
 import type { Inbox } from "./inbox";
 import type { Planner } from "./planner";
 import type { Sbx } from "./sbx";
+import type { SbxMcp } from "./sbxMcp";
 import type { Sessions } from "./sessions";
 import { newAgent } from "./store";
 
@@ -42,7 +43,7 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(
 const str = (v: unknown, max = 2000) => (typeof v === "string" ? v.slice(0, max) : "");
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 
-export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inbox: Inbox, sbx: Sbx) {
+export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inbox: Inbox, sbx: Sbx, mcp: SbxMcp) {
   /** Runs an sbx change and reports failures in the activity feed. */
   const attempt = async (agentId: string | null, what: string, fn: () => Promise<void>) => {
     try {
@@ -127,6 +128,7 @@ export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inb
       hub.snap.config.team = team().filter((a) => a.id !== agent.id);
       hub.snap.agents = hub.snap.agents.filter((a) => a.agentId !== agent.id);
       inbox.forget(agent.id);
+      mcp.forget(agent.id);
       for (const t of hub.snap.tasks)
         if (t.ownerId === agent.id && t.status !== "done") {
           t.ownerId = null;
@@ -189,6 +191,21 @@ export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inb
       await sbx.refresh();
     },
     refreshSbx: () => sbx.refresh(),
+
+    refreshMcp: () => mcp.refresh(),
+    addMcp: (raw) => {
+      const v = (raw ?? {}) as Partial<NewMcpServer>;
+      return mcp.add({
+        name: str(v.name, 40),
+        url: str(v.url, 500) || undefined,
+        command: str(v.command, 300) || undefined,
+        args: Array.isArray(v.args) ? v.args.slice(0, 20).map((a) => str(a, 200)) : undefined,
+        apiKey: str(v.apiKey, 4000) || undefined,
+      });
+    },
+    authMcp: (name) => mcp.authorize(str(name, 40)),
+    removeMcp: (name) => mcp.remove(str(name, 40)),
+    setAgentMcp: (agentId, names) => mcp.setAgent(str(agentId, 80), Array.isArray(names) ? names.slice(0, 50).map((n) => str(n, 40)) : []),
     answerApproval: (agentId, approvalId, decision) => {
       const d = decision === "allow" || decision === "dismiss" ? decision : null;
       if (d) return sbx.answerApproval(str(agentId, 80), str(approvalId, 120), d);

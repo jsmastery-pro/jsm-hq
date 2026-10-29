@@ -14,6 +14,7 @@ import { GitHubSync } from "./githubSync";
 import { Inbox } from "./inbox";
 import { Planner } from "./planner";
 import { Sbx } from "./sbx";
+import { SbxMcp } from "./sbxMcp";
 import { run } from "./lib/exec";
 import { log } from "./lib/log";
 import { ensurePtyHelperExecutable } from "./lib/ptyFix";
@@ -54,8 +55,14 @@ async function main() {
   sessions.lastHookAt = (id) => inbox.lastHookAt(id);
   const sbx = new Sbx(hub);
   sessions.envFileFor = (id) => (existsSync(sbx.envFile(id)) ? sbx.envFile(id) : null);
-  sessions.onSandboxReady = (id) => void sbx.syncRules(id);
+  const mcp = new SbxMcp(hub, (id, file, args, onExit) => sessions.runTerminal(id, file, args, onExit));
+  sessions.onSandboxReady = (id) => {
+    void sbx.syncRules(id);
+    void mcp.attachAll(id);
+  };
+  sessions.onSandboxRemoved = (id) => mcp.forget(id);
   void sbx.refresh();
+  void mcp.refresh();
   const planner = new Planner(hub, inbox);
 
   const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -73,7 +80,7 @@ async function main() {
     agentToken: token,
     distDir: dev ? null : distDir,
     allowedOrigins: [uiOrigin, `http://127.0.0.1:${uiPort}`, `http://localhost:${port}`, `http://127.0.0.1:${port}`],
-    commands: makeCommands(hub, sessions, planner, inbox, sbx),
+    commands: makeCommands(hub, sessions, planner, inbox, sbx, mcp),
   });
   sessions.startPolling();
   sbx.startApprovalPolling();
