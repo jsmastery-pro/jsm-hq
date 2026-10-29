@@ -13,6 +13,8 @@ const REVIEW_HINT: Record<ReviewTool, string> = {
 
 export function WorkflowSettings() {
   const wf = useOffice((s) => s.snap?.config.workflow);
+  // Deploy isn't built in real HQ yet (only the demo shows environments), so it's shown as coming soon.
+  const live = useOffice((s) => s.live);
   if (!wf) return null;
   const stage = (name: string, on: boolean, detail: string) => (
     <span className={`border-[3px] border-ink px-2 py-0.5 ${on ? "bg-white" : "bg-cream-2 text-muted line-through"}`}>
@@ -31,7 +33,13 @@ export function WorkflowSettings() {
           <span>→</span>
           {stage("Merge", true, wf.merge.by === "lead" ? "by the lead" : "by you")}
           <span>→</span>
-          {stage("Deploy", wf.deploy.enabled, deployToolLabel[wf.deploy.tool])}
+          {live ? (
+            <span className="border-[3px] border-dashed border-ink bg-cream-2 px-2 py-0.5 text-muted">
+              <b>Deploy</b> <span className="text-[12px]">coming soon</span>
+            </span>
+          ) : (
+            stage("Deploy", wf.deploy.enabled, deployToolLabel[wf.deploy.tool])
+          )}
         </div>
         <p className="mt-2 text-[13px] text-muted">One task = one branch = one PR. HQ only reads results from these tools; it never merges or deploys itself.</p>
       </section>
@@ -77,6 +85,18 @@ export function WorkflowSettings() {
         <p className="mt-2 text-[12px] text-muted">The lead always sets the merge order and handles conflicts between PRs.</p>
       </section>
 
+      {live ? (
+        <section className="border-[3px] border-dashed border-ink bg-cream-2 p-3">
+          <div className="mb-1 flex items-center justify-between">
+            <SectionTitle>Deploy</SectionTitle>
+            <span className="chip text-[12px]">Coming soon</span>
+          </div>
+          <p className="m-0 text-[13px] text-muted">
+            Preview deployments per PR (Vercel, InstaCloud) and one environment per agent, shown in the office's server room. Not available yet; agents can
+            still deploy with their own tools.
+          </p>
+        </section>
+      ) : (
       <section className="border-[3px] border-ink bg-white p-3">
         <div className="mb-3 flex items-center justify-between">
           <SectionTitle>Deploy</SectionTitle>
@@ -112,6 +132,7 @@ export function WorkflowSettings() {
         </div>
         <p className="mt-2 text-[12px] text-muted">The server room shows one rack per environment. Turn deploy off to hide it.</p>
       </section>
+      )}
     </div>
   );
 }
