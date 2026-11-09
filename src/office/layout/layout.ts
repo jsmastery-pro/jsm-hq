@@ -7,7 +7,7 @@
 //   │ ════════════════ PR belt ═══════════╪═ gate ══════════════╗     │
 //   └──────────────────────────────────────────────────────────╨─────┘
 
-import type { AgentConfig, Environment, HqConfig } from "../../data/types";
+import { supportsOllama, type AgentConfig, type Environment, type HqConfig } from "../../data/types";
 import { deskCarpets } from "../engine/palette";
 import { WalkGrid, type Tile } from "../engine/path";
 
@@ -22,6 +22,29 @@ const DESK_Y = 14; // first cubicle row
 const CUB = 7;
 const PITCH = 8;
 const RACKS_PER_ROW = 5;
+const SECTION_COLS = 3; // most cubicle columns in one section
+const CORRIDOR = 1; // extra empty tiles between sections (the 1-tile gutter of each block makes the corridor 2 wide)
+
+/** Which part of the AI agents room an agent sits in: its CLI's section, or the local-model section. */
+export type SectionId = "claude" | "codex" | "google" | "local";
+export const SECTIONS: { id: SectionId; label: string; color: string }[] = [
+  { id: "claude", label: "CLAUDE CODE", color: "#d97757" },
+  { id: "codex", label: "CODEX", color: "#3aa675" },
+  { id: "google", label: "ANTIGRAVITY", color: "#4a86e8" },
+  { id: "local", label: "LOCAL MODELS", color: "#8e6bd1" },
+];
+export function sectionOf(a: AgentConfig): SectionId {
+  if (a.provider === "ollama" && supportsOllama(a.cli)) return "local";
+  return a.cli === "claude" ? "claude" : a.cli === "codex" ? "codex" : "google";
+}
+
+export interface Section {
+  id: SectionId;
+  label: string;
+  color: string;
+  x0: number; // first tile of the block
+  w: number; // block width in tiles
+}
 
 export interface PxRect {
   x: number;
@@ -68,6 +91,8 @@ export interface OfficeLayout {
   plan: { board: PxRect; spot: Tile };
   lounge: { x0: number; w: number; coffee: Tile[] };
   desks: DeskSpot[];
+  sections: Section[];
+  corridors: { x0: number; w: number }[]; // the empty lanes between sections (tiles)
   belt: { y: number; x0: number; x1: number; topY: number | null }; // px; topY = vertical run end
   gate: PxRect | null;
   prBoard: PxRect | null;
@@ -83,7 +108,7 @@ export interface OfficeLayout {
 export function layoutKey(config: HqConfig, envs: Environment[]): string {
   const wf = config.workflow;
   return JSON.stringify([
-    config.team.map((a) => [a.id, a.name, a.color, a.isLead]),
+    config.team.map((a) => [a.id, a.name, a.color, a.isLead, sectionOf(a)]),
     wf.review.enabled,
     wf.review.tool,
     wf.deploy.enabled,
@@ -103,9 +128,24 @@ export function generateLayout(config: HqConfig, envs: Environment[]): OfficeLay
   const review = config.workflow.review.enabled;
   const hasServer = config.workflow.deploy.enabled && envs.length > 0;
 
-  const cols = deskColumns(workers.length);
-  const rows = Math.max(1, Math.ceil(workers.length / cols));
-  const x0r = 2 + cols * PITCH; // review column start
+  // Sections of the AI agents room: one block of cubicles per CLI, local models apart, with a corridor between.
+  const groups = SECTIONS.map((s) => ({ ...s, agents: workers.filter((a) => sectionOf(a) === s.id) })).filter((g) => g.agents.length);
+  if (!groups.length) groups.push({ ...SECTIONS[0], agents: [] });
+  const blockCols = (n: number) => Math.min(SECTION_COLS, deskColumns(n));
+  const rows = Math.max(1, ...groups.map((g) => Math.ceil(g.agents.length / blockCols(g.agents.length))));
+  const sections: Section[] = [];
+  const corridors: { x0: number; w: number }[] = [];
+  let sx = 2;
+  groups.forEach((g, gi) => {
+    const w = blockCols(g.agents.length) * PITCH;
+    sections.push({ id: g.id, label: g.label, color: g.color, x0: sx, w });
+    sx += w;
+    if (gi < groups.length - 1) {
+      corridors.push({ x0: sx - 1, w: 1 + CORRIDOR });
+      sx += CORRIDOR;
+    }
+  });
+  const x0r = sx; // review column start
   const mainW = Math.max(LEAD_W + MIN_LOUNGE_W, x0r + (review ? REVIEW_W : 2) - 1);
   const loungeW = mainW - LEAD_W;
 
@@ -145,10 +185,11 @@ export function generateLayout(config: HqConfig, envs: Environment[]): OfficeLay
   grid.set(2, yb, mainW, yb, false);
 
   // ---------------------------------------------------------- desks
-  const desks: DeskSpot[] = workers.map((a, i) => {
-    const c = i % cols;
-    const r = Math.floor(i / cols);
-    const x0 = 2 + c * PITCH;
+  const placed = groups.flatMap((g, gi) => g.agents.map((a, j) => ({ a, j, cols: blockCols(g.agents.length), x: sections[gi].x0 })));
+  const desks: DeskSpot[] = placed.map(({ a, j, cols, x }, i) => {
+    const c = j % cols;
+    const r = Math.floor(j / cols);
+    const x0 = x + c * PITCH;
     const y0 = DESK_Y + r * PITCH;
     grid.set(x0, y0, x0 + CUB - 1, y0, false);
     grid.set(x0 + 1, y0, x0 + 1, y0, true); // door gap
@@ -220,7 +261,9 @@ export function generateLayout(config: HqConfig, envs: Environment[]): OfficeLay
   for (const r of racks) hits.push({ kind: "env", id: r.name, rect: r });
 
   const coffee: Tile[] = [[L, 5], [L + 1, 5], [L + 2, 5]];
-  const wander: Tile[] = [[L + 3, 9], [L + 5, 9], [L + 6, 6], [4, 9], [7, 9], [6, 11], [Math.min(mainW - 1, L + 7), 11]];
+  // Idle agents also stroll down the corridors between sections.
+  const hall: Tile[] = corridors.map((c) => [c.x0, DESK_Y + 3] as Tile);
+  const wander: Tile[] = [[L + 3, 9], [L + 5, 9], [L + 6, 6], [4, 9], [7, 9], [6, 11], [Math.min(mainW - 1, L + 7), 11], ...hall];
 
   return {
     key: layoutKey(config, envs),
@@ -236,6 +279,8 @@ export function generateLayout(config: HqConfig, envs: Environment[]): OfficeLay
     plan: { board: planBoard, spot: [6, 5] },
     lounge: { x0: L, w: loungeW, coffee },
     desks,
+    sections,
+    corridors,
     belt: { y: beltY, x0: px(2), x1: beltX1, topY: beltTop },
     gate,
     prBoard,

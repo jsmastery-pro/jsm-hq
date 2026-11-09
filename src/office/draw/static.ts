@@ -65,8 +65,22 @@ export function buildStatic(l: OfficeLayout, config: HqConfig): HTMLCanvasElemen
   }
   g.restore();
 
-  const logo = config.project.name.toUpperCase().slice(0, 12);
-  text(p, logo, Math.round(mainPx / 2 - textW(logo, 2) / 2), 13 * 16 + 4, C.woodD, 2);
+  // corridors between the sections of the AI agents room: tiled lanes with a dashed centre line
+  for (const c of l.corridors) {
+    const cx = c.x0 * 16;
+    const top = 13 * 16;
+    const bottom = (l.H - 2) * 16 - 16;
+    for (let ty = top; ty < bottom; ty += 8) for (let tx = 0; tx < c.w * 2; tx++) p.rect(cx + tx * 8, ty, 8, 8, (tx + ty / 8) % 2 ? C.tileD : C.tileL);
+    for (let ty = top + 4; ty < bottom; ty += 12) p.rect(cx + c.w * 8 - 1, ty, 2, 6, C.metalD);
+  }
+  // section signs: each CLI's own part of the room, local models in theirs
+  for (const s of l.sections) {
+    const w = s.w * 16 - 6;
+    p.rect(s.x0 * 16 + 2, 14 * 16 - 20, w, 3, s.color);
+    const cx = s.x0 * 16 + 2 + w / 2;
+    box(p, Math.round(cx - textW(s.label) / 2) - 5, 14 * 16 - 33, textW(s.label) + 10, 12, s.color);
+    text(p, s.label, Math.round(cx - textW(s.label) / 2), 14 * 16 - 30, C.white);
+  }
 
   // lead carpet
   p.rect(176, 64, 144, 96, C.carpetJ);

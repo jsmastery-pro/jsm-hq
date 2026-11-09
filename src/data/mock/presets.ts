@@ -127,8 +127,8 @@ const bigTeam: Preset = {
       agent("jim", "Jim", "Developer", "#ffd23a"),
       agent("kenji", "Kenji", "Developer", "#00e436", { cli: "codex", model: "" }),
       agent("priya", "Priya", "QA", "#a98bff", { skills: ["test", "review"] }),
-      agent("leo", "Leo", "Designer", "#ff8a3d", { skills: ["frontend-design", "review"] }),
-      agent("sam", "Sam", "Docs", "#3ee0d0", { model: "Haiku", skills: ["document"] }),
+      agent("leo", "Leo", "Designer", "#ff8a3d", { cli: "antigravity", mode: "local", model: "", skills: ["frontend-design", "review"] }),
+      agent("sam", "Sam", "Docs", "#3ee0d0", { provider: "ollama", ollamaModel: "qwen3-coder", model: "", skills: ["document"] }),
     ],
     workflow: {
       review: { enabled: true, tool: "greptile", command: "" },
