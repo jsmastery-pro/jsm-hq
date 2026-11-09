@@ -130,6 +130,25 @@ export interface ProjectWorker {
 export interface ProjectRoomConfig {
   name: string;
   workers: ProjectWorker[];
+  /** Play the demo animation until a project sends real events. Absent = true. */
+  demo?: boolean;
+}
+
+/** What a project says one of its workers is doing (sent through the project-room API). */
+export type RoomWorkerState = "idle" | "working" | "error" | "done";
+
+export interface RoomWorkerStatus {
+  state: RoomWorkerState;
+  note: string | null; // what it's doing, for the bubble
+  at: string; // when it was reported
+  ttl: number; // seconds the status holds before the worker goes back to idle
+}
+
+/** A piece of work (an email, a file, a job) handed from one worker to the next. null = the room's in-tray / out-tray. */
+export interface RoomHandoff {
+  id: string;
+  from: string | null;
+  to: string | null;
 }
 
 export interface HqConfig {
@@ -384,6 +403,12 @@ export interface OfficeSnapshot {
   accessRequests?: AccessRequest[];
   mcp?: McpState;
   actionItems?: ActionItem[];
+  /** What each project-room worker is doing now, as its project reported it. */
+  roomWorkers?: Record<string, RoomWorkerStatus>;
+  /** Recent hand-offs (the scene animates each once). Newest first. */
+  roomHandoffs?: RoomHandoff[];
+  /** How a project connects to its room: the local address and token (shown in Settings). Never saved to config.json. */
+  roomApi?: { url: string; token: string };
 }
 
 /** Something an agent needs the user to do outside its sandbox (Team MCP `ask_user`). */

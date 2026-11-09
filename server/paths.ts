@@ -35,6 +35,15 @@ export function agentToken(projectSlug: string): string {
   return tok;
 }
 
+/** Token for the project-room API: what a project sends to create its room and report its workers' state. */
+export function roomToken(projectSlug: string): string {
+  const file = join(projectHome(projectSlug), "room-token");
+  if (existsSync(file)) return readFileSync(file, "utf8").trim();
+  const tok = randomBytes(24).toString("hex");
+  writeFileSync(file, tok, { mode: 0o600 });
+  return tok;
+}
+
 /**
  * Browser token, required by the UI's WebSocket. New on every start — except in
  * dev, where it survives server reloads so the open tab keeps working.

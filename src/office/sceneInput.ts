@@ -48,7 +48,10 @@ function describe(hit: Hit): { title: string; sub?: string } {
   }
   if (hit.kind === "worker") {
     const w = snap.config.projectRoom?.workers.find((x) => x.id === hit.id);
-    return { title: `${w?.name ?? hit.id} · ${snap.config.projectRoom?.name ?? "Project room"}`, sub: w ? `${WORKER_KIND_LABEL[w.kind]} (a demo animation for now)` : undefined };
+    const r = snap.roomWorkers?.[hit.id];
+    const live = r && Date.now() - Date.parse(r.at) < r.ttl * 1000;
+    const sub = live ? [r.state, r.note].filter(Boolean).join(": ") : w ? `${WORKER_KIND_LABEL[w.kind]}${snap.roomWorkers && Object.keys(snap.roomWorkers).length ? " · idle" : " · demo animation until a project connects"}` : undefined;
+    return { title: `${w?.name ?? hit.id} · ${snap.config.projectRoom?.name ?? "Project room"}`, sub };
   }
   const env = snap.environments.find((e) => e.name === hit.id);
   return { title: `Environment: ${hit.id}`, sub: env ? `${env.status} · ${env.url}` : undefined };

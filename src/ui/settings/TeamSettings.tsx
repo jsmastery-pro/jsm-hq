@@ -171,6 +171,8 @@ function ProjectRoomSettings() {
   const [name, setName] = useState("");
   const [kind, setKind] = useState<ProjectWorkerKind>("fetcher");
   const workers = room?.workers ?? [];
+  const api = useOffice((s) => s.snap?.roomApi);
+  const [shown, setShown] = useState(false);
   const save = (next: ProjectRoomConfig | null) => officeActions.setProjectRoom(next);
   const rename = (v: string) => save({ name: v.trim() || "Project room", workers });
   const change = (i: number, patch: Partial<ProjectRoomConfig["workers"][number]>) => save({ name: room?.name ?? "Project room", workers: workers.map((w, k) => (k === i ? { ...w, ...patch } : w)) });
@@ -183,7 +185,7 @@ function ProjectRoomSettings() {
     <section className="border-[3px] border-dashed border-ink p-3">
       <SectionTitle>Project room</SectionTitle>
       <p className="mb-3 text-[13px] text-muted">
-        A separate room in the office for your project's own workers: a script that fetches emails, a local model that writes them, a bot that sends them. They aren't coding agents. For now they play a demo animation of the work.
+        A separate room in the office for your project's own workers: a script that fetches emails, a local model that writes them, a bot that sends them. They aren't coding agents. A project reports what they do through a local API (see Connect a project below); until then they play a demo animation.
       </p>
       <div className="mb-3 max-w-[360px]">
         <Field label="Room name">
@@ -233,6 +235,33 @@ function ProjectRoomSettings() {
           Add worker
         </button>
       </form>
+      {workers.length > 0 && (
+        <label className="mt-3 flex items-center gap-2 text-[13px]">
+          <input type="checkbox" checked={room?.demo !== false} onChange={(e) => save({ name: room?.name ?? "Project room", workers, ...(e.target.checked ? {} : { demo: false }) })} />
+          Play the demo animation until a project connects
+        </label>
+      )}
+      <div className="mt-3 border-[3px] border-ink bg-cream p-3">
+        <div className="mb-1 text-[13px] font-bold">Connect a project</div>
+        <p className="mb-2 text-[12px] text-muted">
+          Any project can create this room and show what its workers do, through a small local HTTP API. Set these two variables in the project, then use the Python or Node helper in <code>sdk/</code> (see <code>docs/project-rooms.md</code>).
+        </p>
+        {api ? (
+          <>
+            <pre className="mb-2 overflow-x-auto whitespace-pre-wrap break-all border-2 border-ink bg-white p-2 font-term text-[15px]">{`export HQ_ROOM_URL=${api.url}\nexport HQ_ROOM_TOKEN=${shown ? api.token : "•".repeat(16)}`}</pre>
+            <div className="flex gap-2">
+              <button className="btn px-2 text-[13px]" onClick={() => setShown(!shown)}>
+                {shown ? "Hide token" : "Show token"}
+              </button>
+              <button className="btn px-2 text-[13px]" onClick={() => void navigator.clipboard?.writeText(`export HQ_ROOM_URL=${api.url}\nexport HQ_ROOM_TOKEN=${api.token}`)}>
+                Copy
+              </button>
+            </div>
+          </>
+        ) : (
+          <p className="text-[12px] text-muted">Available when you run My HQ on a repo (not in the demo).</p>
+        )}
+      </div>
       {workers.length > 0 && (
         <p className="mt-2 text-[12px] text-muted">
           Removing every worker removes the room.{" "}

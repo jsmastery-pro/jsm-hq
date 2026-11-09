@@ -26,6 +26,8 @@ import type {
   Task,
   WorkflowPatch,
   ProjectRoomConfig,
+  RoomHandoff,
+  RoomWorkerStatus,
 } from "./types";
 
 export type OfficeEvent =
@@ -47,7 +49,9 @@ export type OfficeEvent =
   | { type: "terminal.output"; agentId: string; data: string }
   | { type: "access.updated"; request: AccessRequest }
   | { type: "mcp.updated"; mcp: McpState }
-  | { type: "action.updated"; item: ActionItem };
+  | { type: "action.updated"; item: ActionItem }
+  | { type: "room.worker"; workerId: string; status: RoomWorkerStatus }
+  | { type: "room.handoff"; handoff: RoomHandoff };
 
 export type SimSpeed = 1 | 2 | 4;
 

@@ -14,6 +14,7 @@ import { handleHook } from "./hooks";
 import type { Hub } from "./hub";
 import type { Inbox } from "./inbox";
 import { handleMcp } from "./mcp";
+import { handleRoomHttp } from "./room";
 import type { Planner } from "./planner";
 import { log } from "./lib/log";
 
@@ -49,6 +50,7 @@ interface Options {
   port: number;
   browserToken: string;
   agentToken: string;
+  roomToken: string;
   distDir: string | null;
   allowedOrigins: string[];
   commands: Record<string, (...args: unknown[]) => unknown>;
@@ -78,6 +80,9 @@ export function startHttp(o: Options) {
         return send(res, 400, "bad request");
       }
     }
+
+    // Project-room API: a project's own token.
+    if (await handleRoomHttp(o.hub, o.roomToken, req, res, url)) return;
 
     // Team MCP: agent token + the agent's id (written into its MCP config by HQ).
     if (url.pathname === "/mcp") {

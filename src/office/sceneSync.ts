@@ -18,6 +18,7 @@ export function syncScene(s: OfficeScene, snap: OfficeSnapshot, epoch: number) {
     s.prevReview.clear();
     s.seenActivity.clear();
     s.seenMessages.clear();
+    s.seenHandoffs.clear();
     s.effects.clear();
     s.projectActors.clear();
     s.layout = null;
@@ -61,6 +62,13 @@ export function syncScene(s: OfficeScene, snap: OfficeSnapshot, epoch: number) {
     Object.assign(bot, tileCentre(l, start));
     s.bots.set(a.id, bot);
   });
+
+  // ---------------------------------------------------------- project room hand-offs (each flies once)
+  for (const h of [...(snap.roomHandoffs ?? [])].reverse()) {
+    if (s.seenHandoffs.has(h.id)) continue;
+    s.seenHandoffs.add(h.id);
+    if (!fresh) s.projectActors.handoff(l, h, s.t);
+  }
 
   // ---------------------------------------------------------- parcels
   // Closed-without-merge PRs leave the office.

@@ -10,7 +10,7 @@ import { think, type Bot } from "./actors/bots";
 import { Effects } from "./actors/effects";
 import { BeltPath, parcelPos, updateParcels, type Parcel } from "./actors/parcels";
 import { PlanNotes } from "./actors/planNotes";
-import { ProjectActors } from "./actors/projectRoom";
+import { ProjectActors, type RoomView } from "./actors/projectRoom";
 import * as live from "./draw/live";
 import { drawEmote, drawFace, drawNameTag, drawSelection, drawShadow } from "./draw/overlay";
 import { buildStatic } from "./draw/static";
@@ -44,6 +44,7 @@ export class OfficeScene {
   prevReview = new Map<number, ReviewState>();
   seenActivity = new Set<string>();
   seenMessages = new Set<string>();
+  seenHandoffs = new Set<string>();
   notes = new PlanNotes();
   projectActors = new ProjectActors();
   effects = new Effects();
@@ -112,6 +113,11 @@ export class OfficeScene {
   }
 
   // ------------------------------------------------------------ queries
+
+  /** What the project room's workers report (and whether to play the demo until they do). */
+  roomView(snap: import("../data/types").OfficeSnapshot): RoomView {
+    return { statuses: snap.roomWorkers ?? {}, demo: snap.config.projectRoom?.demo !== false };
+  }
 
   stateOf(agentId: string | null): AgentState | null {
     if (!agentId) return null;
@@ -212,7 +218,7 @@ export class OfficeScene {
       this.slowAcc = 0;
       this.drawSlow(snap.environments, stateMap, t);
     }
-    this.projectActors.update(l, t, this.reducedMotion);
+    this.projectActors.update(l, t, this.reducedMotion, this.roomView(snap));
     this.drawFast(snap, stateMap, t);
   }
 
@@ -266,7 +272,7 @@ export class OfficeScene {
     const sh = this.gShadow;
     sh.clear();
     const ps = new GfxPen(sh);
-    this.projectActors.draw(p, ps, l, t, this.reducedMotion);
+    this.projectActors.draw(p, ps, l, t, this.reducedMotion, this.roomView(snap));
     const o = this.gOver;
     o.clear();
     const po = new GfxPen(o);

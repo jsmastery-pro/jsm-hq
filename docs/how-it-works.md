@@ -34,7 +34,7 @@ The office has a few rooms:
 
 - **Manager office** (top left): the lead, the plan wall and the review gate.
 - **AI agents room**: one section per kind of agent, each with a colored sign: **Claude Code**, **Codex**, **Antigravity** (Gemini CLI too) and **Local models** (agents on Ollama). An agent sits in the section for how it runs, and moves when you change its CLI or provider. Tiled **corridors** run between the sections, and idle agents stroll along them.
-- **Project room** (optional, to the right): a separate room for your project's own workers. These are characters for a script, a bot or a model that does the project's job, not coding agents, for example a job-referral pipeline: one fetches emails, a local model writes them, one sends them. Add the room in **Settings → Team → Project room** (a room name, then each worker with a name and what it does). Agents can walk in through its doorway. For now the workers play a demo animation (mail comes in, is written, goes out); they don't yet follow real events from your project.
+- **Project room** (optional, to the right): a separate room for your project's own workers. These are characters for a script, a bot or a model that does the project's job, not coding agents, for example a job-referral pipeline: one fetches emails, a local model writes them, one sends them. Add the room in **Settings → Team → Project room** (a room name, then each worker with a name and what it does). Agents can walk in through its doorway. Any project, in any language, can create its room and report what its workers do through a small local HTTP API, so the office shows them live: see **[Project rooms](project-rooms.md)**. Until a project connects, the workers play a demo animation.
 
 ## Workspaces and sessions
 

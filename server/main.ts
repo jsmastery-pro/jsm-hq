@@ -19,7 +19,7 @@ import { SbxMcp } from "./sbxMcp";
 import { run } from "./lib/exec";
 import { log } from "./lib/log";
 import { ensurePtyHelperExecutable } from "./lib/ptyFix";
-import { agentToken, browserToken } from "./paths";
+import { agentToken, browserToken, roomToken } from "./paths";
 import { detectRepo } from "./repo";
 import { Sessions } from "./sessions";
 import { ollamaBaseUrl } from "./ollama";
@@ -42,6 +42,7 @@ async function main() {
   const slug = config.project.id;
   const token = agentToken(slug);
   const uiToken = browserToken(slug, dev);
+  const roomTok = roomToken(slug);
 
   log.info(`repo   ${repo.root}${repo.github ? `  (github.com/${repo.github})` : ""}`);
   log.info("checking setup…");
@@ -49,6 +50,7 @@ async function main() {
   for (const c of setup.checks) log.info(`  ${c.status === "ok" ? "✓" : c.status === "warning" ? "!" : "✗"} ${c.label}: ${c.detail}`);
 
   const hub = new Hub(repo, slug, config, loadPlan(repo.root), setup);
+  hub.snap.roomApi = { url: `http://127.0.0.1:${port}`, token: roomTok };
   hub.snap.welcome = isNew;
   const sessions = new Sessions(hub, token);
   const inbox = new Inbox(hub, { type: (id, text) => sessions.typeInto(id, text), enter: (id) => sessions.pressEnter(id) });
@@ -89,6 +91,7 @@ async function main() {
     port,
     browserToken: uiToken,
     agentToken: token,
+    roomToken: roomTok,
     distDir: dev ? null : distDir,
     allowedOrigins: [uiOrigin, `http://127.0.0.1:${uiPort}`, `http://localhost:${port}`, `http://127.0.0.1:${port}`],
     commands: makeCommands(hub, sessions, planner, inbox, sbx, mcp),

@@ -1,6 +1,6 @@
 // Browser commands → server actions. Names match OfficeDataSource methods.
 
-import { DEFAULT_OLLAMA_URL, isAgentCli, type ProjectRoomConfig, type ProjectWorker, type ProjectWorkerKind, supportsOllama, supportsSandbox, SERVICE_KEYS, type AgentCli, type AgentConfig, type AgentPatch, type ReviewTool, type WelcomeInput, type NewMcpServer, type Board, type NewAgentInput, type ProjectConfig, type RemoveAgentOptions, type SandboxSettings, type SetupCheckId, type WorkflowPatch } from "../src/data/types";
+import { DEFAULT_OLLAMA_URL, isAgentCli, supportsOllama, supportsSandbox, SERVICE_KEYS, type AgentCli, type AgentConfig, type AgentPatch, type ReviewTool, type WelcomeInput, type NewMcpServer, type Board, type NewAgentInput, type ProjectConfig, type RemoveAgentOptions, type SandboxSettings, type SetupCheckId, type WorkflowPatch } from "../src/data/types";
 import { LEAD_NAME, OFFICE_NAME_MAX } from "../src/data/names";
 import { STACK_CATEGORIES, stackSkills, stackTool, type StackChoice, type StackConfig } from "../src/data/stack";
 import { resolveAccess } from "./access";
@@ -14,6 +14,7 @@ import type { Sbx } from "./sbx";
 import type { SbxMcp } from "./sbxMcp";
 import type { Sessions } from "./sessions";
 import { parseOllamaUrl } from "./ollama";
+import { cleanProjectRoom, setRoom } from "./room";
 import { newAgent } from "./store";
 import { mergeByNotice } from "./githubSync";
 
@@ -45,25 +46,6 @@ function cleanStack(raw: unknown): StackConfig | null {
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "agent";
 const str = (v: unknown, max = 2000) => (typeof v === "string" ? v.slice(0, max) : "");
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
-
-const WORKER_KINDS: ProjectWorkerKind[] = ["fetcher", "writer", "sender", "custom"];
-
-/** A project room from the browser: names clipped, kinds and ids checked, colors from the agent palette. */
-function cleanProjectRoom(raw: unknown): ProjectRoomConfig | null {
-  const input = (raw ?? null) as Partial<ProjectRoomConfig> | null;
-  if (!input || typeof input !== "object") return null;
-  const used = new Set<string>();
-  const workers = (Array.isArray(input.workers) ? input.workers : []).slice(0, 12).map((w, i): ProjectWorker => {
-    const name = str(w?.name, 40).trim() || "Worker";
-    let id = slug(name);
-    for (let n = 2; used.has(id); n++) id = `${slug(name)}-${n}`;
-    used.add(id);
-    const kind = WORKER_KINDS.includes(w?.kind as ProjectWorkerKind) ? (w.kind as ProjectWorkerKind) : "custom";
-    const color = typeof w?.color === "string" && (agentPalette as readonly string[]).includes(w.color) ? w.color : agentPalette[i % agentPalette.length];
-    return { id, name, kind, color };
-  });
-  return { name: str(input.name, 40).trim() || "Project", workers };
-}
 
 export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inbox: Inbox, sbx: Sbx, mcp: SbxMcp) {
   /** Runs an sbx change and reports failures in the activity feed. */
@@ -356,10 +338,7 @@ export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inb
     },
 
     setProjectRoom: (raw) => {
-      const room = cleanProjectRoom(raw);
-      if (room) hub.snap.config.projectRoom = room;
-      else delete hub.snap.config.projectRoom;
-      hub.configChanged();
+      setRoom(hub, cleanProjectRoom(raw));
     },
 
     createBoard: (title) => planner.createBoard(str(title, 80)),

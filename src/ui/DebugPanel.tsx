@@ -47,6 +47,8 @@ function summary(e: OfficeEvent): string {
     case "action.updated": return `${e.item.fromId} ${e.item.status}: ${e.item.title}`;
     case "mcp.updated": return `${e.mcp.servers.length} MCP servers`;
     case "access.updated": return `${e.request.agentId} ${e.request.domain} ${e.request.status}`;
+    case "room.worker": return `${e.workerId} ${e.status.state}${e.status.note ? `: ${e.status.note}` : ""}`;
+    case "room.handoff": return `${e.handoff.from ?? "in"} → ${e.handoff.to ?? "out"}`;
   }
 }
 

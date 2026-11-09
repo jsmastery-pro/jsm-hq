@@ -116,6 +116,10 @@ function reduce(snap: OfficeSnapshot, e: OfficeEvent): OfficeSnapshot {
       return { ...snap, actionItems: upsert(snap.actionItems ?? [], e.item, (i) => i.id === e.item.id) };
     case "mcp.updated":
       return { ...snap, mcp: e.mcp };
+    case "room.worker":
+      return { ...snap, roomWorkers: { ...snap.roomWorkers, [e.workerId]: e.status } };
+    case "room.handoff":
+      return { ...snap, roomHandoffs: [e.handoff, ...(snap.roomHandoffs ?? [])].slice(0, 20) };
     case "access.updated":
       return { ...snap, accessRequests: upsert(snap.accessRequests ?? [], e.request, (r) => r.id === e.request.id) };
   }
