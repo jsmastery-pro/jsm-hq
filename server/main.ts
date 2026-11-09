@@ -99,7 +99,7 @@ async function main() {
   github.start();
 
   const url = `${uiOrigin}/?token=${uiToken}`;
-  log.info(`\n\n  JSM HQ is running → ${url}\n`);
+  log.info(`\n\n  My HQ is running → ${url}\n`);
   if (!flag("no-open")) {
     // Windows: rundll32 hands the URL to the default browser without a shell (the token has no special chars, but `&` would).
     const [opener, args] = process.platform === "darwin" ? ["open", [url]] : process.platform === "win32" ? ["rundll32", ["url.dll,FileProtocolHandler", url]] : ["xdg-open", [url]];

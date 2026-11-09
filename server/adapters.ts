@@ -60,7 +60,7 @@ export function codexConfig(agent: AgentConfig, cfg: HqConfig, token: string, di
   const url = hqUrl(agent, cfg.project.hqPort);
   const script = hookScriptFor(agent, dir);
   const lines = [
-    "# Written by JSM HQ for this agent (git-excluded). Codex loads it once you trust this folder.",
+    "# Written by My HQ for this agent (git-excluded). Codex loads it once you trust this folder.",
     `developer_instructions = ${t(roleMd(agent, cfg, extras))}`,
     // Top-level keys come before any table. A provider of its own (not Codex's built-in "ollama" one)
     // so the address can be anything, including a sandbox's host.docker.internal.

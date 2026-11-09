@@ -109,7 +109,7 @@ export interface ProjectConfig {
   path: string; // "~/developer/askwell"
   hqPort: number; // port sandboxes use to reach HQ via host.docker.internal
   exportPlan?: boolean; // also write the plan to docs/plan.md
-  officeName?: string; // the sign on the office wall; empty = "JSM HQ"
+  officeName?: string; // the sign on the office wall; empty = "My HQ"
   ollamaUrl?: string; // where Ollama runs for agents on the "ollama" provider; absent = DEFAULT_OLLAMA_URL
 }
 

@@ -1,4 +1,4 @@
-# Contributing to JSM HQ
+# Contributing to My HQ
 
 ## Run it from source
 

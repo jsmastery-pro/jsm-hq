@@ -1,4 +1,4 @@
-# JSM HQ
+# My HQ
 
 **Run a team of AI coding agents on your repo, and watch them work in a pixel-art office.**
 
@@ -6,7 +6,7 @@
 [![license](https://img.shields.io/npm/l/@therealjsmastery/jsm-hq)](LICENSE)
 [![node](https://img.shields.io/node/v/@therealjsmastery/jsm-hq)](https://nodejs.org)
 
-![The JSM HQ office: a lead and two developers at their desks, the task board on the wall, pull requests on the board and the review gate on the belt](docs/images/office.png)
+![The My HQ office: a lead and two developers at their desks, the task board on the wall, pull requests on the board and the review gate on the belt](docs/images/office.png)
 
 One **lead** agent plans the work and hands out tasks. Each **worker** gets its own desk, its own copy of your repo and its own Docker Sandbox, then opens a pull request. You see it all happen: the plan on the wall, agents at their desks, PRs moving through review.
 
@@ -115,4 +115,4 @@ More detail on workspaces, sandboxes, MCP servers, app variables and what HQ sav
 
 ## License
 
-Code: [MIT](LICENSE). The JSM HQ name and logo are not covered by the license; see [TRADEMARKS.md](TRADEMARKS.md).
+Code: [MIT](LICENSE). This is a fork of [JSM HQ](https://github.com/jsmastery-pro/jsm-hq). The JSM HQ name and logo are not covered by the license; see [TRADEMARKS.md](TRADEMARKS.md).

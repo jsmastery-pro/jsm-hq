@@ -1,4 +1,4 @@
-# Getting started with JSM HQ
+# Getting started with My HQ
 
 This guide takes you from a fresh machine to a team of AI agents working on your repo. It takes about 15 minutes, most of it installing tools. You only do it once.
 
