@@ -30,6 +30,15 @@ export type AgentCli = "claude" | "codex" | "gemini";
 
 export const CLI_LABEL: Record<AgentCli, string> = { claude: "Claude Code", codex: "Codex", gemini: "Gemini CLI" };
 
+/** Where an agent's model comes from: the CLI's own cloud account, or a local Ollama server. */
+export type ModelProvider = "default" | "ollama";
+
+/** Ollama's address when the project doesn't set one. */
+export const DEFAULT_OLLAMA_URL = "http://localhost:11434";
+
+/** Gemini CLI has no local-model path; Claude Code and Codex can use Ollama. */
+export const supportsOllama = (cli: AgentCli) => cli !== "gemini";
+
 /** Narrows untrusted input (a UI message, an edited config) to a known CLI. */
 export const isAgentCli = (v: unknown): v is AgentCli => typeof v === "string" && Object.hasOwn(CLI_LABEL, v);
 
@@ -48,6 +57,10 @@ export interface AgentConfig {
   workspacePath: string | null; // an existing folder to use; null = HQ-managed clone
   /** MCP servers (names in sbx's registry) this agent's sandbox gets. */
   mcp?: string[];
+  /** Where the model runs. Absent means "default" (the CLI's own cloud account), so older configs load unchanged. */
+  provider?: ModelProvider;
+  /** The Ollama model to run when provider is "ollama" (for example "qwen3-coder"). */
+  ollamaModel?: string;
 }
 
 /** An MCP server registered with Docker Sandboxes (`sbx mcp ls`). */
@@ -94,6 +107,7 @@ export interface ProjectConfig {
   hqPort: number; // port sandboxes use to reach HQ via host.docker.internal
   exportPlan?: boolean; // also write the plan to docs/plan.md
   officeName?: string; // the sign on the office wall; empty = "JSM HQ"
+  ollamaUrl?: string; // where Ollama runs for agents on the "ollama" provider; absent = DEFAULT_OLLAMA_URL
 }
 
 export interface HqConfig {
@@ -249,7 +263,7 @@ export interface RemoveAgentOptions {
 
 // ---------------------------------------------------------------- Setup
 
-export type SetupCheckId = "os" | "sbx" | "sbx-login" | "sbx-policy" | "tmux" | "gh" | "gh-remote" | "github-secret" | "claude" | "codex" | "openai-secret" | "gemini" | "google-secret";
+export type SetupCheckId = "os" | "sbx" | "sbx-login" | "sbx-policy" | "tmux" | "gh" | "gh-remote" | "github-secret" | "claude" | "codex" | "openai-secret" | "gemini" | "google-secret" | "ollama" | "ollama-model";
 export type SetupStatus = "ok" | "missing" | "unsupported" | "warning";
 
 export interface SetupFix {
@@ -370,6 +384,8 @@ export interface NewAgentInput {
   cli?: AgentCli;
   model?: string;
   mode: AgentMode;
+  provider?: ModelProvider;
+  ollamaModel?: string;
 }
 
 /** First-run choices from the welcome screen. */
@@ -384,7 +400,7 @@ export interface WelcomeInput {
 }
 
 export type AgentPatch = Partial<
-  Pick<AgentConfig, "name" | "role" | "cli" | "model" | "mode" | "color" | "skills" | "roleMd" | "workspacePath">
+  Pick<AgentConfig, "name" | "role" | "cli" | "model" | "mode" | "color" | "skills" | "roleMd" | "workspacePath" | "provider" | "ollamaModel">
 >;
 
 export interface WorkflowPatch {

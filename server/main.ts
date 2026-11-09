@@ -22,6 +22,7 @@ import { ensurePtyHelperExecutable } from "./lib/ptyFix";
 import { agentToken, browserToken } from "./paths";
 import { detectRepo } from "./repo";
 import { Sessions } from "./sessions";
+import { ollamaBaseUrl } from "./ollama";
 import { runSetupChecks } from "./setup";
 import { loadConfig, loadPlan } from "./store";
 
@@ -44,7 +45,7 @@ async function main() {
 
   log.info(`repo   ${repo.root}${repo.github ? `  (github.com/${repo.github})` : ""}`);
   log.info("checking setup…");
-  const setup = await runSetupChecks(repo, config.team);
+  const setup = await runSetupChecks(repo, config.team, ollamaBaseUrl(config));
   for (const c of setup.checks) log.info(`  ${c.status === "ok" ? "✓" : c.status === "warning" ? "!" : "✗"} ${c.label}: ${c.detail}`);
 
   const hub = new Hub(repo, slug, config, loadPlan(repo.root), setup);

@@ -7,16 +7,19 @@ import { agentRead, agentWrite } from "./lib/agentFs";
 import type { AgentCli, AgentConfig, HqConfig } from "../src/data/types";
 import { adoptRoleFile, excludeFromGit, HOOK_SCRIPT, isOurs, type RoleExtras, hookCommand, hookScriptFor, hqUrl, MCP_CONFIG, ROLE_FILE, roleMd, writeClaudeFiles, writeHookScript } from "./agentFiles";
 import { run } from "./lib/exec";
+import { claudeOllamaEnv, ollamaUrlFor, usesOllama } from "./ollama";
 
 export interface Launch {
   sbxAgent: string; // agent name for `sbx run`
   args: string[]; // the CLI's own arguments (not shell-quoted)
+  /** Extra environment for the agent's process (for example a local model provider). */
+  env?: Record<string, string>;
 }
 
 export interface CliAdapter {
   /** Writes HQ's files into the agent's folder (all git-excluded). */
   writeFiles(dir: string, agent: AgentConfig, cfg: HqConfig, token: string, extras?: RoleExtras): Promise<void>;
-  launch(agent: AgentConfig): Launch;
+  launch(agent: AgentConfig, cfg: HqConfig): Launch;
 }
 
 // ---------------------------------------------------------------- Claude Code
@@ -26,7 +29,14 @@ const claude: CliAdapter = {
     const ownRole = await adoptRoleFile(dir);
     writeClaudeFiles(dir, agent, cfg, token, { ...extras, ownRole });
   },
-  launch(agent) {
+  launch(agent, cfg) {
+    // On Ollama the model is the local one; Claude Code reaches it through ANTHROPIC_BASE_URL.
+    if (usesOllama(agent)) {
+      // Local mode keeps permission prompts on: an "auto" mode from the user's own settings would run its
+      // safety classifier on the same local model, which is slow and times out, blocking every tool call.
+      const prompts = agent.mode === "local" ? ["--permission-mode", "default"] : [];
+      return { sbxAgent: "claude", args: ["--mcp-config", MCP_CONFIG, "--model", agent.ollamaModel?.trim() ?? "", ...prompts], env: claudeOllamaEnv(agent, cfg) };
+    }
     // "Opus" / "Sonnet" / "Haiku" → Claude Code's aliases; anything else is passed as a full model id.
     const m = agent.model.trim();
     const model = !m || /^default$/i.test(m) ? null : /^(opus|sonnet|haiku)$/i.test(m) ? m.toLowerCase() : m;
@@ -41,6 +51,8 @@ const claude: CliAdapter = {
 export const CODEX_CONFIG = ".codex/config.toml";
 const CODEX_EVENTS = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PermissionRequest", "Stop", "SessionEnd"];
 
+const OLLAMA_PROVIDER = "hq-ollama";
+
 /** TOML basic string (JSON's escaping is valid TOML for these characters). */
 const t = (s: string) => JSON.stringify(s);
 
@@ -50,6 +62,9 @@ export function codexConfig(agent: AgentConfig, cfg: HqConfig, token: string, di
   const lines = [
     "# Written by JSM HQ for this agent (git-excluded). Codex loads it once you trust this folder.",
     `developer_instructions = ${t(roleMd(agent, cfg, extras))}`,
+    // Top-level keys come before any table. A provider of its own (not Codex's built-in "ollama" one)
+    // so the address can be anything, including a sandbox's host.docker.internal.
+    ...(usesOllama(agent) ? [`model = ${t(agent.ollamaModel?.trim() ?? "")}`, `model_provider = ${t(OLLAMA_PROVIDER)}`] : []),
     "",
     "[features]",
     "hooks = true",
@@ -58,6 +73,7 @@ export function codexConfig(agent: AgentConfig, cfg: HqConfig, token: string, di
     `url = ${t(`${url}/mcp`)}`,
     `http_headers = { Authorization = ${t(`Bearer ${token}`)}, "X-HQ-Agent" = ${t(agent.id)} }`,
   ];
+  if (usesOllama(agent)) lines.push("", `[model_providers.${OLLAMA_PROVIDER}]`, 'name = "Ollama"', `base_url = ${t(`${ollamaUrlFor(agent, cfg)}/v1`)}`, 'wire_api = "responses"');
   for (const event of CODEX_EVENTS)
     lines.push("", `[[hooks.${event}]]`, `[[hooks.${event}.hooks]]`, 'type = "command"', `command = ${t(hookCommand(url, token, agent.id, event, script))}`);
   return lines.join("\n") + "\n";
@@ -75,6 +91,8 @@ const codex: CliAdapter = {
     excludeFromGit(dir, [CODEX_CONFIG, HOOK_SCRIPT]);
   },
   launch(agent) {
+    // On Ollama the model and provider are in the config file written above.
+    if (usesOllama(agent)) return { sbxAgent: "codex", args: [] };
     const model = agent.model.trim() && !/^default$/i.test(agent.model.trim()) ? agent.model.trim() : null;
     return { sbxAgent: "codex", args: model ? ["-m", model] : [] };
   },

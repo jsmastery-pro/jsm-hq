@@ -8,8 +8,9 @@ import { homedir } from "node:os";
 import { stackSkills } from "../src/data/stack";
 import { hasHqSkills, prepareSkills } from "./skills";
 import { resolve, sep } from "node:path";
-import { CLI_LABEL, HOST_TERMINAL, type AgentCli, type SetupCheckId, type WorkspaceInfo } from "../src/data/types";
+import { CLI_LABEL, HOST_TERMINAL, type AgentCli, type AgentConfig, type SetupCheckId, type WorkspaceInfo } from "../src/data/types";
 import { adapters, localBinary } from "./adapters";
+import { findModel, ollamaBaseUrl, ollamaPolicyTargets, ollamaStatus, usesOllama } from "./ollama";
 import type { Hub } from "./hub";
 import { sessionBackend, type LaunchSpec, type TermHandle } from "./backends";
 import { resolveCommand } from "./backends/pty";
@@ -57,7 +58,8 @@ export class Sessions {
   private shells = new Map<string, IPty>();
   private closing = new WeakSet<IPty>(); // closed on purpose: no "[shell closed]" line
   private shellGen = new Map<string, number>();
-  private policyOk = false;
+  /** Sandbox network rules already known to be in place this run. */
+  private allowed = new Set<string>();
   /** Called whenever an agent's Claude Code session goes away (stop, restart, crash). */
   onSessionDown: (agentId: string) => void = () => {};
   /** Called once an agent's sandbox exists after Start (to apply its network rules). */
@@ -104,6 +106,11 @@ export class Sessions {
     if (agent.mode === "sandbox" && agent.cli === "gemini" && check("google-secret") !== "ok")
       return fail("Gemini needs an API key in sbx. Run `sbx secret set google` (Setup checklist → Run in terminal).");
 
+    if (usesOllama(agent)) {
+      const problem = await this.ollamaProblem(agent);
+      if (problem) return fail(problem);
+    }
+
     const name = this.name(id);
     this.onSessionDown(id);
     try {
@@ -120,22 +127,22 @@ export class Sessions {
         if (skills.error) hub.activity("session", id, `${agent.name}: some agent skills didn't install (${skills.error.slice(0, 120)}). Starting anyway.`);
       }
       if (!(await this.backend.exists(name))) {
-        const launch = adapter.launch(agent);
+        const launch = adapter.launch(agent, hub.snap.config);
         const envFile = this.envFileFor(id);
         // Local mode: the agent gets the env file's variables (tmux only: there's no shell to load them into otherwise).
-        let spec: LaunchSpec = { file: localBinary[agent.cli], args: launch.args, envFile };
+        let spec: LaunchSpec = { file: localBinary[agent.cli], args: launch.args, envFile, env: launch.env };
         if (agent.mode === "local" && envFile && !this.backend.persistent)
           hub.activity("session", id, `${agent.name}'s env file isn't loaded in Local mode on Windows. Use Sandbox mode for app variables.`);
         if (agent.mode === "sandbox") {
           hub.setSession(id, { detail: "Allowing the sandbox to reach HQ…" });
-          await this.ensurePolicy();
+          await this.ensurePolicy(usesOllama(agent) ? ollamaPolicyTargets(hub.snap.config) : []);
           hub.setSession(id, { detail: "Starting sandbox…" });
           // sbx only accepts a size when it creates the sandbox; an existing (stopped) one keeps its size,
           // and passing --cpus/--memory again makes `sbx run` fail. "Recreate sandbox" applies a new size.
           const { cpus, memoryGb } = agent.sandbox.resources;
           const isNew = !(await this.sandboxExists(name));
           const size = !isNew ? [] : [...(cpus ? ["--cpus", String(cpus)] : []), ...(memoryGb ? ["--memory", `${Math.round(memoryGb * 1024)}m`] : [])];
-          const env = [...(envFile ? ["--env-file", envFile] : []), "-e", `BROWSER=${SANDBOX_BROWSER}`];
+          const env = [...(envFile ? ["--env-file", envFile] : []), "-e", `BROWSER=${SANDBOX_BROWSER}`, ...Object.entries(launch.env ?? {}).flatMap(([k, v]) => ["-e", `${k}=${v}`])];
           const args = launch.args.length ? ["--", ...launch.args] : [];
           spec = { file: "sbx", args: ["run", "--name", name, ...size, ...env, launch.sbxAgent, dir, ...args], envFile: null };
         }
@@ -290,14 +297,18 @@ export class Sessions {
   }
 
   /**
-   * Lets sandboxes reach HQ's port (checked once per run, added only if missing).
-   * The sandbox proxy evaluates host.docker.internal as localhost, so both are allowed.
+   * Lets sandboxes reach HQ's port, and Ollama's for agents on a local model (each checked once per
+   * run, added only if missing). The sandbox proxy evaluates host.docker.internal as localhost, so
+   * both are allowed. The user's base policy is never changed: only these allow rules are added.
    */
-  private async ensurePolicy() {
-    if (this.policyOk) return;
+  private async ensurePolicy(extra: string[] = []) {
     const port = this.hub.snap.config.project.hqPort;
-    for (const target of [`localhost:${port}`, `host.docker.internal:${port}`]) {
-      if ((await policyVerdict(target)).verdict === "allowed") continue;
+    for (const target of [`localhost:${port}`, `host.docker.internal:${port}`, ...extra]) {
+      if (this.allowed.has(target)) continue;
+      if ((await policyVerdict(target)).verdict === "allowed") {
+        this.allowed.add(target);
+        continue;
+      }
       const add = await run("sbx", ["policy", "allow", "network", target], { timeoutMs: 10_000 });
       if (!add.ok && POLICY_NOT_INITIALIZED.test(add.stderr + add.stdout)) {
         void this.recheckSetup();
@@ -305,8 +316,19 @@ export class Sessions {
       }
       if (!add.ok) throw new Error(`Could not allow ${target}: ${add.stderr.trim()}`);
       log.info(`added sandbox network rule: allow ${target}`);
+      this.allowed.add(target);
     }
-    this.policyOk = true;
+  }
+
+  /** Why an agent on Ollama can't start (not reachable, model not pulled), or null. Checked live, not from the last setup check. */
+  private async ollamaProblem(agent: AgentConfig): Promise<string | null> {
+    const url = ollamaBaseUrl(this.hub.snap.config);
+    const model = agent.ollamaModel?.trim();
+    if (!model) return `${agent.name} runs on Ollama but has no model. Set one in Settings → Team.`;
+    const status = await ollamaStatus(url);
+    if (!status) return `Ollama isn't reachable at ${url}. Start it (ollama serve), or change the address in Settings → Team.`;
+    if (!findModel(status, model)) return `Ollama doesn't have ${model}. Run: ollama pull ${model}`;
+    return null;
   }
 
   // ------------------------------------------------------------ terminals
@@ -527,7 +549,7 @@ export class Sessions {
   // ------------------------------------------------------------ setup helper
 
   async recheckSetup() {
-    this.hub.setSetup(await runSetupChecks(this.hub.repo, this.hub.snap.config.team));
+    this.hub.setSetup(await runSetupChecks(this.hub.repo, this.hub.snap.config.team, ollamaBaseUrl(this.hub.snap.config)));
   }
 
   /** Runs a program in a terminal the browser can watch and type into (id must start with "setup:"). */

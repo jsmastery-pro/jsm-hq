@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { nextAgentName } from "../../data/names";
-import { CLI_LABEL, type AgentCli, type AgentConfig, type AgentMode } from "../../data/types";
+import { CLI_LABEL, DEFAULT_OLLAMA_URL, supportsOllama, type AgentCli, type AgentConfig, type AgentMode, type ModelProvider } from "../../data/types";
 import { officeActions, useOffice } from "../../store/office";
 import { agentPalette } from "../../theme/tokens";
 import { Field, Portrait, SectionTitle } from "../kit";
@@ -46,6 +46,8 @@ export function TeamSettings() {
 
 function AgentRow({ agent, expanded, onToggle, onRemove }: { agent: AgentConfig; expanded: boolean; onToggle: () => void; onRemove: () => void }) {
   const set = (patch: Parameters<typeof officeActions.updateAgent>[1]) => officeActions.updateAgent(agent.id, patch);
+  const ollamaUrl = useOffice((s) => s.snap?.config.project.ollamaUrl);
+  const onOllama = agent.provider === "ollama" && supportsOllama(agent.cli);
   return (
     <div className="border-[3px] border-ink bg-white">
       <div className="grid grid-cols-[40px_1fr_1fr_150px_130px_auto] items-end gap-2.5 p-2.5">
@@ -103,7 +105,25 @@ function AgentRow({ agent, expanded, onToggle, onRemove }: { agent: AgentConfig;
               ))}
             </div>
           </Field>
-          <Field label="Start with model" hint="Optional. Leave empty to use the CLI's default — you can always switch with /model in the terminal. Set it to keep a choice across restarts (e.g. Opus for the lead).">
+          {supportsOllama(agent.cli) && (
+            <Field label="Model provider" hint={`${CLI_LABEL[agent.cli]}'s own account, or a model running on your machine (or another machine) with Ollama.`}>
+              <select className="field" value={agent.provider ?? "default"} onChange={(e) => set({ provider: e.target.value as ModelProvider })}>
+                <option value="default">{CLI_LABEL[agent.cli]} account</option>
+                <option value="ollama">Ollama (local model)</option>
+              </select>
+            </Field>
+          )}
+          {onOllama && (
+            <>
+              <Field label="Ollama model" hint="Pull it first: ollama pull <model>. Tool-calling quality varies a lot between local models, and agents need tools. Use a model that lists tools, with a context window of 64k or more.">
+                <CommitInput className="field" value={agent.ollamaModel ?? ""} placeholder="qwen3-coder" list="ollama-models" onCommit={(v) => set({ ollamaModel: v.trim() })} />
+              </Field>
+              <Field label="Ollama address (all agents)" hint="Where Ollama runs. Sandboxes reach http://localhost:11434 through host.docker.internal. Use another machine's address to run models on a LAN box.">
+                <CommitInput className="field font-term text-[17px]" value={ollamaUrl ?? ""} placeholder={DEFAULT_OLLAMA_URL} onCommit={(v) => officeActions.updateProject({ ollamaUrl: v.trim() })} />
+              </Field>
+            </>
+          )}
+          {!onOllama && <Field label="Start with model" hint="Optional. Leave empty to use the CLI's default — you can always switch with /model in the terminal. Set it to keep a choice across restarts (e.g. Opus for the lead).">
             <CommitInput
               className="field"
               value={agent.model}
@@ -111,7 +131,7 @@ function AgentRow({ agent, expanded, onToggle, onRemove }: { agent: AgentConfig;
               list={`${agent.cli}-models`}
               onCommit={(v) => set({ model: v.trim() })}
             />
-          </Field>
+          </Field>}
           <Field label="Skills" hint="Comma separated. Copied into the agent's .claude/skills.">
             <CommitInput
               className="field"
@@ -185,6 +205,10 @@ function AddAgent() {
       </p>
       <datalist id="codex-models">
         <option value="gpt-5.6-sol" />
+      </datalist>
+      <datalist id="ollama-models">
+        <option value="qwen3-coder" />
+        <option value="gpt-oss:20b" />
       </datalist>
       <datalist id="gemini-models">
         <option value="gemini-2.5-pro" />

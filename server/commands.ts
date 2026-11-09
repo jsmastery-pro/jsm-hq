@@ -1,6 +1,6 @@
 // Browser commands → server actions. Names match OfficeDataSource methods.
 
-import { isAgentCli, SERVICE_KEYS, type AgentCli, type AgentConfig, type AgentPatch, type ReviewTool, type WelcomeInput, type NewMcpServer, type Board, type NewAgentInput, type ProjectConfig, type RemoveAgentOptions, type SandboxSettings, type SetupCheckId, type WorkflowPatch } from "../src/data/types";
+import { DEFAULT_OLLAMA_URL, isAgentCli, supportsOllama, SERVICE_KEYS, type AgentCli, type AgentConfig, type AgentPatch, type ReviewTool, type WelcomeInput, type NewMcpServer, type Board, type NewAgentInput, type ProjectConfig, type RemoveAgentOptions, type SandboxSettings, type SetupCheckId, type WorkflowPatch } from "../src/data/types";
 import { LEAD_NAME, OFFICE_NAME_MAX } from "../src/data/names";
 import { STACK_CATEGORIES, stackSkills, stackTool, type StackChoice, type StackConfig } from "../src/data/stack";
 import { resolveAccess } from "./access";
@@ -13,6 +13,7 @@ import type { Planner } from "./planner";
 import type { Sbx } from "./sbx";
 import type { SbxMcp } from "./sbxMcp";
 import type { Sessions } from "./sessions";
+import { parseOllamaUrl } from "./ollama";
 import { newAgent } from "./store";
 import { mergeByNotice } from "./githubSync";
 
@@ -91,6 +92,10 @@ export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inb
       agent.cli = isAgentCli(input.cli) ? input.cli : "claude";
       agent.model = str(input.model, 60).trim();
       agent.mode = input.mode === "local" ? "local" : "sandbox";
+      if (input.provider === "ollama" && supportsOllama(agent.cli)) {
+        agent.provider = "ollama";
+        agent.ollamaModel = str(input.ollamaModel, 100).trim();
+      }
       const lead = team().find((a) => a.isLead);
       if (lead) agent.sandbox = structuredClone(lead.sandbox);
       team().push(agent);
@@ -99,14 +104,14 @@ export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inb
       hub.configChanged();
       hub.emit({ type: "agent.updated", agent: structuredClone(status) });
       hub.activity("config", null, `Added ${agent.name} (${agent.role}). Press Start to launch their session.`);
-      if (agent.cli !== "claude") void sessions.recheckSetup(); // Codex and Gemini agents add their own setup checks
+      if (agent.cli !== "claude" || agent.provider === "ollama") void sessions.recheckSetup(); // Codex, Gemini and Ollama agents add their own setup checks
     },
 
     updateAgent: (id, patch) => {
       const agent = hub.cfg(str(id));
       if (!agent) return;
       const p = (patch ?? {}) as AgentPatch;
-      const before = `${agent.cli}/${agent.mode}`;
+      const before = `${agent.cli}/${agent.mode}/${agent.provider}/${agent.ollamaModel}`;
       for (const k of ["name", "role", "model", "color", "roleMd"] as const) if (typeof p[k] === "string") agent[k] = str(p[k], 8000);
       if (p.mode === "sandbox" || p.mode === "local") agent.mode = p.mode;
       if (isAgentCli(p.cli) && p.cli !== agent.cli) {
@@ -114,11 +119,18 @@ export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inb
         // Model names don't carry over between CLIs.
         if (typeof p.model !== "string") agent.model = "";
       }
+      // Gemini CLI has no local-model path, so it always uses its own account.
+      if (p.provider === "default" || p.provider === "ollama") {
+        if (p.provider === "ollama" && supportsOllama(agent.cli)) agent.provider = "ollama";
+        else delete agent.provider; // absent = default, so configs of agents that never used Ollama stay unchanged
+      }
+      if (typeof p.ollamaModel === "string") agent.ollamaModel = str(p.ollamaModel, 100).trim();
+      if (!supportsOllama(agent.cli)) delete agent.provider;
       if (Array.isArray(p.skills)) agent.skills = p.skills.map((s) => str(s, 60)).filter(Boolean);
       if (p.workspacePath !== undefined) agent.workspacePath = p.workspacePath ? str(p.workspacePath, 500).trim() || null : null;
       hub.configChanged();
       // Codex and Gemini agents add their own setup checks.
-      if (`${agent.cli}/${agent.mode}` !== before) void sessions.recheckSetup();
+      if (`${agent.cli}/${agent.mode}/${agent.provider}/${agent.ollamaModel}` !== before) void sessions.recheckSetup();
     },
 
     inspectWorkspace: async (id) => {
@@ -305,6 +317,13 @@ export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inb
         const name = p.officeName.trim().slice(0, OFFICE_NAME_MAX);
         if (name) project.officeName = name;
         else delete project.officeName;
+      }
+      if (typeof p.ollamaUrl === "string") {
+        const url = parseOllamaUrl(p.ollamaUrl);
+        // Empty or invalid = back to the default (http://localhost:11434).
+        if (url && url !== DEFAULT_OLLAMA_URL) project.ollamaUrl = url;
+        else delete project.ollamaUrl;
+        void sessions.recheckSetup();
       }
       const exportOn = typeof p.exportPlan === "boolean" && p.exportPlan && !project.exportPlan;
       if (typeof p.exportPlan === "boolean") project.exportPlan = p.exportPlan;

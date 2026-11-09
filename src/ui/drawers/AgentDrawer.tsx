@@ -35,7 +35,7 @@ export function AgentDrawer({ id, initialTab }: { id: string; initialTab?: Agent
             <StateChip state={status.state} />
           </div>
           <div className="truncate font-term text-[17px] text-muted">
-            {agent.role} · {CLI_LABEL[agent.cli]}{agent.model ? ` ${agent.model}` : ""} · {agent.mode === "sandbox" ? "Docker Sandbox" : "Local mode"}
+            {agent.role} · {CLI_LABEL[agent.cli]}{agent.provider === "ollama" ? ` on Ollama ${agent.ollamaModel || "(no model set)"}` : agent.model ? ` ${agent.model}` : ""} · {agent.mode === "sandbox" ? "Docker Sandbox" : "Local mode"}
           </div>
         </div>
       </DrawerHeader>
@@ -249,6 +249,11 @@ function NotRunning({ agent, status }: { agent: AgentConfig; status: AgentStatus
             {agent.cli === "codex" && (
               <p className="mb-4 text-[12px] text-[#ffc14d]">
                 First start only: Codex asks you to trust this folder and HQ's hooks. Choose <b>Yes</b>, then <b>Trust all and continue</b>, in the terminal.
+              </p>
+            )}
+            {agent.provider === "ollama" && (
+              <p className="mb-4 text-[12px] text-[#ffc14d]">
+                Runs {agent.ollamaModel || "a local model"} through Ollama. Tool-calling quality varies a lot by local model; if the agent fumbles its tools, try a different model.
               </p>
             )}
             {agent.cli === "gemini" && (

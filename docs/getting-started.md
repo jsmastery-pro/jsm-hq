@@ -92,6 +92,21 @@ In **Local** mode, Gemini CLI uses your own setup on this machine: install it wi
 
 Claude Code agents ask you to sign in the first time they start. Do it in the agent's terminal inside HQ.
 
+### Optional: run agents on a local model (Ollama)
+
+Claude Code and Codex agents can use a model on your own machine instead of a cloud account. In **Settings → Team**, open an agent's **More** panel, set **Model provider** to **Ollama**, and enter a model name. Gemini CLI agents can't use Ollama.
+
+```bash
+ollama pull qwen3-coder        # or any model that lists "tools"
+ollama serve                   # if Ollama isn't already running
+```
+
+- Needs Ollama 0.14 or newer (Claude Code talks to its Anthropic-compatible API). Use a context window of at least 64k tokens.
+- In a sandbox, HQ points the agent at `http://host.docker.internal:11434` and adds that one allow rule to the network policy. Your base policy is never changed.
+- Ollama on another machine? Set **Ollama address** in the same panel (for example `http://192.168.1.20:11434`). That machine must accept connections from yours (`OLLAMA_HOST=0.0.0.0`).
+- Tool-calling quality varies a lot by model. If an agent can't use HQ's tools, try another model.
+- The setup checklist adds **Ollama** and **Models** checks once an agent uses it; the fix for a missing model is `ollama pull <model>`.
+
 ## 5. Prepare a GitHub repo
 
 HQ works on a git repo that has a GitHub remote called `origin`. Each agent clones it, works on its own branch, and opens pull requests there. HQ follows those PRs and their reviews.

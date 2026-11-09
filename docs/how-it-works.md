@@ -23,6 +23,8 @@ What HQ does behind the office: where agents work, how they talk, what reaches G
 - **Workers** build. One task means one branch and one pull request. A worker edits only the files its task lists and asks the lead if it needs more.
 - Each agent runs **Claude Code**, **Codex** or **Gemini CLI**, in a **Sandbox** (the default) or in **Local** mode. Set this per agent in Settings → Team.
 
+**Model provider.** Claude Code and Codex agents can run on a local model through [Ollama](https://ollama.com): set **Model provider** to **Ollama** and a model in Settings → Team. HQ starts Claude Code with `ANTHROPIC_BASE_URL` pointing at Ollama (with a placeholder token and `--model <model>`), and writes an Ollama provider into the agent's Codex config. Everything else (hooks, the HQ tools, messages) is unchanged. Gemini CLI has no local-model path. A sandbox reaches Ollama at `host.docker.internal:11434`; the address is configurable for an Ollama box on your network.
+
 New teams get names from The Office: Michael leads, then Dwight, Jim, Pam and so on. Rename them any time.
 
 ## Workspaces and sessions
@@ -119,7 +121,7 @@ HQ never stores key values and never reads your env files.
 | Office name (the sign on the wall) | Settings → Project | Right away, for everyone on the project |
 | Font: Pixel, Clean or Mono | Settings → Project | Right away, in this browser only. The office itself stays pixel. |
 | Review tool | Settings → Workflow | Right away |
-| Agents, roles, CLI, mode | Settings → Team | Next time the agent starts |
+| Agents, roles, CLI, mode, model provider | Settings → Team | Next time the agent starts |
 | CPU and memory | Settings → Sandbox | After **Recreate sandbox** |
 | MCP servers per agent | Settings → MCP | Right away for new servers |
 

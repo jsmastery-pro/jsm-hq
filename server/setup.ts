@@ -2,10 +2,11 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { arch, cpus, platform, release, totalmem } from "node:os";
-import type { AgentConfig, SetupCheck, SetupFix, SetupState } from "../src/data/types";
+import { DEFAULT_OLLAMA_URL, type AgentConfig, type SetupCheck, type SetupFix, type SetupState } from "../src/data/types";
 import { usesTmux } from "./backends";
 import { parseCliJson, sandboxList } from "./lib/json";
 import { has, run } from "./lib/exec";
+import { findModel, OLLAMA_MIN_VERSION, olderThan, ollamaStatus, usesOllama } from "./ollama";
 import type { RepoInfo } from "./repo";
 
 const SBX_DOCS = "https://docs.docker.com/ai/sandboxes/install/";
@@ -216,8 +217,46 @@ async function checkGoogleSecret(sbxOk: boolean): Promise<Check> {
   return { ...base, status: "missing", detail: "Gemini agents in a sandbox can't sign in until this is set. Paste a key from Google AI Studio when asked.", fix: fix("sbx secret set google", true, "https://docs.docker.com/ai/sandboxes/agents/gemini/") };
 }
 
-/** `team` adds the Codex and Gemini checks only when the team has such agents. */
-export async function runSetupChecks(repo: RepoInfo, team: AgentConfig[] = []): Promise<SetupState> {
+const OLLAMA_DOCS = "https://ollama.com/download";
+
+/** Ollama answers at its address, and is new enough for Claude Code agents (they use its Anthropic API). */
+async function checkOllama(url: string, team: AgentConfig[]): Promise<Check> {
+  const base = { id: "ollama" as const, label: "Ollama (for agents on a local model)", neededFor: "all" as const };
+  const status = await ollamaStatus(url);
+  if (!status) {
+    const local = url === DEFAULT_OLLAMA_URL || /^https?:\/\/(localhost|127\.0\.0\.1)[:/]/.test(url);
+    const installed = local && (await has("ollama"));
+    return {
+      ...base,
+      status: "missing",
+      detail: installed ? `Installed, but not answering at ${url}.` : local ? "Not installed." : `Not answering at ${url}. Check the address in Settings → Team and that the server accepts connections from this machine (OLLAMA_HOST=0.0.0.0).`,
+      fix: installed ? fix("ollama serve", false, OLLAMA_DOCS) : local ? fix(os === "darwin" ? "brew install ollama" : "curl -fsSL https://ollama.com/install.sh | sh", false, OLLAMA_DOCS) : null,
+    };
+  }
+  if (team.some((a) => usesOllama(a) && a.cli === "claude") && olderThan(status.version, OLLAMA_MIN_VERSION))
+    return { ...base, status: "warning", detail: `Ollama ${status.version} at ${url}. Claude Code agents need ${OLLAMA_MIN_VERSION} or newer (its Anthropic-compatible API).`, fix: fix("brew upgrade ollama", false, OLLAMA_DOCS) };
+  return { ...base, status: "ok", detail: `${status.version ? `Ollama ${status.version}` : "Ollama"} at ${url} · ${status.models.length} model${status.models.length === 1 ? "" : "s"}`, fix: null };
+}
+
+/** Each Ollama agent's model is pulled. Warns when a model says it can't call tools (agents need that). */
+async function checkOllamaModels(url: string, team: AgentConfig[]): Promise<Check> {
+  const base = { id: "ollama-model" as const, label: "Models for agents on Ollama", neededFor: "all" as const };
+  const status = await ollamaStatus(url);
+  if (!status) return { ...base, status: "missing", detail: "Waiting for Ollama.", fix: null };
+  const agents = team.filter(usesOllama);
+  const unset = agents.filter((a) => !a.ollamaModel?.trim());
+  if (unset.length) return { ...base, status: "missing", detail: `Pick a model for ${unset.map((a) => a.name).join(", ")} in Settings → Team.`, fix: null };
+  const wanted = [...new Set(agents.map((a) => a.ollamaModel!.trim()))];
+  const missing = wanted.filter((m) => !findModel(status, m));
+  if (missing.length)
+    return { ...base, status: "missing", detail: `Not pulled yet: ${missing.join(", ")}.`, fix: fix(missing.map((m) => `ollama pull ${m}`).join(" && "), true, "https://ollama.com/library") };
+  const noTools = wanted.filter((m) => findModel(status, m)?.tools === false);
+  if (noTools.length) return { ...base, status: "warning", detail: `${noTools.join(", ")} doesn't list tool calling, which agents depend on. Pick a model with tools (see ollama.com/search?c=tools).`, fix: null };
+  return { ...base, status: "ok", detail: `${wanted.join(", ")} pulled. Tool-calling quality varies a lot between local models.`, fix: null };
+}
+
+/** `team` adds the Codex, Gemini and Ollama checks only when the team has such agents. */
+export async function runSetupChecks(repo: RepoInfo, team: AgentConfig[] = [], ollamaUrl = DEFAULT_OLLAMA_URL): Promise<SetupState> {
   const brew = os === "darwin" && (await has("brew"));
   const [osCheck, sbx, tmux, claude, gh] = await Promise.all([checkOs(), checkSbx(brew), checkTmux(brew), checkClaude(), checkGh(brew)]);
   const sbxOk = sbx.status === "ok";
@@ -230,6 +269,7 @@ export async function runSetupChecks(repo: RepoInfo, team: AgentConfig[] = []): 
   const geminiAgents = team.filter((a) => a.cli === "gemini");
   if (geminiAgents.some((a) => a.mode === "sandbox")) checks.splice(5, 0, await checkGoogleSecret(sbxOk));
   if (geminiAgents.some((a) => a.mode === "local")) checks.push(await checkGemini());
+  if (team.some(usesOllama)) checks.push(await checkOllama(ollamaUrl, team), await checkOllamaModels(ollamaUrl, team));
   const ok = (c: SetupCheck) => c.status === "ok";
   return {
     machine: { cpus: cpus().length, memoryGb: Math.round(totalmem() / 1024 ** 3), persistentAgents: usesTmux() },

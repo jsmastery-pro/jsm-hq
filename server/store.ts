@@ -3,8 +3,9 @@
 
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentConfig, Board, HqConfig, SandboxSettings, Task } from "../src/data/types";
+import { supportsOllama, type AgentConfig, type Board, type HqConfig, type SandboxSettings, type Task } from "../src/data/types";
 import { LEAD_NAME, WORKER_NAMES } from "../src/data/names";
+import { parseOllamaUrl } from "./ollama";
 import { slugify } from "./paths";
 import type { RepoInfo } from "./repo";
 
@@ -76,6 +77,8 @@ export function loadConfig(repo: RepoInfo, port: number): { config: HqConfig; is
       a.workspacePath ??= null;
       a.mcp ??= [];
       a.cli ??= "claude";
+      // Absent = the CLI's own account. A hand-edited or unknown value falls back to that too.
+      if (a.provider !== "ollama" || !supportsOllama(a.cli)) delete a.provider;
       a.sandbox.resources ??= { cpus: null, memoryGb: null };
       // Phase D: policy level, proxy and secret names moved to sbx itself.
       const old = a.sandbox as unknown as Record<string, unknown>;
@@ -87,6 +90,7 @@ export function loadConfig(repo: RepoInfo, port: number): { config: HqConfig; is
     // Slugified again in case the file was edited by hand: it ends up in paths and sandbox names.
     found.project.id = slugify(found.project.id ?? found.project.name);
     found.project.path = repo.root;
+    if (!parseOllamaUrl(found.project.ollamaUrl)) delete found.project.ollamaUrl;
     return { config: found, isNew: false };
   }
   return { config: defaultConfig(repo, port), isNew: true };
