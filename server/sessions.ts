@@ -437,6 +437,7 @@ export class Sessions {
           }
           if (agent.cli === "codex") await this.watchCodexScreen(agent.id, name);
           if (agent.cli === "gemini") await this.watchGeminiScreen(agent.id, name);
+          if (agent.cli === "antigravity") await this.watchAntigravityScreen(agent.id, name);
           await this.reconcileFromScreen(agent.id, agent.cli, name);
         } else if (st.session.state === "running") {
           this.detach(agent.id);
@@ -502,6 +503,29 @@ export class Sessions {
   }
 
   /**
+   * Antigravity CLI fires SessionStart only on the first prompt, and its first-run setup (colour scheme,
+   * terms, sign-in) and folder-trust prompt come before any hook, so HQ reads its screen. HQ never answers them.
+   */
+  private async watchAntigravityScreen(agentId: string, name: string) {
+    const st = this.hub.status(agentId);
+    if (!st) return;
+    const screen = await this.backend.screenText(name, 24);
+    const SETUP_NOTE = "Asking: finish Antigravity CLI's setup or folder trust prompt in the terminal";
+    if (/Do you trust the contents of this project|Terms of Service & Data Use|Select login method|Choose your color scheme/i.test(screen)) {
+      if (st.note !== SETUP_NOTE) {
+        this.hub.setStatus(agentId, { state: "needs-input", note: SETUP_NOTE });
+        this.hub.activity("agent.needs-input", agentId, `${this.hub.name(agentId)} needs you: finish Antigravity CLI's setup in the terminal`);
+      }
+      return;
+    }
+    // Its input box is up (footer "? for shortcuts"): messages can be typed.
+    if (st.state !== "working" && /\? for shortcuts/.test(screen) && (st.note === SETUP_NOTE || st.note === "Running locally" || st.note === "Reattached")) {
+      this.onSessionReattached(agentId);
+      this.hub.setStatus(agentId, { state: "idle", note: "Ready" });
+    }
+  }
+
+  /**
    * Hooks are the main signal, but one can be missed or arrive late (a hook
    * that timed out, an answer with no tool call after it). When hooks have been
    * quiet for a while, the screen says what the agent is really doing, and a
@@ -514,9 +538,8 @@ export class Sessions {
     if (quietMs < SCREEN_QUIET_MS) return;
     const screen = await this.backend.screenText(name, 10);
     if (!screen) return;
-    // The screen wording is known for Claude Code, Codex and Gemini CLI; for Antigravity CLI only hooks say what it is doing.
-    if (cli === "antigravity") return;
-    const busy = (cli === "gemini" ? GEMINI_BUSY : BUSY).test(screen);
+    // Gemini CLI and Antigravity CLI both show "esc to cancel" while a turn runs. Antigravity's approval prompts are unknown.
+    const busy = (cli === "gemini" || cli === "antigravity" ? GEMINI_BUSY : BUSY).test(screen);
     const dialog = DIALOG.test(screen) || (cli === "gemini" && GEMINI_DIALOG.test(screen));
     const set = (state: "idle" | "working" | "needs-input", note: string) => {
       if (process.env.HQ_DEBUG) log.info(`screen ${agentId}: ${st.state} → ${state} (${note})`);
@@ -524,7 +547,7 @@ export class Sessions {
     };
 
     if (st.state === "needs-input") {
-      if (dialog || st.note?.includes("Codex's folder") || st.note?.includes("Gemini CLI's folder")) return; // still waiting (folder trust is watched separately)
+      if (dialog || st.note?.includes("Codex's folder") || st.note?.includes("Gemini CLI's folder") || st.note?.includes("Antigravity CLI's setup")) return; // still waiting (folder trust is watched separately)
       this.idleScreens.delete(agentId);
       if (busy) return set("working", "Continuing after your answer");
       // Idle only on a positive sign: Claude Code's normal input footer is back. An unfamiliar

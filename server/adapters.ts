@@ -181,7 +181,9 @@ const ANTIGRAVITY_HOOK_NAME = "jsm-hq";
 /**
  * Antigravity's hook events → the HQ event each reports as. It has no permission or notification event
  * and no SessionEnd: a prompt waiting on you can't be seen from hooks, and a session that ends is
- * noticed when its process exits. PreInvocation fires before each model call, so it also re-marks the
+ * noticed when its process exits. SessionStart only fires with the first prompt. In agy 1.5.3, none of
+ * the PreToolUse/PostToolUse layouts tried (grouped or flat, with or without a matcher) fired in a test,
+ * so tool use isn't reported; PreInvocation and Stop still drive working/idle. PreInvocation fires before each model call, so it also re-marks the
  * agent as working when a Stop hook continues the turn.
  */
 const ANTIGRAVITY_EVENTS: Record<string, string> = { SessionStart: "SessionStart", PreInvocation: "UserPromptSubmit", PreToolUse: "PreToolUse", PostToolUse: "PostToolUse", Stop: "Stop" };
@@ -197,7 +199,7 @@ export function antigravityHooks(existing: JsonObject, agent: AgentConfig, cfg: 
   const entry: JsonObject = { enabled: true };
   for (const [event, hqEvent] of Object.entries(ANTIGRAVITY_EVENTS)) {
     const handler = { type: "command", command: hookCommand(url, token, agent.id, hqEvent, script), timeout: 5 };
-    entry[event] = event === "PreToolUse" || event === "PostToolUse" ? [{ matcher: "*", hooks: [handler] }] : [handler];
+    entry[event] = event === "PreToolUse" || event === "PostToolUse" ? [{ matcher: ".*", hooks: [handler] }] : [handler];
   }
   return { ...existing, [ANTIGRAVITY_HOOK_NAME]: entry };
 }
