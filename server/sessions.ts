@@ -8,7 +8,7 @@ import { homedir } from "node:os";
 import { stackSkills } from "../src/data/stack";
 import { hasHqSkills, prepareSkills } from "./skills";
 import { resolve, sep } from "node:path";
-import { HOST_TERMINAL, type AgentCli, type SetupCheckId, type WorkspaceInfo } from "../src/data/types";
+import { CLI_LABEL, HOST_TERMINAL, type AgentCli, type SetupCheckId, type WorkspaceInfo } from "../src/data/types";
 import { adapters, localBinary } from "./adapters";
 import type { Hub } from "./hub";
 import { sessionBackend, type LaunchSpec, type TermHandle } from "./backends";
@@ -34,11 +34,14 @@ const SHELL_ENV = { ...TERM_ENV, FORCE_HYPERLINK: "1" };
  */
 const SANDBOX_BROWSER = "/usr/local/bin/xdg-open";
 
-// What the agents' screens show (Claude Code and Codex).
+// What the agents' screens show (Claude Code, Codex and Gemini CLI).
 const BUSY = /esc to interrupt/i; // the footer while a turn runs
+const GEMINI_BUSY = /esc to cancel/i; // Gemini CLI's spinner line while a turn runs
 // A question or permission prompt (Claude Code's wording; the numbered-option line also covers Codex's).
 const DIALOG = /Enter to select|↑\/↓ to navigate|Do you want to (proceed|make this edit|create)|Would you like to|^\s*[❯›]\s*1\.\s/im;
-const PROMPT_READY = /⏵⏵|\? for shortcuts|Ask Codex to do anything/; // the input prompt is up
+// Gemini CLI's approval dialogs ("Allow execution of [Shell]?" with "● 1. Allow once") and its folder-trust prompt.
+const GEMINI_DIALOG = /Allow (execution|once)|Do you trust the files in this folder|Apply this change\?/i;
+const PROMPT_READY = /⏵⏵|\? for shortcuts|Ask Codex to do anything|Type your message or @path/; // the input prompt is up
 const SCREEN_QUIET_MS = 4000; // only second-guess hooks after this much silence
 const STALE_WORKING_MS = 15_000; // "working" with an idle screen this long = a missed Stop
 
@@ -97,6 +100,9 @@ export class Sessions {
     if (agent.mode === "local" && agent.cli === "codex" && check("codex") !== "ok") return fail("Codex isn't installed on this machine. See the setup checklist, or run this agent in a sandbox.");
     if (agent.mode === "sandbox" && agent.cli === "codex" && check("openai-secret") !== "ok")
       return fail("Codex needs an OpenAI key in sbx. Run `sbx secret set openai --oauth` (Setup checklist → Run in terminal).");
+    if (agent.mode === "local" && agent.cli === "gemini" && check("gemini") !== "ok") return fail("Gemini CLI isn't installed on this machine. See the setup checklist, or run this agent in a sandbox.");
+    if (agent.mode === "sandbox" && agent.cli === "gemini" && check("google-secret") !== "ok")
+      return fail("Gemini needs an API key in sbx. Run `sbx secret set google` (Setup checklist → Run in terminal).");
 
     const name = this.name(id);
     this.onSessionDown(id);
@@ -138,7 +144,7 @@ export class Sessions {
       this.attach(id);
       hub.setSession(id, { state: "running", detail: null, workspace: dir });
       hub.setStatus(id, { state: "idle", note: agent.mode === "sandbox" ? "Sandbox running" : "Running locally" });
-      hub.activity("session", id, `${agent.name} started (${agent.cli === "codex" ? "Codex" : "Claude Code"}, ${agent.mode === "sandbox" ? "Docker Sandbox" : "Local mode"})`);
+      hub.activity("session", id, `${agent.name} started (${CLI_LABEL[agent.cli]}, ${agent.mode === "sandbox" ? "Docker Sandbox" : "Local mode"})`);
       if (agent.mode === "sandbox") {
         setTimeout(() => void this.refreshSandboxSizes(), 4000);
         void this.whenSandboxExists(id).then((ok) => ok && this.onSandboxReady(id));
@@ -406,6 +412,7 @@ export class Sessions {
             this.onSessionReattached(agent.id);
           }
           if (agent.cli === "codex") await this.watchCodexScreen(agent.id, name);
+          if (agent.cli === "gemini") await this.watchGeminiScreen(agent.id, name);
           await this.reconcileFromScreen(agent.id, agent.cli, name);
         } else if (st.session.state === "running") {
           this.detach(agent.id);
@@ -449,6 +456,28 @@ export class Sessions {
   }
 
   /**
+   * Until you trust the folder, Gemini CLI ignores HQ's settings (no hooks, no HQ tools), so no hook
+   * can say it is waiting: HQ reads its screen. HQ never answers the trust prompt for you.
+   */
+  private async watchGeminiScreen(agentId: string, name: string) {
+    const st = this.hub.status(agentId);
+    if (!st) return;
+    const screen = await this.backend.screenText(name, 24);
+    const TRUST_NOTE = "Asking: approve Gemini CLI's folder trust prompt in the terminal (choose Trust folder)";
+    if (/Do you trust the files in this folder/i.test(screen)) {
+      if (st.note !== TRUST_NOTE) {
+        this.hub.setStatus(agentId, { state: "needs-input", note: TRUST_NOTE });
+        this.hub.activity("agent.needs-input", agentId, `${this.hub.name(agentId)} needs you: trust the folder in Gemini CLI`);
+      }
+      return;
+    }
+    if (st.note === TRUST_NOTE && /Type your message or @path/.test(screen)) {
+      this.onSessionReattached(agentId); // its prompt is ready for typed messages
+      this.hub.setStatus(agentId, { state: "idle", note: "Ready" });
+    }
+  }
+
+  /**
    * Hooks are the main signal, but one can be missed or arrive late (a hook
    * that timed out, an answer with no tool call after it). When hooks have been
    * quiet for a while, the screen says what the agent is really doing, and a
@@ -461,26 +490,26 @@ export class Sessions {
     if (quietMs < SCREEN_QUIET_MS) return;
     const screen = await this.backend.screenText(name, 10);
     if (!screen) return;
-    const busy = BUSY.test(screen);
-    const dialog = DIALOG.test(screen);
+    const busy = (cli === "gemini" ? GEMINI_BUSY : BUSY).test(screen);
+    const dialog = DIALOG.test(screen) || (cli === "gemini" && GEMINI_DIALOG.test(screen));
     const set = (state: "idle" | "working" | "needs-input", note: string) => {
       if (process.env.HQ_DEBUG) log.info(`screen ${agentId}: ${st.state} → ${state} (${note})`);
       this.hub.setStatus(agentId, { state, note });
     };
 
     if (st.state === "needs-input") {
-      if (dialog || st.note?.includes("Codex's folder")) return; // still waiting (Codex trust is watched separately)
+      if (dialog || st.note?.includes("Codex's folder") || st.note?.includes("Gemini CLI's folder")) return; // still waiting (folder trust is watched separately)
       this.idleScreens.delete(agentId);
       if (busy) return set("working", "Continuing after your answer");
       // Idle only on a positive sign: Claude Code's normal input footer is back. An unfamiliar
       // prompt keeps "needs you", so queued messages aren't typed into it. Codex: wait for "busy".
-      if (cli === "claude" && PROMPT_READY.test(screen)) set("idle", "Waiting for you");
+      if (cli !== "codex" && PROMPT_READY.test(screen)) set("idle", "Waiting for you");
       return;
     }
     if (dialog) return set("needs-input", "Asking: answer the question in the terminal");
     // A missed UserPromptSubmit: the agent is busy, so don't type into it.
     if (st.state === "idle" && busy) return set("working", "Working");
-    if (st.state === "working" && !busy && cli === "claude") {
+    if (st.state === "working" && !busy && cli !== "codex") {
       // Twice in a row, so a gap between two steps isn't mistaken for the end of the turn.
       const n = (this.idleScreens.get(agentId) ?? 0) + 1;
       this.idleScreens.set(agentId, n);

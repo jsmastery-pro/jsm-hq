@@ -251,6 +251,11 @@ function NotRunning({ agent, status }: { agent: AgentConfig; status: AgentStatus
                 First start only: Codex asks you to trust this folder and HQ's hooks. Choose <b>Yes</b>, then <b>Trust all and continue</b>, in the terminal.
               </p>
             )}
+            {agent.cli === "gemini" && (
+              <p className="mb-4 text-[12px] text-[#ffc14d]">
+                First start only: Gemini CLI asks you to trust this folder. Choose <b>Trust folder</b> in the terminal, or HQ's hooks and tools won't load.
+              </p>
+            )}
             <p className="hidden">
             </p>
             <div className="flex justify-center gap-2">

@@ -26,9 +26,12 @@ export interface SandboxSettings {
 export type AgentMode = "sandbox" | "local";
 
 /** Which coding agent CLI runs in the sandbox. */
-export type AgentCli = "claude" | "codex";
+export type AgentCli = "claude" | "codex" | "gemini";
 
-export const CLI_LABEL: Record<AgentCli, string> = { claude: "Claude Code", codex: "Codex" };
+export const CLI_LABEL: Record<AgentCli, string> = { claude: "Claude Code", codex: "Codex", gemini: "Gemini CLI" };
+
+/** Narrows untrusted input (a UI message, an edited config) to a known CLI. */
+export const isAgentCli = (v: unknown): v is AgentCli => typeof v === "string" && Object.hasOwn(CLI_LABEL, v);
 
 export interface AgentConfig {
   id: string; // "john"
@@ -246,7 +249,7 @@ export interface RemoveAgentOptions {
 
 // ---------------------------------------------------------------- Setup
 
-export type SetupCheckId = "os" | "sbx" | "sbx-login" | "sbx-policy" | "tmux" | "gh" | "gh-remote" | "github-secret" | "claude" | "codex" | "openai-secret";
+export type SetupCheckId = "os" | "sbx" | "sbx-login" | "sbx-policy" | "tmux" | "gh" | "gh-remote" | "github-secret" | "claude" | "codex" | "openai-secret" | "gemini" | "google-secret";
 export type SetupStatus = "ok" | "missing" | "unsupported" | "warning";
 
 export interface SetupFix {

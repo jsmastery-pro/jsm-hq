@@ -108,7 +108,7 @@ function AgentRow({ agent, expanded, onToggle, onRemove }: { agent: AgentConfig;
               className="field"
               value={agent.model}
               placeholder={`${CLI_LABEL[agent.cli]} default`}
-              list={agent.cli === "codex" ? "codex-models" : "claude-models"}
+              list={`${agent.cli}-models`}
               onCommit={(v) => set({ model: v.trim() })}
             />
           </Field>
@@ -185,6 +185,10 @@ function AddAgent() {
       </p>
       <datalist id="codex-models">
         <option value="gpt-5.6-sol" />
+      </datalist>
+      <datalist id="gemini-models">
+        <option value="gemini-2.5-pro" />
+        <option value="gemini-2.5-flash" />
       </datalist>
       <datalist id="claude-models">
         <option value="opus" />

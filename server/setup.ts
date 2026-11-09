@@ -194,7 +194,29 @@ async function checkOpenAiSecret(sbxOk: boolean): Promise<Check> {
   return { ...base, status: "missing", detail: "Codex agents can't sign in until this is set. Opens your browser to sign in with ChatGPT.", fix: fix("sbx secret set openai --oauth", true, "https://docs.docker.com/ai/sandboxes/") };
 }
 
-/** `team` adds the Codex checks only when the team has Codex agents. */
+async function checkGemini(): Promise<Check> {
+  const base = { id: "gemini" as const, label: "Gemini CLI (for Gemini agents in Local mode)", neededFor: "local" as const };
+  const v = await run("gemini", ["--version"], { timeoutMs: 8000 });
+  if (v.ok) return { ...base, status: "ok", detail: v.stdout.trim().split("\n").pop() ?? "", fix: null };
+  return { ...base, status: "missing", detail: "Not installed. Only needed for Gemini agents in Local mode (sandboxes have it).", fix: fix("npm install -g @google/gemini-cli", false, "https://github.com/google-gemini/gemini-cli") };
+}
+
+/** Gemini's OAuth sign-in is disabled in sandboxes, so they need a Gemini API key in sbx's secret store. */
+async function checkGoogleSecret(sbxOk: boolean): Promise<Check> {
+  const base = { id: "google-secret" as const, label: "Gemini API key for Gemini agents", neededFor: "sandbox" as const };
+  if (!sbxOk) return { ...base, status: "missing", detail: "Waiting for sbx.", fix: null };
+  const r = await run("sbx", ["secret", "ls", "--json"], { timeoutMs: 10_000 });
+  let found = false;
+  try {
+    found = (parseCliJson<{ secrets?: { name: string; scope: string }[] }>(r.stdout)?.secrets ?? []).some((s) => s.name === "google" && s.scope === "global");
+  } catch {
+    /* sbx down */
+  }
+  if (found) return { ...base, status: "ok", detail: "Stored in Docker's secret store; injected by the proxy.", fix: null };
+  return { ...base, status: "missing", detail: "Gemini agents in a sandbox can't sign in until this is set. Paste a key from Google AI Studio when asked.", fix: fix("sbx secret set google", true, "https://docs.docker.com/ai/sandboxes/agents/gemini/") };
+}
+
+/** `team` adds the Codex and Gemini checks only when the team has such agents. */
 export async function runSetupChecks(repo: RepoInfo, team: AgentConfig[] = []): Promise<SetupState> {
   const brew = os === "darwin" && (await has("brew"));
   const [osCheck, sbx, tmux, claude, gh] = await Promise.all([checkOs(), checkSbx(brew), checkTmux(brew), checkClaude(), checkGh(brew)]);
@@ -205,6 +227,9 @@ export async function runSetupChecks(repo: RepoInfo, team: AgentConfig[] = []): 
   const codexAgents = team.filter((a) => a.cli === "codex");
   if (codexAgents.some((a) => a.mode === "sandbox")) checks.splice(5, 0, await checkOpenAiSecret(sbxOk));
   if (codexAgents.some((a) => a.mode === "local")) checks.push(await checkCodex());
+  const geminiAgents = team.filter((a) => a.cli === "gemini");
+  if (geminiAgents.some((a) => a.mode === "sandbox")) checks.splice(5, 0, await checkGoogleSecret(sbxOk));
+  if (geminiAgents.some((a) => a.mode === "local")) checks.push(await checkGemini());
   const ok = (c: SetupCheck) => c.status === "ok";
   return {
     machine: { cpus: cpus().length, memoryGb: Math.round(totalmem() / 1024 ** 3), persistentAgents: usesTmux() },

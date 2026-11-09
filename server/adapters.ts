@@ -1,10 +1,11 @@
 // Per-CLI differences: which files HQ writes into the agent's folder and how
 // the agent is launched. Everything else (hooks → state, Team MCP, delivery)
-// is shared — Codex and Claude Code send the same hook payloads.
+// is shared — Codex and Claude Code send the same hook payloads, and Gemini CLI's
+// hooks are mapped onto them (see GEMINI_EVENTS).
 
-import { agentWrite } from "./lib/agentFs";
+import { agentRead, agentWrite } from "./lib/agentFs";
 import type { AgentCli, AgentConfig, HqConfig } from "../src/data/types";
-import { adoptRoleFile, excludeFromGit, HOOK_SCRIPT, type RoleExtras, hookCommand, hookScriptFor, hqUrl, MCP_CONFIG, roleMd, writeClaudeFiles, writeHookScript } from "./agentFiles";
+import { adoptRoleFile, excludeFromGit, HOOK_SCRIPT, isOurs, type RoleExtras, hookCommand, hookScriptFor, hqUrl, MCP_CONFIG, ROLE_FILE, roleMd, writeClaudeFiles, writeHookScript } from "./agentFiles";
 import { run } from "./lib/exec";
 
 export interface Launch {
@@ -79,7 +80,80 @@ const codex: CliAdapter = {
   },
 };
 
-export const adapters: Record<AgentCli, CliAdapter> = { claude, codex };
+
+// ---------------------------------------------------------------- Gemini CLI
+
+export const GEMINI_SETTINGS = ".gemini/settings.json";
+/** Gemini CLI's hook events → the HQ event each one reports as (the name in the hook URL). */
+const GEMINI_EVENTS: Record<string, string> = {
+  SessionStart: "SessionStart",
+  BeforeAgent: "UserPromptSubmit", // a prompt was submitted; the turn starts
+  BeforeTool: "PreToolUse",
+  AfterTool: "PostToolUse", // also clears "needs you" once a permission prompt is answered
+  Notification: "PermissionRequest", // Gemini only notifies for tool permissions
+  AfterAgent: "Stop", // the turn ended; HQ's reply can hand over queued messages
+  SessionEnd: "SessionEnd",
+};
+
+type GeminiHook = { matcher?: string; hooks: { name?: string; type: "command"; command: string; timeout?: number }[] };
+type GeminiSettings = { hooks?: Record<string, GeminiHook[]>; mcpServers?: Record<string, unknown>; context?: { fileName?: string | string[]; [k: string]: unknown }; [k: string]: unknown };
+
+/** The context files Gemini loads: its default GEMINI.md (the repo's own, if any) plus HQ's role file. */
+function geminiContextFiles(current: string | string[] | undefined): string[] {
+  const files = current === undefined ? ["GEMINI.md"] : [current].flat();
+  return files.includes(ROLE_FILE) ? files : [...files, ROLE_FILE];
+}
+
+/**
+ * .gemini/settings.json: HQ's hooks and Team MCP server, plus the role file as extra context. Settings
+ * and hooks already in the file are kept; only HQ's own hooks are replaced. Gemini's hook timeouts are
+ * in milliseconds (Claude Code's are seconds).
+ */
+export function geminiSettings(existing: GeminiSettings, agent: AgentConfig, cfg: HqConfig, token: string, dir: string): GeminiSettings {
+  const url = hqUrl(agent, cfg.project.hqPort);
+  const script = hookScriptFor(agent, dir);
+  const hooks: Record<string, GeminiHook[]> = { ...(existing.hooks ?? {}) };
+  for (const [event, hqEvent] of Object.entries(GEMINI_EVENTS)) {
+    const kept = (hooks[event] ?? []).map((e) => ({ ...e, hooks: e.hooks.filter((h) => !isOurs(h.command ?? "")) })).filter((e) => e.hooks.length);
+    const ours = { name: `jsm-hq-${hqEvent}`, type: "command" as const, command: hookCommand(url, token, agent.id, hqEvent, script), timeout: 5000 };
+    hooks[event] = [...kept, event === "BeforeTool" || event === "AfterTool" ? { matcher: "*", hooks: [ours] } : { hooks: [ours] }];
+  }
+  return {
+    ...existing,
+    // Gemini loads the role from its context files; the repo's own GEMINI.md keeps loading as usual.
+    context: { ...existing.context, fileName: geminiContextFiles(existing.context?.fileName) },
+    hooks,
+    // trust: the agent may call HQ's tools without a confirmation prompt for each one.
+    mcpServers: { ...existing.mcpServers, hq: { httpUrl: `${url}/mcp`, headers: { Authorization: `Bearer ${token}`, "X-HQ-Agent": agent.id }, trust: true } },
+  };
+}
+
+const gemini: CliAdapter = {
+  async writeFiles(dir, agent, cfg, token, extras = {}) {
+    // A repo that commits its own Gemini settings can't take HQ's without changing a tracked file.
+    const tracked = await run("git", ["ls-files", "--error-unmatch", GEMINI_SETTINGS], { cwd: dir });
+    if (tracked.ok) throw new Error(`This repo commits ${GEMINI_SETTINGS}, so HQ can't add its Gemini settings without changing a tracked file. Use Claude Code for this agent, or remove that file from the repo.`);
+    // The role goes in its own file that Gemini loads as context. GEMINI.md and ROLE.md are included, never overwritten.
+    const ownRole = await adoptRoleFile(dir);
+    agentWrite(dir, ROLE_FILE, roleMd(agent, cfg, { ...extras, ownRole }));
+    let existing: GeminiSettings = {};
+    try {
+      existing = JSON.parse(agentRead(dir, GEMINI_SETTINGS) ?? "{}") as GeminiSettings; // a symlink reads as missing
+    } catch {
+      /* a broken file is replaced */
+    }
+    agentWrite(dir, GEMINI_SETTINGS, JSON.stringify(geminiSettings(existing, agent, cfg, token, dir), null, 2) + "\n", { mode: 0o600 });
+    if (hookScriptFor(agent, dir)) writeHookScript(dir);
+    excludeFromGit(dir, [GEMINI_SETTINGS, ROLE_FILE, HOOK_SCRIPT]);
+  },
+  launch(agent) {
+    const model = agent.model.trim() && !/^default$/i.test(agent.model.trim()) ? agent.model.trim() : null;
+    // In a sandbox, sbx starts `gemini --yolo` and appends flags after it; Local mode keeps permission prompts on.
+    return { sbxAgent: "gemini", args: model ? ["-m", model] : [] };
+  },
+};
+
+export const adapters: Record<AgentCli, CliAdapter> = { claude, codex, gemini };
 
 /** The command a Local-mode agent runs on the host. */
-export const localBinary: Record<AgentCli, string> = { claude: "claude", codex: "codex" };
+export const localBinary: Record<AgentCli, string> = { claude: "claude", codex: "codex", gemini: "gemini" };

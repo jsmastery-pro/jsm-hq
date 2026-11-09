@@ -21,14 +21,14 @@ What HQ does behind the office: where agents work, how they talk, what reaches G
 
 - **The lead** plans and assigns. It creates boards (for example one per phase), splits the work into tasks and gives each task to a free worker. It never writes app code.
 - **Workers** build. One task means one branch and one pull request. A worker edits only the files its task lists and asks the lead if it needs more.
-- Each agent runs **Claude Code** or **Codex**, in a **Sandbox** (the default) or in **Local** mode. Set this per agent in Settings → Team.
+- Each agent runs **Claude Code**, **Codex** or **Gemini CLI**, in a **Sandbox** (the default) or in **Local** mode. Set this per agent in Settings → Team.
 
 New teams get names from The Office: Michael leads, then Dwight, Jim, Pam and so on. Rename them any time.
 
 ## Workspaces and sessions
 
 - **Its own copy of the repo.** Each agent gets a full clone at `~/.jsmhq/<project>/<agent>/`. Your own working folder is never touched.
-- **Its instructions.** HQ writes `.jsmhq-role.md` into that folder: the agent's role (the ROLE.md text from Settings → Team), the team, the rules and its tools. HQ also adds its hooks and MCP config there, and keeps all of these out of git. If the folder has its own `ROLE.md`, HQ includes it and never overwrites it.
+- **Its instructions.** HQ writes `.jsmhq-role.md` into that folder: the agent's role (the ROLE.md text from Settings → Team), the team, the rules and its tools. HQ also adds its hooks and MCP config there, and keeps all of these out of git. If the folder has its own `ROLE.md`, HQ includes it and never overwrites it. For **Gemini CLI** the role file is loaded as extra context beside the repo's own `GEMINI.md`, and hooks and the HQ tools go in `.gemini/settings.json` (a repo that commits that file can't run Gemini agents).
 - **Its session.** On macOS and Linux each agent runs in a tmux session called `hq-<project>-<agent>`, so agents keep working if you close HQ or the browser. You can watch one from any terminal with `tmux attach -t hq-<project>-<agent>`, or open its drawer in HQ.
 
 ## Messages between agents
@@ -88,7 +88,7 @@ Mark a request **Done** (with an optional note) or **Dismiss** it, and HQ tells 
 Optional. In Settings → Stack (or during the welcome), pick what the project uses: frameworks, plus tools for auth, payments, database, analytics and security. You can also add your own under "Other".
 
 - Agents see the stack in their instructions.
-- Each tool's official agent skills are installed into the agents' folders (`.claude/skills`, `.agents/skills`), kept out of git.
+- Each tool's official agent skills are installed into the agents' folders (`.claude/skills`, `.agents/skills`), kept out of git. Codex and Gemini CLI both read `.agents/skills`.
 - One click allows every tool's docs and API websites for all sandboxes.
 
 Skip it and nothing changes.

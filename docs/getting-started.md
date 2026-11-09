@@ -7,7 +7,7 @@ This guide takes you from a fresh machine to a team of AI agents working on your
 - A Mac (Apple silicon, macOS 14+), Linux (Ubuntu 24.04+), or a Windows 11 PC.
 - A [Docker](https://app.docker.com/signup) account (free) for Docker Sandboxes.
 - A [GitHub](https://github.com/signup) account and a repo for your project.
-- A Claude (Pro, Max or API) or ChatGPT account for the agents themselves.
+- A Claude (Pro, Max or API), ChatGPT or Gemini (API key) account for the agents themselves.
 
 HQ checks everything below when it starts and shows a **setup checklist** with the exact command for anything missing, so you can also skip ahead to [step 6](#6-run-hq) and follow the checklist.
 
@@ -82,6 +82,14 @@ Using **Codex** agents? Also sign in with ChatGPT once:
 sbx secret set openai --oauth
 ```
 
+Using **Gemini CLI** agents in a sandbox? Store a Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey) (Gemini's own sign-in is turned off in sandboxes):
+
+```bash
+sbx secret set google
+```
+
+In **Local** mode, Gemini CLI uses your own setup on this machine: install it with `npm install -g @google/gemini-cli`, then set `GEMINI_API_KEY` or sign in once by running `gemini` in a terminal. The first time an agent starts, Gemini asks you to trust its folder: choose **Trust folder** in the agent's terminal.
+
 Claude Code agents ask you to sign in the first time they start. Do it in the agent's terminal inside HQ.
 
 ## 5. Prepare a GitHub repo
@@ -112,7 +120,7 @@ npx @therealjsmastery/jsm-hq@latest
 
 `@latest` makes sure npx doesn't reuse an old version it cached. HQ opens your browser. If it doesn't, open the `http://127.0.0.1:7420/?token=…` link printed in the terminal.
 
-- **Welcome:** name the project, pick a lead and workers (Claude Code or Codex for each) and a review tool. Optionally pick your stack (frameworks, auth, payments, database, analytics, security): agents then get those tools' agent skills and know what the project uses. This is saved to `.jsmhq/config.json` in your repo.
+- **Welcome:** name the project, pick a lead and workers (Claude Code, Codex or Gemini CLI for each) and a review tool. Optionally pick your stack (frameworks, auth, payments, database, analytics, security): agents then get those tools' agent skills and know what the project uses. This is saved to `.jsmhq/config.json` in your repo.
 - **Setup checklist:** anything still missing shows here with a **Copy** button and, for safe commands, **Run in terminal**. Press **Check again** after fixing something.
 
 Leave the terminal running while you work. On macOS and Linux, agents keep running even if you close HQ; on Windows they stop with it (see [Windows](how-it-works.md#windows)).
@@ -139,6 +147,7 @@ When an agent needs a website its sandbox blocks (a tool's docs, an API), it ask
 | Start fails with a Docker sign-in error | Your sign-in expired: `sbx login`, then **Check again**. |
 | Agents can't push or open PRs | Step 4 (`sbx secret set github …`), and check the repo has a GitHub `origin` (step 5). |
 | A Codex agent waits on "Do you trust this folder?" | Answer it once in the agent's terminal. HQ never answers trust prompts for you. |
+| A Gemini agent waits on "Do you trust the files in this folder?" | Choose **Trust folder** in the agent's terminal. Until you do, Gemini ignores HQ's hooks and tools. |
 | "Port 7420 is in use" | Another HQ is running. Stop it or use `--port 7421`. |
 | Windows: `listen EACCES` | Windows reserved that port. Use `--port 8420`. |
 

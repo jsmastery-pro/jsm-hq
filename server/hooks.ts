@@ -1,5 +1,7 @@
-// Claude Code / Codex hooks → agent state. Each agent's hooks POST to
-// /hook/<agentId>/<Event> with the hook's JSON payload.
+// Claude Code / Codex / Gemini CLI hooks → agent state. Each agent's hooks POST to
+// /hook/<agentId>/<Event> with the hook's JSON payload. Gemini CLI's own event
+// names (BeforeAgent, AfterTool…) are mapped to these in its settings file (see
+// adapters.ts), so only its Notification payload needs reshaping here.
 
 import type { Hub } from "./hub";
 import type { Inbox } from "./inbox";
@@ -9,9 +11,20 @@ interface HookPayload {
   tool_name?: string;
   message?: string;
   notification_type?: string;
+  /** Gemini CLI's Notification: what is being approved (it has no top-level tool_name). */
+  details?: { title?: string; toolName?: string; command?: string };
 }
 
 const clip = (s: string, n = 80) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
+
+/** What a permission prompt asks, from Codex's tool_name or Gemini CLI's notification details. */
+function permissionQuestion(body: HookPayload): string {
+  const tool = body.tool_name ?? body.details?.toolName;
+  if (tool) return `Approve ${tool}?`;
+  if (body.details?.command) return `Approve: ${clip(body.details.command.replace(/\s+/g, " "), 60)}`;
+  if (body.details?.title) return `Approve: ${clip(body.details.title, 60)}`;
+  return "Approval needed in the terminal";
+}
 
 /**
  * Whether the agent is inside a turn (prompt submitted, no Stop yet). Hooks can
@@ -54,8 +67,8 @@ export function handleHook(hub: Hub, inbox: Inbox, agentId: string, event: strin
       if (st.state === "needs-input") hub.setStatus(agentId, { state: "working", note: "Continuing after your answer" });
       break;
     case "PermissionRequest": {
-      // Codex: an approval prompt is waiting in the terminal.
-      const what = body.tool_name ? `Approve ${body.tool_name}?` : "Approval needed in the terminal";
+      // Codex and Gemini CLI: an approval prompt is waiting in the terminal.
+      const what = permissionQuestion(body);
       hub.setStatus(agentId, { state: "needs-input", note: `Asking: ${what}` });
       hub.activity("agent.needs-input", agentId, `${name} needs you: ${what}`);
       break;

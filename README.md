@@ -10,7 +10,7 @@
 
 One **lead** agent plans the work and hands out tasks. Each **worker** gets its own desk, its own copy of your repo and its own Docker Sandbox, then opens a pull request. You see it all happen: the plan on the wall, agents at their desks, PRs moving through review.
 
-Agents run **Claude Code** or **Codex**. Everything runs on your machine.
+Agents run **Claude Code**, **Codex** or **Gemini CLI**. Everything runs on your machine.
 
 ## Why use it
 
@@ -30,7 +30,7 @@ npx @therealjsmastery/jsm-hq@latest
 
 HQ opens in your browser and walks you through the rest:
 
-1. **Welcome:** name the project and pick a lead and workers (Claude Code or Codex for each).
+1. **Welcome:** name the project and pick a lead and workers (Claude Code, Codex or Gemini CLI for each).
 2. **Setup checklist:** anything missing on your machine is listed with the command to fix it.
 3. **Start team** in the top bar, then message the lead, for example: *"Plan two small tasks for Dwight and assign the first one."*
 
@@ -64,9 +64,9 @@ Use it often? `npm install -g @therealjsmastery/jsm-hq`, then run `jsm-hq` in an
 | GitHub CLI (`gh`) | Reads PRs and reviews |
 | Docker Sandboxes (`sbx`) | Each agent runs in its own VM |
 | tmux (macOS, Linux) | Agents keep running if you close HQ |
-| A Claude or ChatGPT account | For the agents themselves |
+| A Claude, ChatGPT or Gemini account | For the agents themselves (Gemini agents need a Gemini API key) |
 
-Sandboxes need **macOS 14+ on Apple silicon, Windows 11, or Ubuntu 24.04+**. On other machines, set agents to **Local** in Settings → Team: they run Claude Code or Codex directly on your machine, with permission prompts on.
+Sandboxes need **macOS 14+ on Apple silicon, Windows 11, or Ubuntu 24.04+**. On other machines, set agents to **Local** in Settings → Team: they run Claude Code, Codex or Gemini CLI directly on your machine, with permission prompts on.
 
 You don't need to install these by hand first. HQ checks for each one and shows the exact command. The [getting-started guide](docs/getting-started.md) has every step.
 
@@ -93,6 +93,7 @@ More detail on workspaces, sandboxes, MCP servers, app variables and what HQ sav
 | Agents fail to start with a sign-in error | Your Docker sign-in expired. Run `sbx login`, then **Check again** in the setup checklist. |
 | Agents can't push or open PRs | Run `sbx secret set github --command "gh auth token"`, and check the repo has a GitHub `origin`. |
 | A Codex agent waits on "Do you trust this folder?" | Answer it once in the agent's terminal. HQ never answers trust prompts for you. |
+| A Gemini agent waits on "Do you trust the files in this folder?" | Choose **Trust folder** once in the agent's terminal. Until you do, Gemini ignores HQ's hooks and tools. |
 | A CLI sign-in in a sandbox opens the browser, then fails on `localhost:<port>` | Press **Forward port** in the agent's drawer, then reload the page. |
 | An agent's state never changes | The sandbox can't reach HQ. `sbx policy ls` should show `localhost:<port>` and `host.docker.internal:<port>` allowed; HQ adds them on start. |
 | "Port 7420 is in use" | Another HQ is running. Stop it, or use `--port 7421`. |

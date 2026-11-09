@@ -43,7 +43,7 @@ export async function adoptRoleFile(dir: string): Promise<string | null> {
 export const MARK = "# jsmhq-hook";
 /** Same marker for node hook commands (cmd and PowerShell have no `#` comments). */
 const MARK_ARG = "--jsmhq-hook";
-const isOurs = (command: string) => command.includes(MARK) || command.includes(MARK_ARG);
+export const isOurs = (command: string) => command.includes(MARK) || command.includes(MARK_ARG);
 
 /**
  * Hooks run where the agent runs. Sandboxes are Linux, so they use sh + curl;
