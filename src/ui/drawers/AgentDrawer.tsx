@@ -258,7 +258,7 @@ function NotRunning({ agent, status }: { agent: AgentConfig; status: AgentStatus
             )}
             {agent.cli === "antigravity" && (
               <p className="mb-4 text-[12px] text-[#ffc14d]">
-                First start: sign in to Antigravity in the terminal (it opens your browser). HQ can't see its approval prompts, so an agent waiting on one shows as working: check its terminal. Choose "always allow" for the <b>hq</b> tools.
+                First start: Antigravity runs its setup in the terminal (colour scheme, terms, sign-in in your browser). Do it once there. HQ can't see its approval prompts, so an agent waiting on one shows as working: check its terminal.
               </p>
             )}
             {agent.cli === "gemini" && (

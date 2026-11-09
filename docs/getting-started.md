@@ -90,7 +90,7 @@ sbx secret set google
 
 In **Local** mode, Gemini CLI uses your own setup on this machine: install it with `npm install -g @google/gemini-cli`, then set `GEMINI_API_KEY` or sign in once by running `gemini` in a terminal. The first time an agent starts, Gemini asks you to trust its folder: choose **Trust folder** in the agent's terminal.
 
-Using **Antigravity CLI** agents? They run in **Local** mode only (Docker Sandboxes has no Antigravity agent). Install `agy` from the [install page](https://antigravity.google/docs/install?tab=cli) and sign in once in the agent's terminal; it opens your browser. HQ can't see Antigravity's approval prompts, so check its terminal if an agent seems stuck, and choose "always allow" for the `hq` tools.
+Using **Antigravity CLI** agents? They run in **Local** mode only (Docker Sandboxes has no Antigravity agent). Install `agy` from the [install page](https://antigravity.google/docs/install?tab=cli) and finish its first-run setup once in the agent's terminal (colour scheme, terms, sign-in in your browser). HQ can't see Antigravity's approval prompts, so check its terminal if an agent seems stuck. HQ's own tools are pre-approved for the session.
 
 Claude Code agents ask you to sign in the first time they start. Do it in the agent's terminal inside HQ.
 

@@ -243,7 +243,9 @@ const antigravity: CliAdapter = {
   launch(agent) {
     // Models are named by label ("Gemini 3.8 Flash"). Local mode only, so there is no sbx agent.
     const model = agent.model.trim() && !/^default$/i.test(agent.model.trim()) ? agent.model.trim() : null;
-    return { sbxAgent: "", args: model ? [`--model=${model}`] : [] };
+    // --settings applies to this session only and is never saved, so the user's own settings.json is
+    // untouched. It lets the agent use HQ's tools without an approval prompt for each call.
+    return { sbxAgent: "", args: ["--settings", JSON.stringify({ permissions: { allow: ["mcp(hq/*)"] } }), ...(model ? ["--model", model] : [])] };
   },
 };
 

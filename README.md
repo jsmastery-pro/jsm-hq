@@ -96,7 +96,7 @@ More detail on workspaces, sandboxes, MCP servers, app variables and what HQ sav
 | A Codex agent waits on "Do you trust this folder?" | Answer it once in the agent's terminal. HQ never answers trust prompts for you. |
 | A local-model agent says "Ollama isn't reachable" or "doesn't have <model>" | Start Ollama (`ollama serve`) and run `ollama pull <model>`. Sandboxes reach it at `host.docker.internal:11434`; HQ adds that network rule on start. |
 | A local-model agent keeps failing its tool calls | Local models differ a lot in tool calling. Pick one that lists tools on [ollama.com](https://ollama.com/search?c=tools) with a 64k+ context window. |
-| An Antigravity agent shows "working" but nothing moves | It may be waiting on an approval prompt, which HQ can't see (Antigravity has no hook for it). Open its terminal and answer, and choose "always allow" for the `hq` tools. |
+| An Antigravity agent shows "working" but nothing moves | It may be waiting on an approval prompt, which HQ can't see (Antigravity has no hook for it). Open its terminal and answer. HQ's own tools are pre-approved for the session. |
 | A Gemini agent waits on "Do you trust the files in this folder?" | Choose **Trust folder** once in the agent's terminal. Until you do, Gemini ignores HQ's hooks and tools. |
 | A CLI sign-in in a sandbox opens the browser, then fails on `localhost:<port>` | Press **Forward port** in the agent's drawer, then reload the page. |
 | An agent's state never changes | The sandbox can't reach HQ. `sbx policy ls` should show `localhost:<port>` and `host.docker.internal:<port>` allowed; HQ adds them on start. |
