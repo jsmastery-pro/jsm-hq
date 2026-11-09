@@ -113,8 +113,29 @@ export interface ProjectConfig {
   ollamaUrl?: string; // where Ollama runs for agents on the "ollama" provider; absent = DEFAULT_OLLAMA_URL
 }
 
+/** What a project-room worker does. It's a character in the office, not a coding agent. */
+export type ProjectWorkerKind = "fetcher" | "writer" | "sender" | "custom";
+
+export const WORKER_KIND_LABEL: Record<ProjectWorkerKind, string> = { fetcher: "Fetches emails", writer: "Writes emails (local model)", sender: "Sends emails", custom: "Other job" };
+
+/** A non-AI-agent character in the project room: a script, a bot or a model that works on the project itself. */
+export interface ProjectWorker {
+  id: string;
+  name: string;
+  kind: ProjectWorkerKind;
+  color: string;
+}
+
+/** The project room: a separate room for the project's own workers (for example a job-referral email pipeline). */
+export interface ProjectRoomConfig {
+  name: string;
+  workers: ProjectWorker[];
+}
+
 export interface HqConfig {
   project: ProjectConfig;
+  /** Optional: absent = no project room in the office. */
+  projectRoom?: ProjectRoomConfig;
   team: AgentConfig[];
   workflow: WorkflowConfig;
   /** Optional: what the project is built with (plan 009). */

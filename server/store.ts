@@ -91,6 +91,8 @@ export function loadConfig(repo: RepoInfo, port: number): { config: HqConfig; is
     found.project.id = slugify(found.project.id ?? found.project.name);
     found.project.path = repo.root;
     if (!parseOllamaUrl(found.project.ollamaUrl)) delete found.project.ollamaUrl;
+    // The project room is optional; a malformed one from a hand-edited file is dropped.
+    if (found.projectRoom && !Array.isArray(found.projectRoom.workers)) delete found.projectRoom;
     return { config: found, isNew: false };
   }
   return { config: defaultConfig(repo, port), isNew: true };

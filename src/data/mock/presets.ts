@@ -121,6 +121,14 @@ const bigTeam: Preset = {
   label: "Shipyard · 7 agents",
   config: {
     project: { id: "shipyard", name: "Shipyard", repo: "jsmastery-pro/shipyard", path: "~/developer/shipyard", hqPort: 7420 },
+    projectRoom: {
+      name: "Job referrals",
+      workers: [
+        { id: "mailbot", name: "Mailbot", kind: "fetcher", color: "#ffd23a" },
+        { id: "quill", name: "Quill", kind: "writer", color: "#3ee0d0" },
+        { id: "postie", name: "Postie", kind: "sender", color: "#ff8a3d" },
+      ],
+    },
     team: [
       agent("maya", "Maya", "Lead", "#ff77a8", { isLead: true }),
       agent("dwight", "Dwight", "Developer", "#29adff"),

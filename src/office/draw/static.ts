@@ -6,7 +6,7 @@ import { mulberry32 } from "../../lib/random";
 import { text, textW } from "../engine/font";
 import { C } from "../engine/palette";
 import { box, CanvasPen, disc, ellipse, line, makeCanvas } from "../engine/pen";
-import type { OfficeLayout } from "../layout/layout";
+import { DOOR_Y, type OfficeLayout } from "../layout/layout";
 import { beanbag, easel, partitions, plant, plate, rackBody, tree, workDesk } from "./furniture";
 
 export function buildStatic(l: OfficeLayout, config: HqConfig): HTMLCanvasElement {
@@ -115,6 +115,18 @@ export function buildStatic(l: OfficeLayout, config: HqConfig): HTMLCanvasElemen
     for (let x = sx; x < sx + sw; x += 8) p.rect(x, 64, 1, bh - 80, C.grateD);
   }
 
+  // project room floor: warm tiles
+  const pr = l.projectRoom;
+  if (pr) {
+    const fx = pr.x0 * 16;
+    for (let ty = 64; ty < bh - 16; ty += 8) for (let tx = 0; tx < pr.w * 2; tx++) p.rect(fx + tx * 8, ty, 8, 8, (tx + ty / 8) % 2 ? "#e4d4c1" : "#efe3d3");
+    // a rug under each worker's desk, in the worker's color
+    for (const s of pr.stations) {
+      p.rect(s.rect.x - l.ox + 4, s.rect.y - l.oy + 22, s.rect.w - 8, 50, s.color, 0.22);
+      p.rect(s.rect.x - l.ox + 4, s.rect.y - l.oy + 22, s.rect.w - 8, 1, s.color, 0.6);
+    }
+  }
+
   // cable channels
   for (const cb of l.cables) {
     const color = config.team.find((a) => a.id === cb.agentId)?.color ?? C.blue;
@@ -138,9 +150,19 @@ export function buildStatic(l: OfficeLayout, config: HqConfig): HTMLCanvasElemen
   for (let x = 8; x < mainPx; x += 16) p.rect(x, 47, 1, 11, "#365a50");
   p.rect(0, 60, bw, 4, C.base);
   p.rect(0, 60, bw, 1, "#8a6450");
+  if (pr) {
+    const wx = pr.wallX * 16;
+    const ww = (pr.w + 1) * 16;
+    p.rect(wx, 16, ww, 44, "#8a5a6e");
+    for (let x = wx; x < wx + ww; x += 8) p.rect(x, 16, 1, 44, "#6e4558");
+    const label = pr.name.toUpperCase().slice(0, 22);
+    box(p, wx + ww / 2 - textW(label) / 2 - 3, 3, textW(label) + 6, 9, C.ink);
+    text(p, label, wx + ww / 2 - textW(label) / 2, 5, C.white);
+  }
   if (sr) {
-    p.rect(mainPx, 16, bw - mainPx, 44, C.wallSrv);
-    for (let x = mainPx; x < bw; x += 8) p.rect(x, 16, 1, 44, C.wallSrvD);
+    const sx0 = sr.glassX * 16;
+    p.rect(sx0, 16, bw - sx0, 44, C.wallSrv);
+    for (let x = sx0; x < bw; x += 8) p.rect(x, 16, 1, 44, C.wallSrvD);
     const label = "SERVER ROOM";
     box(p, sr.x0 * 16 + (sr.w * 16) / 2 - textW(label) / 2 - 3, 3, textW(label) + 6, 9, C.ink);
     text(p, label, sr.x0 * 16 + (sr.w * 16) / 2 - textW(label) / 2, 5, C.white);
@@ -156,6 +178,18 @@ export function buildStatic(l: OfficeLayout, config: HqConfig): HTMLCanvasElemen
   p.rect(0, doorY - l.oy, 16, 16, C.wood);
   p.rect(0, doorY - l.oy - 3, 20, 3, C.deskDD);
   p.rect(0, doorY - l.oy + 16, 20, 3, C.deskDD);
+  // the wall between the office and the project room, with a doorway
+  if (pr) {
+    const wx = pr.wallX * 16;
+    const dy0 = DOOR_Y * 16;
+    p.rect(wx, 64, 16, dy0 - 64, C.wallTop);
+    p.rect(wx, dy0 + 32, 16, bh - 16 - (dy0 + 32), C.wallTop);
+    p.rect(wx + 15, 64, 1, dy0 - 64, C.wallTopL);
+    p.rect(wx + 15, dy0 + 32, 1, bh - 16 - (dy0 + 32), C.wallTopL);
+    p.rect(wx, dy0 - 3, 16, 3, C.deskDD); // door frame
+    p.rect(wx, dy0 + 32, 16, 3, C.deskDD);
+    p.rect(wx, dy0, 16, 32, "#e4d4c1");
+  }
   // glass wall
   if (sr) {
     const gx = sr.glassX * 16;
@@ -274,6 +308,45 @@ export function buildStatic(l: OfficeLayout, config: HqConfig): HTMLCanvasElemen
     partitions(p, X, Y, 7);
     const name = config.team.find((a) => a.id === d.agentId)?.name.toUpperCase().slice(0, 10) ?? "";
     plate(p, name, X + 64, Y + 4);
+  }
+
+  // ------------------------------------------------ project room: desks, in/out trays
+  if (pr) {
+    const ox = l.ox;
+    const oy = l.oy;
+    for (const s of pr.stations) {
+      const dx = s.desk.x - ox;
+      const dy = s.desk.y - oy;
+      workDesk(p, dx, dy, s.index);
+      plate(p, s.name.toUpperCase().slice(0, 10), dx + 24, dy + 52);
+      if (s.kind === "fetcher") {
+        box(p, dx + 52, dy + 12, 26, 14, C.metal);
+        for (let k = 0; k < 3; k++) {
+          p.rect(dx + 55 + k * 7, dy + 6 + k, 8, 6, C.ink);
+          p.rect(dx + 56 + k * 7, dy + 7 + k, 6, 4, C.white);
+        }
+      } else if (s.kind === "writer") {
+        box(p, dx + 54, dy + 6, 22, 20, "#2b3a4a");
+        p.rect(dx + 58, dy + 10, 14, 12, "#3fe0c4");
+        text(p, "AI", dx + 61, dy + 12, C.ink);
+      } else if (s.kind === "sender") {
+        box(p, dx + 54, dy + 4, 22, 22, "#5f6b80");
+        p.rect(dx + 57, dy + 10, 16, 5, "#1f1d26");
+        p.rect(dx + 70, dy - 2, 2, 8, C.red);
+        p.rect(dx + 70, dy - 2, 6, 3, C.red);
+      } else {
+        box(p, dx + 54, dy + 8, 20, 18, C.metal);
+        disc(p, dx + 64, dy + 17, 5, C.metalD);
+        disc(p, dx + 64, dy + 17, 2, C.yellow);
+      }
+    }
+    const ib = pr.inbox;
+    box(p, ib.x - ox, ib.y - oy, ib.w, ib.h, C.metal);
+    text(p, "IN", ib.x - ox + 9, ib.y - oy + 7, C.ink);
+    const ob = pr.outbox;
+    box(p, ob.x - ox, ob.y - oy, ob.w, ob.h, "#5f6b80");
+    p.rect(ob.x - ox + 3, ob.y - oy + 10, ob.w - 6, 6, "#1f1d26");
+    text(p, "OUT", ob.x - ox + 4, ob.y - oy + 3, C.white);
   }
 
   // ------------------------------------------------ PR board, racks, mailbox

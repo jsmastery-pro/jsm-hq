@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { nextAgentName } from "../../data/names";
-import { CLI_LABEL, DEFAULT_OLLAMA_URL, supportsOllama, supportsSandbox, type AgentCli, type AgentConfig, type AgentMode, type ModelProvider } from "../../data/types";
+import { CLI_LABEL, DEFAULT_OLLAMA_URL, supportsOllama, supportsSandbox, WORKER_KIND_LABEL, type AgentCli, type AgentConfig, type AgentMode, type ModelProvider, type ProjectRoomConfig, type ProjectWorkerKind } from "../../data/types";
 import { officeActions, useOffice } from "../../store/office";
 import { agentPalette } from "../../theme/tokens";
 import { Field, Portrait, SectionTitle } from "../kit";
@@ -40,6 +40,7 @@ export function TeamSettings() {
         </div>
       </section>
       <AddAgent />
+      <ProjectRoomSettings />
       {removing && <RemoveAgentDialog agent={removing} onClose={() => setRemoving(null)} />}
     </div>
   );
@@ -161,6 +162,86 @@ function AgentRow({ agent, expanded, onToggle, onRemove }: { agent: AgentConfig;
         </div>
       )}
     </div>
+  );
+}
+
+/** The project room: a separate room in the office for the project's own workers (scripts, bots, a model), not coding agents. */
+function ProjectRoomSettings() {
+  const room = useOffice((s) => s.snap?.config.projectRoom);
+  const [name, setName] = useState("");
+  const [kind, setKind] = useState<ProjectWorkerKind>("fetcher");
+  const workers = room?.workers ?? [];
+  const save = (next: ProjectRoomConfig | null) => officeActions.setProjectRoom(next);
+  const rename = (v: string) => save({ name: v.trim() || "Project room", workers });
+  const change = (i: number, patch: Partial<ProjectRoomConfig["workers"][number]>) => save({ name: room?.name ?? "Project room", workers: workers.map((w, k) => (k === i ? { ...w, ...patch } : w)) });
+  const add = () => {
+    const label = name.trim() || WORKER_KIND_LABEL[kind].split(" ")[0];
+    save({ name: room?.name ?? "Project room", workers: [...workers, { id: "", name: label, kind, color: agentPalette[(workers.length + 3) % agentPalette.length] }] });
+    setName("");
+  };
+  return (
+    <section className="border-[3px] border-dashed border-ink p-3">
+      <SectionTitle>Project room</SectionTitle>
+      <p className="mb-3 text-[13px] text-muted">
+        A separate room in the office for your project's own workers: a script that fetches emails, a local model that writes them, a bot that sends them. They aren't coding agents. For now they play a demo animation of the work.
+      </p>
+      <div className="mb-3 max-w-[360px]">
+        <Field label="Room name">
+          <CommitInput className="field" value={room?.name ?? ""} placeholder="Job referrals" onCommit={rename} />
+        </Field>
+      </div>
+      {workers.length > 0 && (
+        <div className="mb-3 flex flex-col gap-2">
+          {workers.map((w, i) => (
+            <div key={`${w.id}-${i}`} className="grid grid-cols-[28px_1fr_220px_auto] items-center gap-2.5 border-[3px] border-ink bg-white p-2">
+              <span className="h-5 w-5 border-[3px] border-ink" style={{ background: w.color }} aria-hidden />
+              <CommitInput className="field" value={w.name} onCommit={(v) => v.trim() && change(i, { name: v.trim() })} />
+              <select className="field" value={w.kind} aria-label="What it does" onChange={(e) => change(i, { kind: e.target.value as ProjectWorkerKind })}>
+                {(Object.keys(WORKER_KIND_LABEL) as ProjectWorkerKind[]).map((k) => (
+                  <option key={k} value={k}>
+                    {WORKER_KIND_LABEL[k]}
+                  </option>
+                ))}
+              </select>
+              <button className="btn px-2 text-[13px] text-red" onClick={() => save({ name: room?.name ?? "Project room", workers: workers.filter((_, k) => k !== i) })}>
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <form
+        className="grid grid-cols-[1fr_220px_auto] items-end gap-2.5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          add();
+        }}
+      >
+        <Field label="Worker name">
+          <input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Mailbot" />
+        </Field>
+        <Field label="What it does">
+          <select className="field" value={kind} onChange={(e) => setKind(e.target.value as ProjectWorkerKind)}>
+            {(Object.keys(WORKER_KIND_LABEL) as ProjectWorkerKind[]).map((k) => (
+              <option key={k} value={k}>
+                {WORKER_KIND_LABEL[k]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <button className="btn" type="submit">
+          Add worker
+        </button>
+      </form>
+      {workers.length > 0 && (
+        <p className="mt-2 text-[12px] text-muted">
+          Removing every worker removes the room.{" "}
+          <button className="underline" onClick={() => save(null)}>
+            Remove the room
+          </button>
+        </p>
+      )}
+    </section>
   );
 }
 

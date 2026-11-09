@@ -10,6 +10,7 @@ import { think, type Bot } from "./actors/bots";
 import { Effects } from "./actors/effects";
 import { BeltPath, parcelPos, updateParcels, type Parcel } from "./actors/parcels";
 import { PlanNotes } from "./actors/planNotes";
+import { ProjectActors } from "./actors/projectRoom";
 import * as live from "./draw/live";
 import { drawEmote, drawFace, drawNameTag, drawSelection, drawShadow } from "./draw/overlay";
 import { buildStatic } from "./draw/static";
@@ -44,6 +45,7 @@ export class OfficeScene {
   seenActivity = new Set<string>();
   seenMessages = new Set<string>();
   notes = new PlanNotes();
+  projectActors = new ProjectActors();
   effects = new Effects();
   gateMode: { mode: live.GateMode; at: number } = { mode: "idle", at: 0 };
   pulses = new Map<string, number>();
@@ -210,6 +212,7 @@ export class OfficeScene {
       this.slowAcc = 0;
       this.drawSlow(snap.environments, stateMap, t);
     }
+    this.projectActors.update(l, t, this.reducedMotion);
     this.drawFast(snap, stateMap, t);
   }
 
@@ -263,6 +266,7 @@ export class OfficeScene {
     const sh = this.gShadow;
     sh.clear();
     const ps = new GfxPen(sh);
+    this.projectActors.draw(p, ps, l, t, this.reducedMotion);
     const o = this.gOver;
     o.clear();
     const po = new GfxPen(o);

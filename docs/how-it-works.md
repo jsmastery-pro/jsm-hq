@@ -3,6 +3,7 @@
 What HQ does behind the office: where agents work, how they talk, what reaches GitHub, and what HQ saves. New here? Start with the [getting-started guide](getting-started.md).
 
 - [The team](#the-team)
+- [The rooms](#the-rooms)
 - [Workspaces and sessions](#workspaces-and-sessions)
 - [Messages between agents](#messages-between-agents)
 - [GitHub and reviews](#github-and-reviews)
@@ -26,6 +27,14 @@ What HQ does behind the office: where agents work, how they talk, what reaches G
 **Model provider.** Claude Code and Codex agents can run on a local model through [Ollama](https://ollama.com): set **Model provider** to **Ollama** and a model in Settings → Team. HQ starts Claude Code with `ANTHROPIC_BASE_URL` pointing at Ollama (with a placeholder token and `--model <model>`), and writes an Ollama provider into the agent's Codex config. Everything else (hooks, the HQ tools, messages) is unchanged. Gemini CLI has no local-model path. A sandbox reaches Ollama at `host.docker.internal:11434`; the address is configurable for an Ollama box on your network.
 
 New teams get names from The Office: Michael leads, then Dwight, Jim, Pam and so on. Rename them any time.
+
+## The rooms
+
+The office has a few rooms:
+
+- **Manager office** (top left): the lead, the plan wall and the review gate.
+- **AI agents room**: one section per kind of agent, each with a colored sign: **Claude Code**, **Codex**, **Antigravity** (Gemini CLI too) and **Local models** (agents on Ollama). An agent sits in the section for how it runs, and moves when you change its CLI or provider. Tiled **corridors** run between the sections, and idle agents stroll along them.
+- **Project room** (optional, to the right): a separate room for your project's own workers. These are characters for a script, a bot or a model that does the project's job, not coding agents, for example a job-referral pipeline: one fetches emails, a local model writes them, one sends them. Add the room in **Settings → Team → Project room** (a room name, then each worker with a name and what it does). Agents can walk in through its doorway. For now the workers play a demo animation (mail comes in, is written, goes out); they don't yet follow real events from your project.
 
 ## Workspaces and sessions
 

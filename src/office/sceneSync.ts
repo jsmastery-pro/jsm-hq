@@ -19,6 +19,7 @@ export function syncScene(s: OfficeScene, snap: OfficeSnapshot, epoch: number) {
     s.seenActivity.clear();
     s.seenMessages.clear();
     s.effects.clear();
+    s.projectActors.clear();
     s.layout = null;
   }
 
@@ -42,6 +43,7 @@ export function syncScene(s: OfficeScene, snap: OfficeSnapshot, epoch: number) {
     }
   }
   const l = s.layout;
+  s.projectActors.sync(l, s.actors);
 
   // ---------------------------------------------------------- bots
   const ids = new Set(snap.config.team.map((a) => a.id));

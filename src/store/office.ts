@@ -187,6 +187,7 @@ export const officeActions = {
   answerApproval: (agentId: string, approvalId: string, decision: "allow" | "dismiss") => source.answerApproval(agentId, approvalId, decision),
   updateWorkflow: source.updateWorkflow.bind(source),
   updateProject: source.updateProject.bind(source),
+  setProjectRoom: source.setProjectRoom.bind(source),
   createBoard: source.createBoard.bind(source),
   updateBoard: source.updateBoard.bind(source),
   completeWelcome: (input: WelcomeInput) => source.completeWelcome(input),

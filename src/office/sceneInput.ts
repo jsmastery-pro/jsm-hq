@@ -2,6 +2,7 @@
 
 import { reviewToolLabel, useOffice } from "../store/office";
 import { ui, useUi } from "../store/ui";
+import { WORKER_KIND_LABEL } from "../data/types";
 import { stateStyle } from "../theme/tokens";
 import type { Hit, PxRect } from "./layout/layout";
 import type { OfficeScene } from "./OfficeScene";
@@ -45,6 +46,10 @@ function describe(hit: Hit): { title: string; sub?: string } {
     const label = reviewToolLabel[snap.config.workflow.review.tool];
     return { title: hit.kind === "gate" ? `${label} review gate` : "Pull requests", sub: `${open.length} open · ${reviewing} reviewing` };
   }
+  if (hit.kind === "worker") {
+    const w = snap.config.projectRoom?.workers.find((x) => x.id === hit.id);
+    return { title: `${w?.name ?? hit.id} · ${snap.config.projectRoom?.name ?? "Project room"}`, sub: w ? `${WORKER_KIND_LABEL[w.kind]} (a demo animation for now)` : undefined };
+  }
   const env = snap.environments.find((e) => e.name === hit.id);
   return { title: `Environment: ${hit.id}`, sub: env ? `${env.status} · ${env.url}` : undefined };
 }
@@ -53,7 +58,7 @@ function activate(hit: Hit) {
   if (hit.kind === "agent") ui.openAgent(hit.id);
   else if (hit.kind === "plan") ui.openBoards(useUi.getState().planBoardId ?? undefined);
   else if (hit.kind === "gate" || hit.kind === "prs") ui.openPrs();
-  else ui.openEnv(hit.id);
+  else if (hit.kind === "env") ui.openEnv(hit.id);
 }
 
 export function attachInput(s: OfficeScene): () => void {

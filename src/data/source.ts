@@ -25,6 +25,7 @@ import type {
   SandboxSettings,
   Task,
   WorkflowPatch,
+  ProjectRoomConfig,
 } from "./types";
 
 export type OfficeEvent =
@@ -128,6 +129,8 @@ export interface OfficeDataSource {
   refreshSbx(): void;
   updateWorkflow(patch: WorkflowPatch): void;
   updateProject(patch: Partial<ProjectConfig>): void;
+  /** Sets the project room and its workers (null removes the room). The server cleans names, ids and colors. */
+  setProjectRoom(room: ProjectRoomConfig | null): void;
   createBoard(title: string): void;
   updateBoard(id: string, patch: Partial<Pick<Board, "title" | "status">>): void;
 

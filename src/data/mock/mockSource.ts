@@ -405,6 +405,12 @@ export function createMockSource(): OfficeDataSource {
       world.syncEnvironments();
     },
 
+    setProjectRoom(room) {
+      if (room) world.snap.config.projectRoom = structuredClone(room);
+      else delete world.snap.config.projectRoom;
+      world.configChanged();
+    },
+
     createBoard(title) {
       const clean = title.trim();
       if (!clean) return;
