@@ -1,7 +1,7 @@
 // Per-CLI differences: which files HQ writes into the agent's folder and how
 // the agent is launched. Everything else (hooks → state, Team MCP, delivery)
 // is shared — Codex and Claude Code send the same hook payloads, and Gemini CLI's
-// hooks are mapped onto them (see GEMINI_EVENTS).
+// hooks are mapped onto them (see GEMINI_EVENTS), and so are Antigravity CLI's (ANTIGRAVITY_EVENTS).
 
 import { agentRead, agentWrite } from "./lib/agentFs";
 import type { AgentCli, AgentConfig, HqConfig } from "../src/data/types";
@@ -171,7 +171,83 @@ const gemini: CliAdapter = {
   },
 };
 
-export const adapters: Record<AgentCli, CliAdapter> = { claude, codex, gemini };
+// ---------------------------------------------------------------- Antigravity CLI
+
+export const ANTIGRAVITY_HOOKS = ".agents/hooks.json";
+export const ANTIGRAVITY_MCP = ".agents/mcp_config.json";
+export const ANTIGRAVITY_RULES = ".agents/rules/jsm-hq.md";
+/** The key HQ's hooks live under in hooks.json; other hook names in the file are left alone. */
+const ANTIGRAVITY_HOOK_NAME = "jsm-hq";
+/**
+ * Antigravity's hook events → the HQ event each reports as. It has no permission or notification event
+ * and no SessionEnd: a prompt waiting on you can't be seen from hooks, and a session that ends is
+ * noticed when its process exits. PreInvocation fires before each model call, so it also re-marks the
+ * agent as working when a Stop hook continues the turn.
+ */
+const ANTIGRAVITY_EVENTS: Record<string, string> = { SessionStart: "SessionStart", PreInvocation: "UserPromptSubmit", PreToolUse: "PreToolUse", PostToolUse: "PostToolUse", Stop: "Stop" };
+/** Antigravity truncates a rule file past 24,000 bytes. */
+const ANTIGRAVITY_RULE_LIMIT = 24_000;
+
+type JsonObject = Record<string, unknown>;
+
+/** hooks.json: HQ's hooks under their own name, next to any the file already has. Timeouts are in seconds. */
+export function antigravityHooks(existing: JsonObject, agent: AgentConfig, cfg: HqConfig, token: string, dir: string): JsonObject {
+  const url = hqUrl(agent, cfg.project.hqPort);
+  const script = hookScriptFor(agent, dir);
+  const entry: JsonObject = { enabled: true };
+  for (const [event, hqEvent] of Object.entries(ANTIGRAVITY_EVENTS)) {
+    const handler = { type: "command", command: hookCommand(url, token, agent.id, hqEvent, script), timeout: 5 };
+    entry[event] = event === "PreToolUse" || event === "PostToolUse" ? [{ matcher: "*", hooks: [handler] }] : [handler];
+  }
+  return { ...existing, [ANTIGRAVITY_HOOK_NAME]: entry };
+}
+
+/** mcp_config.json: the Team MCP server (Streamable HTTP, `serverUrl`), next to any servers the file already has. */
+export function antigravityMcp(existing: JsonObject, agent: AgentConfig, cfg: HqConfig, token: string): JsonObject {
+  const servers = (existing.mcpServers ?? {}) as JsonObject;
+  return { ...existing, mcpServers: { ...servers, hq: { serverUrl: `${hqUrl(agent, cfg.project.hqPort)}/mcp`, headers: { Authorization: `Bearer ${token}`, "X-HQ-Agent": agent.id } } } };
+}
+
+/** An always-on rule: Antigravity reads every top-level .md in .agents/rules that has a `trigger`. */
+export function antigravityRule(agent: AgentConfig, cfg: HqConfig, extras: RoleExtras): string {
+  const body = roleMd(agent, cfg, extras);
+  const bytes = Buffer.from(body);
+  const text = bytes.length > ANTIGRAVITY_RULE_LIMIT ? bytes.subarray(0, ANTIGRAVITY_RULE_LIMIT).toString("utf8") + "\n" : body;
+  return `---\ntrigger: always_on\n---\n${text}`;
+}
+
+function readJson(dir: string, file: string): JsonObject {
+  try {
+    const parsed: unknown = JSON.parse(agentRead(dir, file) ?? "{}"); // a symlink reads as missing
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as JsonObject) : {};
+  } catch {
+    return {}; // a broken file is replaced
+  }
+}
+
+const antigravity: CliAdapter = {
+  async writeFiles(dir, agent, cfg, token, extras = {}) {
+    // A repo that commits any of these files can't take HQ's without changing a tracked file.
+    for (const file of [ANTIGRAVITY_HOOKS, ANTIGRAVITY_MCP, ANTIGRAVITY_RULES]) {
+      const tracked = await run("git", ["ls-files", "--error-unmatch", file], { cwd: dir });
+      if (tracked.ok) throw new Error(`This repo commits ${file}, so HQ can't add its Antigravity settings without changing a tracked file. Use Claude Code for this agent, or remove that file from the repo.`);
+    }
+    // The role is an always-on rule. The repo's own AGENTS.md / GEMINI.md and ROLE.md are included, never overwritten.
+    const ownRole = await adoptRoleFile(dir);
+    agentWrite(dir, ANTIGRAVITY_RULES, antigravityRule(agent, cfg, { ...extras, ownRole }));
+    agentWrite(dir, ANTIGRAVITY_HOOKS, JSON.stringify(antigravityHooks(readJson(dir, ANTIGRAVITY_HOOKS), agent, cfg, token, dir), null, 2) + "\n");
+    agentWrite(dir, ANTIGRAVITY_MCP, JSON.stringify(antigravityMcp(readJson(dir, ANTIGRAVITY_MCP), agent, cfg, token), null, 2) + "\n", { mode: 0o600 });
+    if (hookScriptFor(agent, dir)) writeHookScript(dir);
+    excludeFromGit(dir, [ANTIGRAVITY_HOOKS, ANTIGRAVITY_MCP, ANTIGRAVITY_RULES, HOOK_SCRIPT]);
+  },
+  launch(agent) {
+    // Models are named by label ("Gemini 3.8 Flash"). Local mode only, so there is no sbx agent.
+    const model = agent.model.trim() && !/^default$/i.test(agent.model.trim()) ? agent.model.trim() : null;
+    return { sbxAgent: "", args: model ? [`--model=${model}`] : [] };
+  },
+};
+
+export const adapters: Record<AgentCli, CliAdapter> = { claude, codex, gemini, antigravity };
 
 /** The command a Local-mode agent runs on the host. */
-export const localBinary: Record<AgentCli, string> = { claude: "claude", codex: "codex", gemini: "gemini" };
+export const localBinary: Record<AgentCli, string> = { claude: "claude", codex: "codex", gemini: "gemini", antigravity: "agy" };

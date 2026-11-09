@@ -90,6 +90,8 @@ sbx secret set google
 
 In **Local** mode, Gemini CLI uses your own setup on this machine: install it with `npm install -g @google/gemini-cli`, then set `GEMINI_API_KEY` or sign in once by running `gemini` in a terminal. The first time an agent starts, Gemini asks you to trust its folder: choose **Trust folder** in the agent's terminal.
 
+Using **Antigravity CLI** agents? They run in **Local** mode only (Docker Sandboxes has no Antigravity agent). Install `agy` from the [install page](https://antigravity.google/docs/install?tab=cli) and sign in once in the agent's terminal; it opens your browser. HQ can't see Antigravity's approval prompts, so check its terminal if an agent seems stuck, and choose "always allow" for the `hq` tools.
+
 Claude Code agents ask you to sign in the first time they start. Do it in the agent's terminal inside HQ.
 
 ### Optional: run agents on a local model (Ollama)
@@ -135,7 +137,7 @@ npx @therealjsmastery/jsm-hq@latest
 
 `@latest` makes sure npx doesn't reuse an old version it cached. HQ opens your browser. If it doesn't, open the `http://127.0.0.1:7420/?token=…` link printed in the terminal.
 
-- **Welcome:** name the project, pick a lead and workers (Claude Code, Codex or Gemini CLI for each) and a review tool. Optionally pick your stack (frameworks, auth, payments, database, analytics, security): agents then get those tools' agent skills and know what the project uses. This is saved to `.jsmhq/config.json` in your repo.
+- **Welcome:** name the project, pick a lead and workers (Claude Code, Codex, Gemini CLI or Antigravity CLI for each) and a review tool. Optionally pick your stack (frameworks, auth, payments, database, analytics, security): agents then get those tools' agent skills and know what the project uses. This is saved to `.jsmhq/config.json` in your repo.
 - **Setup checklist:** anything still missing shows here with a **Copy** button and, for safe commands, **Run in terminal**. Press **Check again** after fixing something.
 
 Leave the terminal running while you work. On macOS and Linux, agents keep running even if you close HQ; on Windows they stop with it (see [Windows](how-it-works.md#windows)).

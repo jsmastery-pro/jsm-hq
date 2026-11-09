@@ -1,7 +1,7 @@
 {
   "name": "@therealjsmastery/jsm-hq",
   "version": "0.7.5",
-  "description": "Run a team of AI coding agents (Claude Code, Codex, Gemini CLI) on your repo in Docker Sandboxes, and watch them work in a pixel-art office.",
+  "description": "Run a team of AI coding agents (Claude Code, Codex, Gemini CLI, Antigravity CLI) on your repo in Docker Sandboxes, and watch them work in a pixel-art office.",
   "license": "MIT",
   "type": "module",
   "homepage": "https://github.com/jsmastery-pro/jsm-hq#readme",

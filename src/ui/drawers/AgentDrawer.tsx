@@ -256,6 +256,11 @@ function NotRunning({ agent, status }: { agent: AgentConfig; status: AgentStatus
                 Runs {agent.ollamaModel || "a local model"} through Ollama. Tool-calling quality varies a lot by local model; if the agent fumbles its tools, try a different model.
               </p>
             )}
+            {agent.cli === "antigravity" && (
+              <p className="mb-4 text-[12px] text-[#ffc14d]">
+                First start: sign in to Antigravity in the terminal (it opens your browser). HQ can't see its approval prompts, so an agent waiting on one shows as working: check its terminal. Choose "always allow" for the <b>hq</b> tools.
+              </p>
+            )}
             {agent.cli === "gemini" && (
               <p className="mb-4 text-[12px] text-[#ffc14d]">
                 First start only: Gemini CLI asks you to trust this folder. Choose <b>Trust folder</b> in the terminal, or HQ's hooks and tools won't load.

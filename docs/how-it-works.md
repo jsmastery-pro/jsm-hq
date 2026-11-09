@@ -21,7 +21,7 @@ What HQ does behind the office: where agents work, how they talk, what reaches G
 
 - **The lead** plans and assigns. It creates boards (for example one per phase), splits the work into tasks and gives each task to a free worker. It never writes app code.
 - **Workers** build. One task means one branch and one pull request. A worker edits only the files its task lists and asks the lead if it needs more.
-- Each agent runs **Claude Code**, **Codex** or **Gemini CLI**, in a **Sandbox** (the default) or in **Local** mode. Set this per agent in Settings → Team.
+- Each agent runs **Claude Code**, **Codex**, **Gemini CLI** or **Antigravity CLI**, in a **Sandbox** (the default) or in **Local** mode. Set this per agent in Settings → Team.
 
 **Model provider.** Claude Code and Codex agents can run on a local model through [Ollama](https://ollama.com): set **Model provider** to **Ollama** and a model in Settings → Team. HQ starts Claude Code with `ANTHROPIC_BASE_URL` pointing at Ollama (with a placeholder token and `--model <model>`), and writes an Ollama provider into the agent's Codex config. Everything else (hooks, the HQ tools, messages) is unchanged. Gemini CLI has no local-model path. A sandbox reaches Ollama at `host.docker.internal:11434`; the address is configurable for an Ollama box on your network.
 
@@ -30,7 +30,7 @@ New teams get names from The Office: Michael leads, then Dwight, Jim, Pam and so
 ## Workspaces and sessions
 
 - **Its own copy of the repo.** Each agent gets a full clone at `~/.jsmhq/<project>/<agent>/`. Your own working folder is never touched.
-- **Its instructions.** HQ writes `.jsmhq-role.md` into that folder: the agent's role (the ROLE.md text from Settings → Team), the team, the rules and its tools. HQ also adds its hooks and MCP config there, and keeps all of these out of git. If the folder has its own `ROLE.md`, HQ includes it and never overwrites it. For **Gemini CLI** the role file is loaded as extra context beside the repo's own `GEMINI.md`, and hooks and the HQ tools go in `.gemini/settings.json` (a repo that commits that file can't run Gemini agents).
+- **Its instructions.** HQ writes `.jsmhq-role.md` into that folder: the agent's role (the ROLE.md text from Settings → Team), the team, the rules and its tools. HQ also adds its hooks and MCP config there, and keeps all of these out of git. If the folder has its own `ROLE.md`, HQ includes it and never overwrites it. For **Gemini CLI** the role file is loaded as extra context beside the repo's own `GEMINI.md`, and hooks and the HQ tools go in `.gemini/settings.json` (a repo that commits that file can't run Gemini agents). For **Antigravity CLI** the role is an always-on rule in `.agents/rules/jsm-hq.md`, and hooks and the HQ tools go in `.agents/hooks.json` and `.agents/mcp_config.json`. Antigravity agents run in Local mode only, and HQ sees no approval prompts or session end from them (their process exit is noticed instead).
 - **Its session.** On macOS and Linux each agent runs in a tmux session called `hq-<project>-<agent>`, so agents keep working if you close HQ or the browser. You can watch one from any terminal with `tmux attach -t hq-<project>-<agent>`, or open its drawer in HQ.
 
 ## Messages between agents
@@ -90,7 +90,7 @@ Mark a request **Done** (with an optional note) or **Dismiss** it, and HQ tells 
 Optional. In Settings → Stack (or during the welcome), pick what the project uses: frameworks, plus tools for auth, payments, database, analytics and security. You can also add your own under "Other".
 
 - Agents see the stack in their instructions.
-- Each tool's official agent skills are installed into the agents' folders (`.claude/skills`, `.agents/skills`), kept out of git. Codex and Gemini CLI both read `.agents/skills`.
+- Each tool's official agent skills are installed into the agents' folders (`.claude/skills`, `.agents/skills`), kept out of git. Codex, Gemini CLI and Antigravity CLI all read `.agents/skills`.
 - One click allows every tool's docs and API websites for all sandboxes.
 
 Skip it and nothing changes.

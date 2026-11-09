@@ -26,9 +26,9 @@ export interface SandboxSettings {
 export type AgentMode = "sandbox" | "local";
 
 /** Which coding agent CLI runs in the sandbox. */
-export type AgentCli = "claude" | "codex" | "gemini";
+export type AgentCli = "claude" | "codex" | "gemini" | "antigravity";
 
-export const CLI_LABEL: Record<AgentCli, string> = { claude: "Claude Code", codex: "Codex", gemini: "Gemini CLI" };
+export const CLI_LABEL: Record<AgentCli, string> = { claude: "Claude Code", codex: "Codex", gemini: "Gemini CLI", antigravity: "Antigravity CLI" };
 
 /** Where an agent's model comes from: the CLI's own cloud account, or a local Ollama server. */
 export type ModelProvider = "default" | "ollama";
@@ -36,8 +36,11 @@ export type ModelProvider = "default" | "ollama";
 /** Ollama's address when the project doesn't set one. */
 export const DEFAULT_OLLAMA_URL = "http://localhost:11434";
 
-/** Gemini CLI has no local-model path; Claude Code and Codex can use Ollama. */
-export const supportsOllama = (cli: AgentCli) => cli !== "gemini";
+/** Only Claude Code and Codex can run on a local Ollama model. */
+export const supportsOllama = (cli: AgentCli) => cli === "claude" || cli === "codex";
+
+/** Docker Sandboxes has no Antigravity agent, so Antigravity CLI runs in Local mode only. */
+export const supportsSandbox = (cli: AgentCli) => cli !== "antigravity";
 
 /** Narrows untrusted input (a UI message, an edited config) to a known CLI. */
 export const isAgentCli = (v: unknown): v is AgentCli => typeof v === "string" && Object.hasOwn(CLI_LABEL, v);
@@ -263,7 +266,7 @@ export interface RemoveAgentOptions {
 
 // ---------------------------------------------------------------- Setup
 
-export type SetupCheckId = "os" | "sbx" | "sbx-login" | "sbx-policy" | "tmux" | "gh" | "gh-remote" | "github-secret" | "claude" | "codex" | "openai-secret" | "gemini" | "google-secret" | "ollama" | "ollama-model";
+export type SetupCheckId = "os" | "sbx" | "sbx-login" | "sbx-policy" | "tmux" | "gh" | "gh-remote" | "github-secret" | "claude" | "codex" | "openai-secret" | "gemini" | "antigravity" | "google-secret" | "ollama" | "ollama-model";
 export type SetupStatus = "ok" | "missing" | "unsupported" | "warning";
 
 export interface SetupFix {

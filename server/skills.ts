@@ -1,6 +1,6 @@
 // Agent skills for the project's stack (plan 009). Installed once per project
 // into a cache with the skills CLI (`npx skills add`), then copied into each
-// agent's folder: Claude Code reads .claude/skills/, Codex and Gemini CLI read .agents/skills/.
+// agent's folder: Claude Code reads .claude/skills/, Codex, Gemini CLI and Antigravity CLI read .agents/skills/.
 // The copies are git-excluded and replaced when the stack changes.
 
 import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -13,7 +13,7 @@ import { run } from "./lib/exec";
 import { log } from "./lib/log";
 import { projectHome } from "./paths";
 
-const AGENT_DIRS = [".claude/skills", ".agents/skills"]; // Claude Code; Codex and Gemini CLI (which also reads .agents/skills)
+const AGENT_DIRS = [".claude/skills", ".agents/skills"]; // Claude Code; Codex, Gemini CLI and Antigravity CLI (which also read .agents/skills)
 
 const cacheDir = (slug: string) => join(projectHome(slug), "skills-cache");
 const key = (specs: SkillSpec[]) => JSON.stringify(specs);
@@ -32,7 +32,7 @@ export function ensureSkillCache(slug: string, specs: SkillSpec[]): Promise<void
     await run("git", ["init", "-q"], { cwd: dir }); // the CLI installs into the current project
     const failed: string[] = [];
     for (const spec of specs) {
-      const args = ["-y", "skills", "add", spec.source, "--skill", ...spec.skills, "-a", "claude-code", "codex", "gemini-cli", "-y", "--copy"];
+      const args = ["-y", "skills", "add", spec.source, "--skill", ...spec.skills, "-a", "claude-code", "codex", "gemini-cli", "antigravity-cli", "-y", "--copy"];
       // npx is a .cmd shim on Windows, which only runs through cmd.exe.
       const [cmd, cmdArgs] = process.platform === "win32" ? ["cmd.exe", ["/d", "/s", "/c", "npx", ...args]] : ["npx", args];
       const r = await run(cmd, cmdArgs, {

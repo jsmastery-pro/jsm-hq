@@ -10,7 +10,7 @@
 
 One **lead** agent plans the work and hands out tasks. Each **worker** gets its own desk, its own copy of your repo and its own Docker Sandbox, then opens a pull request. You see it all happen: the plan on the wall, agents at their desks, PRs moving through review.
 
-Agents run **Claude Code**, **Codex** or **Gemini CLI**. Everything runs on your machine.
+Agents run **Claude Code**, **Codex**, **Gemini CLI** or **Antigravity CLI** (Local mode only). Everything runs on your machine.
 
 ## Why use it
 
@@ -30,7 +30,7 @@ npx @therealjsmastery/jsm-hq@latest
 
 HQ opens in your browser and walks you through the rest:
 
-1. **Welcome:** name the project and pick a lead and workers (Claude Code, Codex or Gemini CLI for each).
+1. **Welcome:** name the project and pick a lead and workers (Claude Code, Codex, Gemini CLI or Antigravity CLI for each).
 2. **Setup checklist:** anything missing on your machine is listed with the command to fix it.
 3. **Start team** in the top bar, then message the lead, for example: *"Plan two small tasks for Dwight and assign the first one."*
 
@@ -67,7 +67,7 @@ Use it often? `npm install -g @therealjsmastery/jsm-hq`, then run `jsm-hq` in an
 | A Claude, ChatGPT or Gemini account | For the agents themselves (Gemini agents need a Gemini API key) |
 | [Ollama](https://ollama.com) 0.14+ (optional) | Run Claude Code or Codex agents on a local model instead of a cloud account |
 
-Sandboxes need **macOS 14+ on Apple silicon, Windows 11, or Ubuntu 24.04+**. On other machines, set agents to **Local** in Settings → Team: they run Claude Code, Codex or Gemini CLI directly on your machine, with permission prompts on.
+Sandboxes need **macOS 14+ on Apple silicon, Windows 11, or Ubuntu 24.04+**. On other machines, set agents to **Local** in Settings → Team: they run Claude Code, Codex, Gemini CLI or Antigravity CLI directly on your machine, with permission prompts on.
 
 You don't need to install these by hand first. HQ checks for each one and shows the exact command. The [getting-started guide](docs/getting-started.md) has every step.
 
@@ -96,6 +96,7 @@ More detail on workspaces, sandboxes, MCP servers, app variables and what HQ sav
 | A Codex agent waits on "Do you trust this folder?" | Answer it once in the agent's terminal. HQ never answers trust prompts for you. |
 | A local-model agent says "Ollama isn't reachable" or "doesn't have <model>" | Start Ollama (`ollama serve`) and run `ollama pull <model>`. Sandboxes reach it at `host.docker.internal:11434`; HQ adds that network rule on start. |
 | A local-model agent keeps failing its tool calls | Local models differ a lot in tool calling. Pick one that lists tools on [ollama.com](https://ollama.com/search?c=tools) with a 64k+ context window. |
+| An Antigravity agent shows "working" but nothing moves | It may be waiting on an approval prompt, which HQ can't see (Antigravity has no hook for it). Open its terminal and answer, and choose "always allow" for the `hq` tools. |
 | A Gemini agent waits on "Do you trust the files in this folder?" | Choose **Trust folder** once in the agent's terminal. Until you do, Gemini ignores HQ's hooks and tools. |
 | A CLI sign-in in a sandbox opens the browser, then fails on `localhost:<port>` | Press **Forward port** in the agent's drawer, then reload the page. |
 | An agent's state never changes | The sandbox can't reach HQ. `sbx policy ls` should show `localhost:<port>` and `host.docker.internal:<port>` allowed; HQ adds them on start. |

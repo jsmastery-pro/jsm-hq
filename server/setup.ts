@@ -202,6 +202,14 @@ async function checkGemini(): Promise<Check> {
   return { ...base, status: "missing", detail: "Not installed. Only needed for Gemini agents in Local mode (sandboxes have it).", fix: fix("npm install -g @google/gemini-cli", false, "https://github.com/google-gemini/gemini-cli") };
 }
 
+async function checkAntigravity(): Promise<Check> {
+  const base = { id: "antigravity" as const, label: "Antigravity CLI (for Antigravity agents, Local mode only)", neededFor: "local" as const };
+  const v = await run("agy", ["--version"], { timeoutMs: 8000 });
+  if (v.ok) return { ...base, status: "ok", detail: v.stdout.trim().split("\n").pop() ?? "", fix: null };
+  const cmd = os === "win32" ? "irm https://antigravity.google/cli/install.ps1 | iex" : "curl -fsSL https://antigravity.google/cli/install.sh | bash";
+  return { ...base, status: "missing", detail: "Not installed. Docker Sandboxes has no Antigravity agent, so these agents run in Local mode.", fix: fix(cmd, false, "https://antigravity.google/docs/install?tab=cli") };
+}
+
 /** Gemini's OAuth sign-in is disabled in sandboxes, so they need a Gemini API key in sbx's secret store. */
 async function checkGoogleSecret(sbxOk: boolean): Promise<Check> {
   const base = { id: "google-secret" as const, label: "Gemini API key for Gemini agents", neededFor: "sandbox" as const };
@@ -255,7 +263,7 @@ async function checkOllamaModels(url: string, team: AgentConfig[]): Promise<Chec
   return { ...base, status: "ok", detail: `${wanted.join(", ")} pulled. Tool-calling quality varies a lot between local models.`, fix: null };
 }
 
-/** `team` adds the Codex, Gemini and Ollama checks only when the team has such agents. */
+/** `team` adds the Codex, Gemini, Antigravity and Ollama checks only when the team has such agents. */
 export async function runSetupChecks(repo: RepoInfo, team: AgentConfig[] = [], ollamaUrl = DEFAULT_OLLAMA_URL): Promise<SetupState> {
   const brew = os === "darwin" && (await has("brew"));
   const [osCheck, sbx, tmux, claude, gh] = await Promise.all([checkOs(), checkSbx(brew), checkTmux(brew), checkClaude(), checkGh(brew)]);
@@ -269,6 +277,7 @@ export async function runSetupChecks(repo: RepoInfo, team: AgentConfig[] = [], o
   const geminiAgents = team.filter((a) => a.cli === "gemini");
   if (geminiAgents.some((a) => a.mode === "sandbox")) checks.splice(5, 0, await checkGoogleSecret(sbxOk));
   if (geminiAgents.some((a) => a.mode === "local")) checks.push(await checkGemini());
+  if (team.some((a) => a.cli === "antigravity")) checks.push(await checkAntigravity());
   if (team.some(usesOllama)) checks.push(await checkOllama(ollamaUrl, team), await checkOllamaModels(ollamaUrl, team));
   const ok = (c: SetupCheck) => c.status === "ok";
   return {

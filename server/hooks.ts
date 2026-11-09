@@ -1,7 +1,8 @@
-// Claude Code / Codex / Gemini CLI hooks → agent state. Each agent's hooks POST to
+// Claude Code / Codex / Gemini CLI / Antigravity CLI hooks → agent state. Each agent's hooks POST to
 // /hook/<agentId>/<Event> with the hook's JSON payload. Gemini CLI's own event
 // names (BeforeAgent, AfterTool…) are mapped to these in its settings file (see
-// adapters.ts), so only its Notification payload needs reshaping here.
+// adapters.ts), so only its Notification payload needs reshaping here. Antigravity CLI's
+// payload uses camelCase names (lastUserInput, toolCall) and its Stop reply is {"decision":"continue"}.
 
 import type { Hub } from "./hub";
 import type { Inbox } from "./inbox";
@@ -13,7 +14,13 @@ interface HookPayload {
   notification_type?: string;
   /** Gemini CLI's Notification: what is being approved (it has no top-level tool_name). */
   details?: { title?: string; toolName?: string; command?: string };
+  /** Antigravity CLI's names for the prompt and the tool. */
+  lastUserInput?: string;
+  toolCall?: { name?: string };
 }
+
+/** Gives every CLI's payload the field names handleHook reads. */
+const normalize = (body: HookPayload): HookPayload => ({ ...body, prompt: body.prompt ?? body.lastUserInput, tool_name: body.tool_name ?? body.toolCall?.name });
 
 const clip = (s: string, n = 80) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 
@@ -39,7 +46,8 @@ export interface HookResult {
   response?: Record<string, unknown>;
 }
 
-export function handleHook(hub: Hub, inbox: Inbox, agentId: string, event: string, body: HookPayload): HookResult {
+export function handleHook(hub: Hub, inbox: Inbox, agentId: string, event: string, payload: HookPayload): HookResult {
+  const body = normalize(payload);
   const st = hub.status(agentId);
   const name = hub.name(agentId);
   if (!st) return { ok: false };
@@ -91,7 +99,8 @@ export function handleHook(hub: Hub, inbox: Inbox, agentId: string, event: strin
       if (queued) {
         turnOpen.set(agentId, true); // Claude continues: same turn
         hub.setStatus(agentId, { state: "working", note: "Reading new messages" });
-        return { ok: true, response: { decision: "block", reason: queued } };
+        // Claude Code, Codex and Gemini CLI take "block" (keep going with this as the next prompt); Antigravity takes "continue".
+        return { ok: true, response: { decision: hub.cfg(agentId)?.cli === "antigravity" ? "continue" : "block", reason: queued } };
       }
       turnOpen.set(agentId, false);
       hub.setStatus(agentId, { state: "idle", note: "Finished — ready for the next instruction" });

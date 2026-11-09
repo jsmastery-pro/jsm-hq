@@ -8,7 +8,7 @@ import { homedir } from "node:os";
 import { stackSkills } from "../src/data/stack";
 import { hasHqSkills, prepareSkills } from "./skills";
 import { resolve, sep } from "node:path";
-import { CLI_LABEL, HOST_TERMINAL, type AgentCli, type AgentConfig, type SetupCheckId, type WorkspaceInfo } from "../src/data/types";
+import { CLI_LABEL, HOST_TERMINAL, supportsSandbox, type AgentCli, type AgentConfig, type SetupCheckId, type WorkspaceInfo } from "../src/data/types";
 import { adapters, localBinary } from "./adapters";
 import { findModel, ollamaBaseUrl, ollamaPolicyTargets, ollamaStatus, usesOllama } from "./ollama";
 import type { Hub } from "./hub";
@@ -96,12 +96,14 @@ export class Sessions {
       hub.activity("session", id, `${agent.name} could not start: ${detail.split("\n")[0]}`);
     };
     if (!setup.checks.find((c) => c.id === "tmux" && c.status === "ok")) return fail("tmux is not installed. See the setup checklist.");
+    if (agent.mode === "sandbox" && !supportsSandbox(agent.cli)) return fail(`${CLI_LABEL[agent.cli]} can't run in a Docker Sandbox (Docker Sandboxes has no agent for it). Switch this agent to Local mode.`);
     if (agent.mode === "sandbox" && !setup.sandboxReady) return fail("Docker Sandboxes isn't ready on this machine. Finish the setup checklist, or switch this agent to Local mode.");
     const check = (cid: string) => setup.checks.find((c) => c.id === cid)?.status;
     if (agent.mode === "local" && agent.cli === "claude" && check("claude") !== "ok") return fail("Claude Code isn't installed. See the setup checklist.");
     if (agent.mode === "local" && agent.cli === "codex" && check("codex") !== "ok") return fail("Codex isn't installed on this machine. See the setup checklist, or run this agent in a sandbox.");
     if (agent.mode === "sandbox" && agent.cli === "codex" && check("openai-secret") !== "ok")
       return fail("Codex needs an OpenAI key in sbx. Run `sbx secret set openai --oauth` (Setup checklist → Run in terminal).");
+    if (agent.mode === "local" && agent.cli === "antigravity" && check("antigravity") !== "ok") return fail("Antigravity CLI (agy) isn't installed on this machine. See the setup checklist.");
     if (agent.mode === "local" && agent.cli === "gemini" && check("gemini") !== "ok") return fail("Gemini CLI isn't installed on this machine. See the setup checklist, or run this agent in a sandbox.");
     if (agent.mode === "sandbox" && agent.cli === "gemini" && check("google-secret") !== "ok")
       return fail("Gemini needs an API key in sbx. Run `sbx secret set google` (Setup checklist → Run in terminal).");
@@ -512,6 +514,8 @@ export class Sessions {
     if (quietMs < SCREEN_QUIET_MS) return;
     const screen = await this.backend.screenText(name, 10);
     if (!screen) return;
+    // The screen wording is known for Claude Code, Codex and Gemini CLI; for Antigravity CLI only hooks say what it is doing.
+    if (cli === "antigravity") return;
     const busy = (cli === "gemini" ? GEMINI_BUSY : BUSY).test(screen);
     const dialog = DIALOG.test(screen) || (cli === "gemini" && GEMINI_DIALOG.test(screen));
     const set = (state: "idle" | "working" | "needs-input", note: string) => {
