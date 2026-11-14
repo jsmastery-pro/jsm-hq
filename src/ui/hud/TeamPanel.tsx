@@ -68,8 +68,10 @@ export function TeamPanel() {
   const needs = team.filter((a) => a.status.state === "needs-input").length;
 
   return (
-    <section aria-label="Team" className="fixed bottom-[250px] left-4 top-[74px] z-10 flex w-[280px] flex-col gap-2">
-      <div className="flex items-center justify-between px-1 text-[13px] font-semibold uppercase tracking-[0.12em] text-cream [text-shadow:0_2px_0_#241a2e]">
+    // The section reserves the column; only its header and cards take the pointer, so the office
+    // below the last card can still be dragged, hovered and clicked.
+    <section aria-label="Team" className="pointer-events-none fixed bottom-[250px] left-4 top-[74px] z-10 flex w-[280px] flex-col gap-2">
+      <div className="pointer-events-auto flex items-center justify-between px-1 text-[13px] font-semibold uppercase tracking-[0.12em] text-cream [text-shadow:0_2px_0_#241a2e]">
         <span>
           Team · {team.length}
           {needs > 0 && <span className="ml-2 text-yellow">{needs} need you</span>}
@@ -78,7 +80,7 @@ export function TeamPanel() {
           + Agent
         </button>
       </div>
-      <div className="scroll-thin flex min-h-0 flex-col gap-2.5 overflow-y-auto pb-2 pl-4 -ml-4 pr-1">
+      <div className="scroll-thin pointer-events-auto flex min-h-0 flex-col gap-2.5 overflow-y-auto pb-2 pl-4 -ml-4 pr-1">
         {team.map((a, i) => (
           <AgentCard key={a.config.id} a={a} n={i + 1} now={now} focused={drawer?.kind === "agent" && drawer.id === a.config.id} />
         ))}

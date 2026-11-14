@@ -5,7 +5,7 @@ import { Application, Container, Graphics, Sprite, TextureStyle, type Texture } 
 import type { AgentState, HqConfig, PullRequest, ReviewState } from "../data/types";
 import { mulberry32 } from "../lib/random";
 import { selectTeam, useOffice } from "../store/office";
-import { useUi, type FocusTarget } from "../store/ui";
+import { ui, useUi, type FocusTarget } from "../store/ui";
 import { think, type Bot } from "./actors/bots";
 import { Effects } from "./actors/effects";
 import { BeltPath, parcelPos, updateParcels, type Parcel } from "./actors/parcels";
@@ -67,7 +67,7 @@ export class OfficeScene {
     this.camera = new Camera(
       this.world,
       () => ({ w: this.app.screen.width, h: this.app.screen.height }),
-      () => ({ left: 312, top: 74, bottom: 16, right: useUi.getState().drawer ? 552 : 16 }),
+      () => ({ left: 312, top: 74, bottom: 16, right: this.drawerInset() }),
       () => this.reducedMotion,
     );
 
@@ -130,9 +130,20 @@ export class OfficeScene {
     return { x: Math.round(b.x) - 7, y: b.headY - 1, w: 14, h: Math.round(b.y) - b.headY + 3 };
   }
 
+  /** Screen px the side drawer covers on the right, so focused things land beside it, not under it. */
+  private drawerInset(): number {
+    const { drawer, drawerWidth, drawerMaximized } = useUi.getState();
+    // No drawer, the Boards modal (covers everything) or a maximized drawer: nothing to dodge.
+    if (!drawer || drawer.kind === "boards" || drawerMaximized) return 16;
+    return Math.min(drawerWidth, window.innerWidth - 32) + 32;
+  }
+
   focusOn(target: FocusTarget) {
     const l = this.layout;
     if (!l) return;
+    // The camera is about to move: the hover highlight and tooltip would point at the wrong thing.
+    this.hover = null;
+    ui.setHover(null);
     const near = Math.max(this.camera.zoom, Math.min(4, this.camera.fitZoom() + 1));
     if (target.kind === "home") return this.camera.home();
     if (target.kind === "agent") {
