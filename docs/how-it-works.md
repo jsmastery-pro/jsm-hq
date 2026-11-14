@@ -118,6 +118,7 @@ HQ never stores key values and never reads your env files.
 | --- | --- | --- |
 | Office name (the sign on the wall) | Settings → Project | Right away, for everyone on the project |
 | Font: Pixel, Clean or Mono | Settings → Project | Right away, in this browser only. The office itself stays pixel. |
+| Sound when an agent needs you (on by default; the tab title also shows how many are waiting) | Settings → Project | Right away, in this browser only |
 | Review tool | Settings → Workflow | Right away |
 | Agents, roles, CLI, mode | Settings → Team | Next time the agent starts |
 | CPU and memory | Settings → Sandbox | After **Recreate sandbox** |

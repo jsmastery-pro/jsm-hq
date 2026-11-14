@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { DEFAULT_OFFICE_NAME, OFFICE_NAME_MAX } from "../../data/names";
 import { FONT_STYLES, savedFont, setFont, type FontStyle } from "../../theme/fonts";
+import { playChime, setSoundEnabled, soundEnabled } from "../../store/alerts";
 import { officeActions, useOffice } from "../../store/office";
 import { Field, SectionTitle } from "../kit";
 import { CommitInput, Toggle } from "./controls";
@@ -31,12 +32,37 @@ function FontPicker() {
   );
 }
 
+function SoundPicker() {
+  const [on, setOn] = useState(soundEnabled);
+  return (
+    <section className="border-[3px] border-ink bg-white p-3">
+      <SectionTitle>Sound</SectionTitle>
+      <Field label="When an agent needs you" hint="A short chime when an agent starts waiting on you, even if HQ is in a background tab. Saved in this browser only.">
+        <div className="flex items-center gap-3">
+          <Toggle
+            checked={on}
+            label="Play a sound when an agent needs you"
+            onChange={(v) => {
+              setSoundEnabled(v);
+              setOn(v);
+            }}
+          />
+          <button className="btn text-[14px]" onClick={() => playChime()}>
+            Play test sound
+          </button>
+        </div>
+      </Field>
+    </section>
+  );
+}
+
 export function ProjectSettings() {
   const project = useOffice((s) => s.snap?.config.project);
   if (!project) return null;
   return (
     <div className="flex flex-col gap-5">
       <FontPicker />
+      <SoundPicker />
       <section className="grid grid-cols-2 gap-3 border-[3px] border-ink bg-white p-3">
         <div className="col-span-2">
           <SectionTitle>Project</SectionTitle>
