@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { OfficeCanvas } from "./office/OfficeCanvas";
+import { watchNeedsInput } from "./store/alerts";
 import { connectOffice, useOffice } from "./store/office";
 import { ui, useUi } from "./store/ui";
 import { DebugPanel } from "./ui/DebugPanel";
@@ -62,6 +63,7 @@ function useSetupPrompt() {
 
 export function App() {
   useEffect(() => connectOffice(), []);
+  useEffect(() => watchNeedsInput(), []);
   useKeyboard();
   useSetupPrompt();
   const ready = useOffice((s) => s.snap !== null);
