@@ -1,6 +1,7 @@
 // Animated parts of the office, redrawn into a Pixi Graphics every frame.
 
 import type { AgentState, Environment, PullRequest, ReviewState } from "../../data/types";
+import { currentTheme } from "../../theme/theme";
 import { reviewStyle, stateStyle } from "../../theme/tokens";
 import { fit, tag, text, textW } from "../engine/font";
 import { C } from "../engine/palette";
@@ -198,7 +199,7 @@ export function drawCables(
 export function drawWindowAndClock(p: Pen, l: OfficeLayout, t: number) {
   const W = { x: l.ox + l.lounge.x0 * 16 + 66, y: l.oy + 22, w: 60, h: 28 };
   const hour = new Date().getHours();
-  const night = hour < 7 || hour >= 19;
+  const night = currentTheme() === "night" || hour < 7 || hour >= 19;
   p.rect(W.x, W.y, W.w, W.h, night ? C.skyN : C.sky);
   if (night) {
     for (const [sx, sy] of [[6, 5], [19, 12], [33, 4], [47, 9], [54, 18], [12, 20]]) p.rect(W.x + sx, W.y + sy, 1, 1, Math.sin(t * 2 + sx) > -0.3 ? C.white : C.lav);

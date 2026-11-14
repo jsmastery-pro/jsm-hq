@@ -37,7 +37,7 @@ export function SettingsModal() {
         transition={{ duration: 0.2 }}
         className="panel flex h-[min(760px,calc(100dvh-2rem))] w-[min(1080px,100%)] flex-col"
       >
-        <div className="flex items-center gap-3 border-b-[3px] border-ink px-4 py-2">
+        <div className="flex items-center gap-3 border-b-[3px] border-line px-4 py-2">
           <h2 className="m-0 flex-1 text-[22px] font-bold">Settings</h2>
           <span className="text-[13px] text-muted">Changes apply right away.</span>
           <button className="btn px-2.5" aria-label="Close settings" onClick={() => ui.closeSettings()}>
@@ -45,7 +45,7 @@ export function SettingsModal() {
           </button>
         </div>
         <div className="flex min-h-0 flex-1">
-          <nav className="flex w-[200px] shrink-0 flex-col gap-2 border-r-[3px] border-ink bg-cream-2 p-3" aria-label="Settings sections">
+          <nav className="flex w-[200px] shrink-0 flex-col gap-2 border-r-[3px] border-line bg-cream-2 p-3" aria-label="Settings sections">
             {TABS.map((t) => (
               <button
                 key={t.id}

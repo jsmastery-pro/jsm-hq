@@ -6,6 +6,8 @@ import type { AgentState, HqConfig, PullRequest, ReviewState } from "../data/typ
 import { mulberry32 } from "../lib/random";
 import { selectTeam, useOffice } from "../store/office";
 import { useUi, type FocusTarget } from "../store/ui";
+import { THEME_EVENT } from "../theme/theme";
+import { shade } from "./engine/shade";
 import { think, type Bot } from "./actors/bots";
 import { Effects } from "./actors/effects";
 import { BeltPath, parcelPos, updateParcels, type Parcel } from "./actors/parcels";
@@ -58,7 +60,7 @@ export class OfficeScene {
   private destroyed = false;
 
   async init(host: HTMLElement) {
-    await this.app.init({ resizeTo: host, background: C.grass, antialias: false, autoDensity: true, resolution: window.devicePixelRatio || 1, roundPixels: true });
+    await this.app.init({ resizeTo: host, background: shade(C.grass), antialias: false, autoDensity: true, resolution: window.devicePixelRatio || 1, roundPixels: true });
     if (this.destroyed) return void this.app.destroy(true);
     host.appendChild(this.app.canvas);
     this.app.canvas.style.imageRendering = "pixelated";
@@ -84,6 +86,16 @@ export class OfficeScene {
       }),
     );
     this.cleanups.push(attachInput(this));
+    // A new theme: repaint the cached layers (the static office and each robot's sprites).
+    const onTheme = () => {
+      const snap = useOffice.getState().snap;
+      this.app.renderer.background.color = shade(C.grass);
+      if (!snap || !this.layout) return;
+      this.setStatic(this.layout, snap.config);
+      for (const a of snap.config.team) this.bots.get(a.id)?.restyle(a);
+    };
+    window.addEventListener(THEME_EVENT, onTheme);
+    this.cleanups.push(() => window.removeEventListener(THEME_EVENT, onTheme));
     this.app.renderer.on("resize", () => this.camera.apply());
     this.app.ticker.add((tk) => this.frame(Math.min(0.1, tk.deltaMS / 1000)));
     // Dev-only handles for debugging from the console.

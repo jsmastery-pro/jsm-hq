@@ -47,7 +47,7 @@ export function TeamSettings() {
 function AgentRow({ agent, expanded, onToggle, onRemove }: { agent: AgentConfig; expanded: boolean; onToggle: () => void; onRemove: () => void }) {
   const set = (patch: Parameters<typeof officeActions.updateAgent>[1]) => officeActions.updateAgent(agent.id, patch);
   return (
-    <div className="border-[3px] border-ink bg-white">
+    <div className="border-[3px] border-line bg-paper">
       <div className="grid grid-cols-[40px_1fr_1fr_150px_130px_auto] items-end gap-2.5 p-2.5">
         <Portrait color={agent.color} lead={agent.isLead} />
         <Field label="Name">
@@ -89,14 +89,14 @@ function AgentRow({ agent, expanded, onToggle, onRemove }: { agent: AgentConfig;
         </div>
       )}
       {expanded && (
-        <div className="grid grid-cols-2 gap-3 border-t-[3px] border-ink bg-cream p-3">
+        <div className="grid grid-cols-2 gap-3 border-t-[3px] border-line bg-cream p-3">
           <Field label="Colour">
             <div className="flex flex-wrap gap-1.5">
               {agentPalette.map((c) => (
                 <button
                   key={c}
-                  className="h-6 w-6 border-[3px] border-ink"
-                  style={{ background: c, outline: c === agent.color ? "3px solid #241a2e" : undefined, outlineOffset: 1 }}
+                  className="h-6 w-6 border-[3px] border-line"
+                  style={{ background: c, outline: c === agent.color ? "3px solid var(--color-line)" : undefined, outlineOffset: 1 }}
                   aria-label={`Colour ${c}`}
                   onClick={() => set({ color: c })}
                 />
@@ -152,7 +152,7 @@ function AddAgent() {
     setName("");
   };
   return (
-    <section className="border-[3px] border-dashed border-ink p-3">
+    <section className="border-[3px] border-dashed border-line p-3">
       <SectionTitle>Add an agent</SectionTitle>
       <form
         className="grid grid-cols-[1fr_1fr_150px_130px_auto] items-end gap-2.5"

@@ -1,14 +1,41 @@
 import { useState } from "react";
 import { DEFAULT_OFFICE_NAME, OFFICE_NAME_MAX } from "../../data/names";
 import { FONT_STYLES, savedFont, setFont, type FontStyle } from "../../theme/fonts";
+import { THEME_CHOICES, savedThemeChoice, setThemeChoice, type ThemeChoice } from "../../theme/theme";
 import { officeActions, useOffice } from "../../store/office";
 import { Field, SectionTitle } from "../kit";
 import { CommitInput, Toggle } from "./controls";
 
+function ThemePicker() {
+  const [choice, setChoice] = useState(savedThemeChoice);
+  return (
+    <section className="border-[3px] border-line bg-paper p-3">
+      <SectionTitle>Theme</SectionTitle>
+      <Field label="Theme" hint="Recolours the office and the panels. Auto follows your system's light or dark mode. Saved in this browser only.">
+        <select
+          className="field w-[320px]"
+          value={choice}
+          onChange={(e) => {
+            const t = e.target.value as ThemeChoice;
+            setThemeChoice(t);
+            setChoice(t);
+          }}
+        >
+          {THEME_CHOICES.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.label} · {t.hint}
+            </option>
+          ))}
+        </select>
+      </Field>
+    </section>
+  );
+}
+
 function FontPicker() {
   const [font, setCurrent] = useState(savedFont);
   return (
-    <section className="border-[3px] border-ink bg-white p-3">
+    <section className="border-[3px] border-line bg-paper p-3">
       <SectionTitle>Font</SectionTitle>
       <Field label="Font style" hint="For panels, drawers, settings and agent terminals. The office stays pixel. Saved in this browser only.">
         <select
@@ -36,8 +63,9 @@ export function ProjectSettings() {
   if (!project) return null;
   return (
     <div className="flex flex-col gap-5">
+      <ThemePicker />
       <FontPicker />
-      <section className="grid grid-cols-2 gap-3 border-[3px] border-ink bg-white p-3">
+      <section className="grid grid-cols-2 gap-3 border-[3px] border-line bg-paper p-3">
         <div className="col-span-2">
           <SectionTitle>Project</SectionTitle>
         </div>

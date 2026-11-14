@@ -34,12 +34,12 @@ function AgentCard({ a, focused, n, now }: { a: AgentView; focused: boolean; n: 
         <span className="font-term text-[16px] text-muted">{ago(a.status.stateSince, now)}</span>
         {a.config.mode === "local" && <span className="chip text-[11px]">local</span>}
         {items > 0 && (
-          <span className="chip text-[11px]" style={{ background: "#ffec27" }} title="Action items from this agent. Open Action items in the top bar.">
+          <span className="chip bg-yellow text-[11px]" title="Action items from this agent. Open Action items in the top bar.">
             {items} for you
           </span>
         )}
         {blocked > 0 && (
-          <span className="chip text-[11px]" style={{ background: "#fff1d6" }} title="Requests the sandbox blocked. Open the agent to allow or dismiss them.">
+          <span className="chip bg-warn-soft text-[11px]" title="Requests the sandbox blocked. Open the agent to allow or dismiss them.">
             {blocked} blocked
           </span>
         )}
@@ -69,7 +69,7 @@ export function TeamPanel() {
 
   return (
     <section aria-label="Team" className="fixed bottom-[250px] left-4 top-[74px] z-10 flex w-[280px] flex-col gap-2">
-      <div className="flex items-center justify-between px-1 text-[13px] font-semibold uppercase tracking-[0.12em] text-cream [text-shadow:0_2px_0_#241a2e]">
+      <div className="flex items-center justify-between px-1 text-[13px] font-semibold uppercase tracking-[0.12em] text-snow [text-shadow:0_2px_0_#241a2e]">
         <span>
           Team · {team.length}
           {needs > 0 && <span className="ml-2 text-yellow">{needs} need you</span>}
