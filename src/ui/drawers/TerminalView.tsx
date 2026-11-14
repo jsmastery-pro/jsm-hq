@@ -153,7 +153,7 @@ export function TerminalView({ agentId, autoFocus = true }: { agentId: string; a
     <div className="relative h-full min-h-0 w-full">
       <div ref={host} className="h-full min-h-0 w-full bg-navy-2" />
       {notice && (
-        <div role="status" className="absolute bottom-3 left-1/2 z-10 max-w-[90%] -translate-x-1/2 border-2 border-ink bg-yellow px-2 py-1 text-[13px] text-ink">
+        <div role="status" className="absolute bottom-3 left-1/2 z-10 max-w-[90%] -translate-x-1/2 border-2 border-line bg-yellow px-2 py-1 text-[13px] text-ink">
           {notice}
         </div>
       )}

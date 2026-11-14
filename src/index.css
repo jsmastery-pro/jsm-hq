@@ -13,8 +13,16 @@
 @import "@xterm/xterm/css/xterm.css";
 
 @theme {
-  --color-ink: #241a2e;
+  --color-ink: #241a2e; /* text */
+  --color-line: #241a2e; /* outlines and hard shadows */
+  --color-paper: #ffffff; /* inputs and inset sections */
+  --color-bevel: #ffffff; /* panel highlight */
+  --color-warn-soft: #fff1d6; /* notice and warning callouts */
+  --color-danger-soft: #ffe1ea; /* errors and destructive callouts */
+  --color-ok-soft: #dcf7e3; /* success callouts */
+  --color-warn: #a35d00; /* warning text */
   --color-cream: #fff6e9;
+  --color-snow: #fff6e9; /* light text on dark plates, the same in every theme */
   --color-cream-2: #f0dfc2;
   --color-cream-3: #e2cba6;
   --color-muted: #7d6b73;
@@ -72,16 +80,16 @@ html[data-font] .font-term {
   /* Chunky game panel: ink outline, light bevel, hard drop shadow (no blur) */
   .panel {
     background: var(--color-cream);
-    border: 3px solid var(--color-ink);
+    border: 3px solid var(--color-line);
     box-shadow:
       inset -3px -3px 0 var(--color-cream-2),
-      inset 3px 3px 0 #fff,
+      inset 3px 3px 0 var(--color-bevel),
       0 4px 0 rgba(36, 26, 46, 0.45);
   }
   .panel-dark {
     background: rgba(29, 43, 83, 0.94);
-    color: var(--color-cream);
-    border: 3px solid var(--color-ink);
+    color: var(--color-snow);
+    border: 3px solid var(--color-line);
     box-shadow:
       inset -3px -3px 0 rgba(0, 0, 0, 0.25),
       inset 3px 3px 0 rgba(255, 255, 255, 0.08),
@@ -89,28 +97,29 @@ html[data-font] .font-term {
   }
   .btn {
     cursor: pointer;
-    border: 3px solid var(--color-ink);
+    border: 3px solid var(--color-line);
     background: var(--color-cream);
     padding: 1px 10px;
     font-weight: 600;
     box-shadow:
       inset -2px -2px 0 var(--color-cream-3),
-      0 3px 0 var(--color-ink);
+      0 3px 0 var(--color-line);
     transition: transform 0.06s;
     white-space: nowrap;
   }
   .btn:hover {
-    background: #fff;
+    background: var(--color-paper);
   }
   .btn:active,
   .btn[aria-pressed="true"] {
     transform: translateY(3px);
     box-shadow:
       inset -2px -2px 0 var(--color-cream-3),
-      0 0 0 var(--color-ink);
+      0 0 0 var(--color-line);
   }
   .btn[aria-pressed="true"] {
     background: var(--color-yellow);
+    color: var(--color-line);
   }
   .btn:disabled {
     cursor: not-allowed;
@@ -129,20 +138,25 @@ html[data-font] .font-term {
     font-size: 13px;
     font-weight: 600;
     padding: 0 6px 1px;
-    border: 2px solid var(--color-ink);
+    border: 2px solid var(--color-line);
     background: var(--c, var(--color-cream-2));
     color: var(--color-ink);
+  }
+  /* A chip with its own colour (--c) is a bright plate: dark text in every theme. */
+  .chip[style*="--c"] {
+    color: var(--color-line);
     white-space: nowrap;
   }
   .chip-dot::before {
     content: "";
     width: 6px;
     height: 6px;
-    background: var(--color-ink);
+    background: currentColor;
   }
   .field {
-    border: 3px solid var(--color-ink);
-    background: #fff;
+    border: 3px solid var(--color-line);
+    background: var(--color-paper);
+    color: var(--color-ink);
     padding: 2px 8px;
     font-size: 15px;
     width: 100%;
@@ -156,10 +170,41 @@ html[data-font] .font-term {
   .kbd {
     font-family: var(--font-term);
     font-size: 16px;
-    border: 2px solid var(--color-ink);
+    border: 2px solid var(--color-line);
     padding: 0 4px;
-    background: #fff;
+    background: var(--color-paper);
   }
+}
+
+/* Night: the same office after dark. Panels go deep indigo, text goes light, outlines stay
+   dark, and the bright game colours stay bright (they're the lights). */
+:root[data-theme="night"] {
+  --color-ink: #f2ecff;
+  --color-line: #0d0b1f;
+  --color-cream: #2a2550;
+  --color-cream-2: #221e45;
+  --color-cream-3: #191632;
+  --color-paper: #332d5e;
+  --color-bevel: rgba(255, 255, 255, 0.1);
+  --color-muted: #b8acd8;
+  --color-grass: #1a2a2a;
+  --color-warn-soft: #3b3222;
+  --color-danger-soft: #45213a;
+  --color-ok-soft: #1d3b34;
+  --color-warn: #ffc56b;
+  color-scheme: dark;
+}
+/* Text on a bright plate stays dark in Night, whatever text colour the element asked for. */
+:root[data-theme="night"] .text-red {
+  color: #ff6b8f;
+}
+:root[data-theme="night"] :is(.bg-yellow, .bg-blue, .bg-green, .bg-orange, .bg-pink, .bg-red, .bg-lav) {
+  color: var(--color-line);
+}
+
+/* Secondary text on a bright plate (a pressed button, a coloured chip) is dark in every theme. */
+:is(.btn[aria-pressed="true"], .bg-yellow, .bg-blue, .bg-green, .bg-orange, .bg-pink, .chip[style*="--c"]) .text-muted {
+  color: color-mix(in srgb, var(--color-line) 78%, transparent);
 }
 
 @keyframes blink {
@@ -174,7 +219,7 @@ html[data-font] .font-term {
   width: 8px;
   height: 8px;
   background: var(--color-green);
-  box-shadow: 0 0 0 2px var(--color-ink);
+  box-shadow: 0 0 0 2px var(--color-line);
   animation: blink 1s steps(1) infinite;
 }
 

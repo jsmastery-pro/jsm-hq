@@ -117,6 +117,7 @@ HQ never stores key values and never reads your env files.
 | Setting | Where | Applies |
 | --- | --- | --- |
 | Office name (the sign on the wall) | Settings → Project | Right away, for everyone on the project |
+| Theme: Auto, Classic or Night (Auto follows your system's light or dark mode; a theme recolours the office and the panels) | Settings → Project | Right away, in this browser only |
 | Font: Pixel, Clean or Mono | Settings → Project | Right away, in this browser only. The office itself stays pixel. |
 | Review tool | Settings → Workflow | Right away |
 | Agents, roles, CLI, mode | Settings → Team | Next time the agent starts |

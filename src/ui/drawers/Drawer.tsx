@@ -10,7 +10,7 @@ import { TerminalDrawer } from "./TerminalDrawer";
 
 export function DrawerHeader({ children }: { children: ReactNode }) {
   return (
-    <div className="flex items-center gap-2.5 border-b-[3px] border-ink px-3 py-2">
+    <div className="flex items-center gap-2.5 border-b-[3px] border-line px-3 py-2">
       <div className="flex min-w-0 flex-1 items-center gap-2.5">{children}</div>
       <MaximizeButton />
       <button className="btn px-2.5" aria-label="Close" onClick={() => ui.closeDrawer()}>
@@ -74,7 +74,7 @@ function ResizeHandle() {
       onPointerCancel={up}
       onDoubleClick={() => ui.setDrawerWidth(DRAWER_DEFAULT)}
     >
-      <div className="my-auto h-12 w-[4px] bg-ink opacity-0 transition-opacity group-hover:opacity-60" />
+      <div className="my-auto h-12 w-[4px] bg-line opacity-0 transition-opacity group-hover:opacity-60" />
     </div>
   );
 }

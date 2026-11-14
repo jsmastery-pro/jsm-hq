@@ -2,6 +2,7 @@
 // Pixi Graphics (live layer). All drawing helpers take a Pen.
 
 import type { Graphics } from "pixi.js";
+import { shade } from "./shade";
 
 export interface Pen {
   rect(x: number, y: number, w: number, h: number, color: string, alpha?: number): void;
@@ -14,7 +15,7 @@ export class CanvasPen implements Pen {
   rect(x: number, y: number, w: number, h: number, color: string, alpha = 1) {
     if (w <= 0 || h <= 0) return;
     this.g.globalAlpha = alpha;
-    this.g.fillStyle = color;
+    this.g.fillStyle = shade(color);
     this.g.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
     this.g.globalAlpha = 1;
   }
@@ -24,7 +25,7 @@ export class GfxPen implements Pen {
   constructor(public g: Graphics) {}
   rect(x: number, y: number, w: number, h: number, color: string, alpha = 1) {
     if (w <= 0 || h <= 0 || alpha <= 0) return;
-    this.g.rect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)).fill({ color, alpha });
+    this.g.rect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)).fill({ color: shade(color), alpha });
   }
 }
 
