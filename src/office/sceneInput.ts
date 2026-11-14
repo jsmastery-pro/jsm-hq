@@ -10,16 +10,29 @@ type Target = { hit: Hit; rect: PxRect };
 
 const inside = (r: PxRect, x: number, y: number) => x >= r.x && y >= r.y && x <= r.x + r.w && y <= r.y + r.h;
 
+/** Smallest click target on screen, in CSS px. Agents are ~14 world px wide and walk around. */
+const MIN_TARGET = 24;
+
+/** The rect to hit-test: at least MIN_TARGET screen px each way at the current zoom. */
+function grow(r: PxRect, zoom: number): PxRect {
+  const min = MIN_TARGET / zoom;
+  const dx = Math.max(0, (min - r.w) / 2);
+  const dy = Math.max(0, (min - r.h) / 2);
+  return { x: r.x - dx, y: r.y - dy, w: r.w + 2 * dx, h: r.h + 2 * dy };
+}
+
 function hitTest(s: OfficeScene, sx: number, sy: number): Target | null {
   const l = s.layout;
   if (!l) return null;
   const { x, y } = s.camera.screenToWorld(sx, sy);
+  const z = s.camera.zoom;
+  // Front-most agent first, then furniture. The returned rect is the drawn one, for the highlight.
   const bots = [...s.bots.values()].sort((a, b) => b.y - a.y);
   for (const b of bots) {
     const rect = s.botRect(b);
-    if (inside(rect, x, y)) return { hit: { kind: "agent", id: b.config.id, rect }, rect };
+    if (inside(grow(rect, z), x, y)) return { hit: { kind: "agent", id: b.config.id, rect }, rect };
   }
-  for (const h of l.hits) if (inside(h.rect, x, y)) return { hit: h, rect: h.rect };
+  for (const h of l.hits) if (inside(grow(h.rect, z), x, y)) return { hit: h, rect: h.rect };
   return null;
 }
 
@@ -60,12 +73,12 @@ export function attachInput(s: OfficeScene): () => void {
   const el = s.app.canvas;
   let down: { x: number; y: number; lastX: number; lastY: number; dragging: boolean } | null = null;
 
-  const local = (e: PointerEvent | WheelEvent) => {
+  const local = (e: MouseEvent) => {
     const r = el.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
 
-  const updateHover = (e: PointerEvent) => {
+  const updateHover = (e: MouseEvent) => {
     const p = local(e);
     const target = hitTest(s, p.x, p.y);
     s.hover = target ? { rect: target.rect, agentId: target.hit.kind === "agent" ? target.hit.id : null } : null;
@@ -114,6 +127,8 @@ export function attachInput(s: OfficeScene): () => void {
     if (Math.abs(wheelAcc) < 80) return;
     s.camera.zoomBy(wheelAcc < 0 ? 1 : -1, local(e));
     wheelAcc = 0;
+    // The world moved under the pointer: re-check what it's over.
+    updateHover(e);
   };
 
   el.addEventListener("pointerdown", onDown);

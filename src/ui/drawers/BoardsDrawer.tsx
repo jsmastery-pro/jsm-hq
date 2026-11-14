@@ -28,7 +28,7 @@ export function BoardsDrawer({ initialBoardId }: { initialBoardId?: string }) {
 
   return (
     <>
-      <DrawerHeader>
+      <DrawerHeader maximizable={false}>
         <b className="text-[18px]">Boards</b>
         <span className="text-[14px] text-muted">{boards.length} in {snap.config.project.name}</span>
       </DrawerHeader>

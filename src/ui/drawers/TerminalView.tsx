@@ -48,10 +48,15 @@ function openOrCopy(href: string, say: (text: string) => void) {
     .catch(() => say("Your browser blocked the new tab. Select the link and copy it."));
 }
 
-/** A real xterm.js terminal fed by the agent's (mock) output stream. */
-export function TerminalView({ agentId, autoFocus = true }: { agentId: string; autoFocus?: boolean }) {
+/**
+ * A real xterm.js terminal fed by the agent's (mock) output stream.
+ * Keystrokes here reach a real process, so it only takes the keyboard after a click (or Tab),
+ * never just because its drawer opened. Until then HQ's shortcuts (Esc, 1–9) keep working.
+ */
+export function TerminalView({ agentId, autoFocus = false }: { agentId: string; autoFocus?: boolean }) {
   const host = useRef<HTMLDivElement>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [typing, setTyping] = useState(false);
 
   useEffect(() => {
     if (!notice) return;
@@ -89,6 +94,10 @@ export function TerminalView({ agentId, autoFocus = true }: { agentId: string; a
       if (href) openOrCopy(href, setNotice);
     };
     el.addEventListener("click", onClick, true);
+    const onFocusIn = () => setTyping(true);
+    const onFocusOut = () => setTyping(false);
+    el.addEventListener("focusin", onFocusIn);
+    el.addEventListener("focusout", onFocusOut);
     let unsub = () => {};
     let ro: ResizeObserver | null = null;
 
@@ -143,6 +152,8 @@ export function TerminalView({ agentId, autoFocus = true }: { agentId: string; a
       disposed = true;
       window.removeEventListener(FONT_EVENT, onFont);
       el.removeEventListener("click", onClick, true);
+      el.removeEventListener("focusin", onFocusIn);
+      el.removeEventListener("focusout", onFocusOut);
       unsub();
       ro?.disconnect();
       term.dispose();
@@ -151,7 +162,15 @@ export function TerminalView({ agentId, autoFocus = true }: { agentId: string; a
 
   return (
     <div className="relative h-full min-h-0 w-full">
-      <div ref={host} className="h-full min-h-0 w-full bg-navy-2" />
+      <div ref={host} className={`h-full min-h-0 w-full bg-navy-2 outline-offset-[-3px] ${typing ? "outline outline-[3px] outline-blue" : ""}`} />
+      {!notice && (
+        <div
+          aria-hidden
+          className={`pointer-events-none absolute right-3 top-2 z-10 border-2 border-ink px-1.5 py-0.5 text-[12px] ${typing ? "bg-blue text-ink" : "bg-cream text-ink"}`}
+        >
+          {typing ? "Typing to the terminal · click outside to stop" : "Click to type"}
+        </div>
+      )}
       {notice && (
         <div role="status" className="absolute bottom-3 left-1/2 z-10 max-w-[90%] -translate-x-1/2 border-2 border-ink bg-yellow px-2 py-1 text-[13px] text-ink">
           {notice}

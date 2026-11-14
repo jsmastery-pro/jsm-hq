@@ -22,6 +22,9 @@ export function TopBar() {
   const speed = useOffice((s) => s.speed);
   const hasDev = useOffice((s) => s.presets !== null);
   const planBoardId = useUi((s) => s.planBoardId);
+  const drawerKind = useUi((s) => s.drawer?.kind ?? null);
+  // Top-bar buttons toggle their drawer, so a second click closes it.
+  const toggle = (kind: "actions" | "boards" | "prs" | "terminal", open: () => void) => (drawerKind === kind ? ui.closeDrawer() : open());
   const attention = selectAttention(snap).total;
   const debugOpen = useUi((s) => s.debugOpen);
   const live = useOffice((s) => s.live);
@@ -38,7 +41,7 @@ export function TopBar() {
   const openPrs = snap.pullRequests.filter((p) => !p.merged && !p.closed).length;
 
   return (
-    <header className="panel fixed left-4 right-4 top-[10px] z-10 flex h-[50px] items-center gap-4 px-3">
+    <header className="panel fixed left-4 right-4 top-[10px] z-10 flex h-[50px] items-center gap-3 px-3 xl:gap-4">
       <div className="flex min-w-0 items-center gap-2.5">
         <Logo />
         <b className="whitespace-nowrap text-[22px] font-bold tracking-[0.02em]">JSM HQ</b>
@@ -54,8 +57,9 @@ export function TopBar() {
       </div>
       <div className="flex-1" />
 
-      <label className="flex items-center gap-2 text-[14px]">
-        <span className="text-muted">Plan wall</span>
+      {/* Below 1280px the view controls step aside so the actions stay reachable; zoom keeps wheel and +/-. */}
+      <label className="hidden items-center gap-2 text-[14px] xl:flex">
+        <span className="hidden whitespace-nowrap text-muted 2xl:inline">Plan wall</span>
         <select
           className="field w-[190px] py-0 text-[14px]"
           value={planBoardId ?? ""}
@@ -72,7 +76,7 @@ export function TopBar() {
       </label>
 
       {hasDev && (
-        <div className="flex items-center gap-1.5" role="group" aria-label="Simulation speed">
+        <div className="hidden items-center gap-1.5 xl:flex" role="group" aria-label="Simulation speed">
           {SPEEDS.map((s) => (
             <button key={s} className="btn px-2 text-[14px]" aria-pressed={speed === s} onClick={() => officeActions.setSpeed(s)}>
               {s}x
@@ -81,7 +85,7 @@ export function TopBar() {
         </div>
       )}
 
-      <div className="flex gap-1.5">
+      <div className="hidden gap-1.5 lg:flex">
         <button className="btn w-8 px-0 text-[18px] leading-none" aria-label="Zoom out" onClick={() => ui.zoom(-1)}>
           −
         </button>
@@ -91,7 +95,7 @@ export function TopBar() {
       </div>
 
       <div
-        className="flex items-center gap-2 whitespace-nowrap border-[3px] border-ink bg-navy px-2.5 py-0.5 text-[15px] text-cream"
+        className="hidden items-center gap-2 whitespace-nowrap border-[3px] border-ink bg-navy px-2.5 py-0.5 text-[15px] text-cream lg:flex"
         title="Each agent runs in its own isolated Docker Sandbox (microVM)"
       >
         <span>
@@ -114,25 +118,31 @@ export function TopBar() {
         <button
           className="btn text-[14px]"
           style={attention ? { background: "#ffec27" } : undefined}
-          onClick={() => ui.openActions()}
+          aria-pressed={drawerKind === "actions"}
+          onClick={() => toggle("actions", ui.openActions)}
           title="Everything waiting on you"
         >
           Action items{attention ? ` · ${attention}` : ""}
         </button>
-        <button className="btn text-[14px]" onClick={() => ui.openBoards(planBoardId ?? undefined)}>
+        <button className="btn text-[14px]" aria-pressed={drawerKind === "boards"} onClick={() => toggle("boards", () => ui.openBoards(planBoardId ?? undefined))}>
           Boards
         </button>
-        <button className="btn text-[14px]" onClick={() => ui.openPrs()}>
+        <button className="btn whitespace-nowrap text-[14px]" aria-pressed={drawerKind === "prs"} onClick={() => toggle("prs", ui.openPrs)}>
           PRs{openPrs ? ` · ${openPrs}` : ""}
         </button>
-        <button className="btn text-[14px]" onClick={() => ui.openTerminal()} title="Your own shell on this machine: the repo, an agent's folder or any folder">
+        <button
+          className="btn text-[14px]"
+          aria-pressed={drawerKind === "terminal"}
+          onClick={() => toggle("terminal", ui.openTerminal)}
+          title="Your own shell on this machine: the repo, an agent's folder or any folder"
+        >
           Terminal
         </button>
       </div>
       <button className="btn text-[14px]" onClick={() => ui.openSettings("team")}>
         Settings
       </button>
-      <button className="btn text-[14px]" aria-pressed={debugOpen} onClick={() => ui.toggleDebug()} title="Debug panel (D)">
+      <button className="btn hidden text-[14px] xl:block" aria-pressed={debugOpen} onClick={() => ui.toggleDebug()} title="Debug panel (D)">
         Debug
       </button>
     </header>

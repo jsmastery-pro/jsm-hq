@@ -8,11 +8,12 @@ import { PrDrawer } from "./PrDrawer";
 import { ActionItemsDrawer } from "./ActionItemsDrawer";
 import { TerminalDrawer } from "./TerminalDrawer";
 
-export function DrawerHeader({ children }: { children: ReactNode }) {
+/** `maximizable` is off for the Boards modal: it's already near full-screen, and the setting is shared with the side drawers. */
+export function DrawerHeader({ children, maximizable = true }: { children: ReactNode; maximizable?: boolean }) {
   return (
     <div className="flex items-center gap-2.5 border-b-[3px] border-ink px-3 py-2">
       <div className="flex min-w-0 flex-1 items-center gap-2.5">{children}</div>
-      <MaximizeButton />
+      {maximizable && <MaximizeButton />}
       <button className="btn px-2.5" aria-label="Close" onClick={() => ui.closeDrawer()}>
         ✕
       </button>

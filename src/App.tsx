@@ -16,7 +16,7 @@ import { SettingsModal } from "./ui/settings/SettingsModal";
 function useKeyboard() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const el = e.target as HTMLElement | null;
+      const el = e.target instanceof HTMLElement ? e.target : null;
       // Never steal keys from inputs or the terminal.
       if (el && (el.closest("input, textarea, select, [contenteditable], .xterm") || e.metaKey || e.ctrlKey || e.altKey)) {
         if (e.key === "Escape" && el.closest(".xterm")) el.blur();
@@ -39,7 +39,7 @@ function useKeyboard() {
         const agent = team[Number(e.key) - 1];
         if (agent) ui.openAgent(agent.id);
       } else handled = false;
-      // The drawer focuses its terminal; don't let this key land in it too.
+      // Don't let a handled key also land in whatever opens next.
       if (handled) e.preventDefault();
     };
     window.addEventListener("keydown", onKey);
