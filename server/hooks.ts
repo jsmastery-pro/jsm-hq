@@ -1,4 +1,4 @@
-// Claude Code / Codex hooks → agent state. Each agent's hooks POST to
+// Claude Code / Codex / Antigravity hooks → agent state. Each agent's hooks POST to
 // /hook/<agentId>/<Event> with the hook's JSON payload.
 
 import type { Hub } from "./hub";
@@ -9,6 +9,9 @@ interface HookPayload {
   tool_name?: string;
   message?: string;
   notification_type?: string;
+  lastUserInput?: string;
+  toolCall?: { name?: string; args?: unknown };
+  hookEventName?: string;
 }
 
 const clip = (s: string, n = 80) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
@@ -38,16 +41,21 @@ export function handleHook(hub: Hub, inbox: Inbox, agentId: string, event: strin
       hub.setStatus(agentId, { state: "idle", note: "Ready" });
       break;
     case "UserPromptSubmit":
+    case "PreInvocation": {
       turnOpen.set(agentId, true);
-      hub.setStatus(agentId, { state: "working", note: body.prompt ? clip(body.prompt.replace(/\s+/g, " ")) : null });
+      const prompt = body.prompt ?? body.lastUserInput;
+      hub.setStatus(agentId, { state: "working", note: prompt ? clip(prompt.replace(/\s+/g, " ")) : null });
       if (st.state !== "working") hub.activity("task.started", agentId, `${name} is working`);
       break;
-    case "PreToolUse":
+    }
+    case "PreToolUse": {
       // Stale: the turn already ended. (Unknown, e.g. after an HQ restart, is allowed.)
       if (turnOpen.get(agentId) === false) break;
+      const toolName = body.tool_name ?? body.toolCall?.name;
       // Also clears "needs input" once a permission prompt is answered.
-      if (st.state !== "working" || st.note?.startsWith("Asking")) hub.setStatus(agentId, { state: "working", note: body.tool_name ? `Using ${body.tool_name}` : null });
+      if (st.state !== "working" || st.note?.startsWith("Asking")) hub.setStatus(agentId, { state: "working", note: toolName ? `Using ${toolName}` : null });
       break;
+    }
     case "PostToolUse":
       // A tool finished: if it was waiting on the user (a question or a permission), they answered.
       if (turnOpen.get(agentId) === false) break;

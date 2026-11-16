@@ -1,4 +1,13 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+// Ensure common CLI directories like ~/.gemini/bin are on PATH
+const geminiBin = join(homedir(), ".gemini", "bin");
+if (existsSync(geminiBin) && !process.env.PATH?.includes(geminiBin)) {
+  process.env.PATH = `${geminiBin}${process.platform === "win32" ? ";" : ":"}${process.env.PATH ?? ""}`;
+}
 
 export interface RunResult {
   ok: boolean;

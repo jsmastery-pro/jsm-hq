@@ -85,7 +85,7 @@ function AgentRow({ agent, expanded, onToggle, onRemove }: { agent: AgentConfig;
       </div>
       {agent.mode === "local" && (
         <div className="border-t-2 border-dashed border-cream-3 px-3 py-1 text-[12px] text-muted">
-          Local mode runs plain <code>{agent.cli}</code> in the agent's own folder. Permission prompts stay on.
+          Local mode runs plain <code>{agent.cli === "antigravity" ? "agy" : agent.cli}</code> in the agent's own folder. Permission prompts stay on.
         </div>
       )}
       {expanded && (
@@ -108,7 +108,7 @@ function AgentRow({ agent, expanded, onToggle, onRemove }: { agent: AgentConfig;
               className="field"
               value={agent.model}
               placeholder={`${CLI_LABEL[agent.cli]} default`}
-              list={agent.cli === "codex" ? "codex-models" : "claude-models"}
+              list={agent.cli === "codex" ? "codex-models" : agent.cli === "antigravity" ? "antigravity-models" : "claude-models"}
               onCommit={(v) => set({ model: v.trim() })}
             />
           </Field>
@@ -185,6 +185,13 @@ function AddAgent() {
       </p>
       <datalist id="codex-models">
         <option value="gpt-5.6-sol" />
+      </datalist>
+      <datalist id="antigravity-models">
+        <option value="gemini-3.8-flash-high" />
+        <option value="gemini-3.8-pro" />
+        <option value="gemini-3.8-pro-max" />
+        <option value="gemini-3.8-flash" />
+        <option value="auto" />
       </datalist>
       <datalist id="claude-models">
         <option value="opus" />

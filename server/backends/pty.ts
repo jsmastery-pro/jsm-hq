@@ -3,6 +3,9 @@
 // stops; their sandboxes and folders are kept. Also usable on macOS/Linux with
 // HQ_SESSION_BACKEND=pty, which is how it's tested without a Windows machine.
 
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { spawn as spawnPty, type IPty } from "@lydell/node-pty";
 import xtermHeadless from "@xterm/headless";
 import { run } from "../lib/exec";
@@ -34,6 +37,8 @@ export async function resolveCommand(file: string, args: string[]): Promise<{ fi
   if (exe) return { file: exe, args };
   const script = found.find((p) => /\.(cmd|bat)$/i.test(p));
   if (script) return { file: "cmd.exe", args: ["/d", "/s", "/c", script, ...args] };
+  const userGemini = join(homedir(), ".gemini", "bin", `${file}.exe`);
+  if (existsSync(userGemini)) return { file: userGemini, args };
   throw new Error(`${file} was not found on PATH.`);
 }
 

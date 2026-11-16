@@ -2,9 +2,9 @@
 // the agent is launched. Everything else (hooks → state, Team MCP, delivery)
 // is shared — Codex and Claude Code send the same hook payloads.
 
-import { agentWrite } from "./lib/agentFs";
+import { agentRead, agentWrite } from "./lib/agentFs";
 import type { AgentCli, AgentConfig, HqConfig } from "../src/data/types";
-import { adoptRoleFile, excludeFromGit, HOOK_SCRIPT, type RoleExtras, hookCommand, hookScriptFor, hqUrl, MCP_CONFIG, roleMd, writeClaudeFiles, writeHookScript } from "./agentFiles";
+import { adoptRoleFile, excludeFromGit, HOOK_SCRIPT, type RoleExtras, hookCommand, hookScriptFor, hqUrl, MCP_CONFIG, ROLE_FILE, roleMd, writeClaudeFiles, writeHookScript } from "./agentFiles";
 import { run } from "./lib/exec";
 
 export interface Launch {
@@ -79,7 +79,96 @@ const codex: CliAdapter = {
   },
 };
 
-export const adapters: Record<AgentCli, CliAdapter> = { claude, codex };
+// ---------------------------------------------------------------- Antigravity (agy)
+
+export const AGY_MCP_CONFIG = ".agents/mcp_config.json";
+export const AGY_HOOKS_CONFIG = ".agents/hooks.json";
+export const AGY_RULES_ROLE = ".agents/rules/jsmhq-role.md";
+
+const AGY_EVENTS = ["SessionStart", "PreInvocation", "PreToolUse", "PostToolUse", "Stop", "SessionEnd"] as const;
+
+export function agyHooksConfig(agent: AgentConfig, cfg: HqConfig, token: string, dir: string): Record<string, unknown> {
+  const url = hqUrl(agent, cfg.project.hqPort);
+  const script = hookScriptFor(agent, dir);
+  const hooks: Record<string, unknown> = {};
+  for (const event of AGY_EVENTS) {
+    const cmd = hookCommand(url, token, agent.id, event, script);
+    if (event === "PreToolUse" || event === "PostToolUse") {
+      hooks[event] = [{ matcher: "*", hooks: [{ type: "command", command: cmd, timeout: 5 }] }];
+    } else {
+      hooks[event] = [{ type: "command", command: cmd, timeout: 5 }];
+    }
+  }
+  return { "jsmhq-hooks": hooks };
+}
+
+export function agyMcpConfig(agent: AgentConfig, cfg: HqConfig, token: string): Record<string, unknown> {
+  const url = hqUrl(agent, cfg.project.hqPort);
+  return {
+    mcpServers: {
+      hq: {
+        url: `${url}/mcp`,
+        headers: { Authorization: `Bearer ${token}`, "X-HQ-Agent": agent.id },
+      },
+    },
+  };
+}
+
+const antigravity: CliAdapter = {
+  async writeFiles(dir, agent, cfg, token, extras = {}) {
+    const ownRole = await adoptRoleFile(dir);
+    const roleContent = roleMd(agent, cfg, { ...extras, ownRole });
+    agentWrite(dir, ROLE_FILE, roleContent);
+
+    // Workspace rules: .agents/rules/jsmhq-role.md (always active)
+    agentWrite(dir, AGY_RULES_ROLE, `---\ntrigger: always_on\n---\n${roleContent}`);
+
+    // If GEMINI.md is not tracked by the repo, write it too for instant rule discovery
+    const trackedGemini = await run("git", ["ls-files", "--error-unmatch", "GEMINI.md"], { cwd: dir });
+    if (!trackedGemini.ok) {
+      agentWrite(dir, "GEMINI.md", roleContent);
+    }
+
+    // Merge or write .agents/hooks.json
+    let existingHooks: Record<string, unknown> = {};
+    const hooksText = agentRead(dir, AGY_HOOKS_CONFIG);
+    if (hooksText) {
+      try {
+        existingHooks = JSON.parse(hooksText) as Record<string, unknown>;
+      } catch {}
+    }
+    const hqHooks = agyHooksConfig(agent, cfg, token, dir);
+    agentWrite(dir, AGY_HOOKS_CONFIG, JSON.stringify({ ...existingHooks, ...hqHooks }, null, 2) + "\n");
+
+    // Merge or write .agents/mcp_config.json
+    let existingMcp: { mcpServers?: Record<string, unknown> } = {};
+    const mcpText = agentRead(dir, AGY_MCP_CONFIG);
+    if (mcpText) {
+      try {
+        existingMcp = JSON.parse(mcpText) as { mcpServers?: Record<string, unknown> };
+      } catch {}
+    }
+    const hqMcp = agyMcpConfig(agent, cfg, token);
+    const mcpServers = { ...(existingMcp.mcpServers ?? {}), ...((hqMcp as { mcpServers: Record<string, unknown> }).mcpServers) };
+    agentWrite(dir, AGY_MCP_CONFIG, JSON.stringify({ ...existingMcp, mcpServers }, null, 2) + "\n");
+
+    if (hookScriptFor(agent, dir)) writeHookScript(dir);
+    excludeFromGit(dir, [
+      ROLE_FILE,
+      AGY_RULES_ROLE,
+      AGY_HOOKS_CONFIG,
+      AGY_MCP_CONFIG,
+      ...(trackedGemini.ok ? [] : ["GEMINI.md"]),
+      HOOK_SCRIPT,
+    ]);
+  },
+  launch(agent) {
+    const model = agent.model.trim() && !/^default$/i.test(agent.model.trim()) ? agent.model.trim() : null;
+    return { sbxAgent: "agy", args: model ? ["--model", model] : [] };
+  },
+};
+
+export const adapters: Record<AgentCli, CliAdapter> = { claude, codex, antigravity };
 
 /** The command a Local-mode agent runs on the host. */
-export const localBinary: Record<AgentCli, string> = { claude: "claude", codex: "codex" };
+export const localBinary: Record<AgentCli, string> = { claude: "claude", codex: "codex", antigravity: "agy" };

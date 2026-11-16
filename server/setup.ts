@@ -1,7 +1,8 @@
 // The setup checklist: what this machine has, and how to fix what's missing.
 
 import { existsSync, readFileSync } from "node:fs";
-import { arch, cpus, platform, release, totalmem } from "node:os";
+import { arch, cpus, homedir, platform, release, totalmem } from "node:os";
+import { join } from "node:path";
 import type { AgentConfig, SetupCheck, SetupFix, SetupState } from "../src/data/types";
 import { usesTmux } from "./backends";
 import { parseCliJson, sandboxList } from "./lib/json";
@@ -194,7 +195,31 @@ async function checkOpenAiSecret(sbxOk: boolean): Promise<Check> {
   return { ...base, status: "missing", detail: "Codex agents can't sign in until this is set. Opens your browser to sign in with ChatGPT.", fix: fix("sbx secret set openai --oauth", true, "https://docs.docker.com/ai/sandboxes/") };
 }
 
-/** `team` adds the Codex checks only when the team has Codex agents. */
+async function checkAntigravity(): Promise<Check> {
+  const base = { id: "antigravity" as const, label: "Antigravity CLI (agy)", neededFor: "local" as const };
+  let v = await run("agy", ["--version"], { timeoutMs: 8000 });
+  if (!v.ok) {
+    const agyBin = join(homedir(), ".gemini", "bin", os === "win32" ? "agy.exe" : "agy");
+    if (existsSync(agyBin)) {
+      v = await run(agyBin, ["--version"], { timeoutMs: 8000 });
+    }
+  }
+  if (v.ok) return { ...base, status: "ok", detail: v.stdout.trim(), fix: null };
+  return {
+    ...base,
+    status: "missing",
+    detail: "Not installed. Only needed for Antigravity agents in Local mode.",
+    fix: fix(
+      os === "win32"
+        ? "irm https://antigravity.google/cli/install.ps1 | iex"
+        : "curl -fsSL https://antigravity.google/cli/install.sh | bash",
+      false,
+      "https://antigravity.google/docs/cli/reference"
+    ),
+  };
+}
+
+/** `team` adds the Codex and Antigravity checks only when the team has those agents. */
 export async function runSetupChecks(repo: RepoInfo, team: AgentConfig[] = []): Promise<SetupState> {
   const brew = os === "darwin" && (await has("brew"));
   const [osCheck, sbx, tmux, claude, gh] = await Promise.all([checkOs(), checkSbx(brew), checkTmux(brew), checkClaude(), checkGh(brew)]);
@@ -205,12 +230,24 @@ export async function runSetupChecks(repo: RepoInfo, team: AgentConfig[] = []): 
   const codexAgents = team.filter((a) => a.cli === "codex");
   if (codexAgents.some((a) => a.mode === "sandbox")) checks.splice(5, 0, await checkOpenAiSecret(sbxOk));
   if (codexAgents.some((a) => a.mode === "local")) checks.push(await checkCodex());
+  const antigravityAgents = team.filter((a) => a.cli === "antigravity");
+  if (antigravityAgents.some((a) => a.mode === "local")) checks.push(await checkAntigravity());
   const ok = (c: SetupCheck) => c.status === "ok";
+  const localAgents = team.filter((a) => a.mode === "local");
+  const localOk = localAgents.length === 0
+    ? ok(claude)
+    : localAgents.every((a) =>
+        a.cli === "claude"
+          ? ok(claude)
+          : a.cli === "codex"
+          ? checks.find((c) => c.id === "codex")?.status === "ok"
+          : checks.find((c) => c.id === "antigravity")?.status === "ok",
+      );
   return {
     machine: { cpus: cpus().length, memoryGb: Math.round(totalmem() / 1024 ** 3), persistentAgents: usesTmux() },
     checks,
     sandboxReady: osCheck.status !== "unsupported" && ok(sbx) && ok(login) && ok(policy) && ok(tmux),
-    localReady: ok(tmux) && ok(claude),
+    localReady: ok(tmux) && localOk,
     checkedAt: new Date().toISOString(),
   };
 }
