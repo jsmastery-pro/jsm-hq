@@ -6,7 +6,7 @@ import { join } from "node:path";
 import type { AgentConfig, SetupCheck, SetupFix, SetupState } from "../src/data/types";
 import { usesTmux } from "./backends";
 import { parseCliJson, sandboxList } from "./lib/json";
-import { has, run } from "./lib/exec";
+import { ensureCliPaths, has, run } from "./lib/exec";
 import type { RepoInfo } from "./repo";
 
 const SBX_DOCS = "https://docs.docker.com/ai/sandboxes/install/";
@@ -196,11 +196,13 @@ async function checkOpenAiSecret(sbxOk: boolean): Promise<Check> {
 }
 
 async function checkAntigravity(): Promise<Check> {
+  ensureCliPaths();
   const base = { id: "antigravity" as const, label: "Antigravity CLI (agy)", neededFor: "local" as const };
   let v = await run("agy", ["--version"], { timeoutMs: 8000 });
   if (!v.ok) {
     const agyBin = join(homedir(), ".gemini", "bin", os === "win32" ? "agy.exe" : "agy");
     if (existsSync(agyBin)) {
+      ensureCliPaths();
       v = await run(agyBin, ["--version"], { timeoutMs: 8000 });
     }
   }

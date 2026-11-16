@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
@@ -112,26 +112,67 @@ async function main() {
     // 4. Test handleHook with Antigravity payloads
     const hub = new Hub("test-project", tmpDir, mockCfg, () => {});
     const inbox = new Inbox(hub, async () => true);
+    try {
+      // Test PreInvocation hook
+      const preInvoc = handleHook(hub, inbox, "john", "PreInvocation", { lastUserInput: "Fix the build" });
+      assert(preInvoc.ok, "PreInvocation hook should succeed");
+      assert(hub.status("john")?.state === "working", "Status should be working after PreInvocation");
+      assert(hub.status("john")?.note === "Fix the build", "Status note should match user input");
 
-    // Test PreInvocation hook
-    const preInvoc = handleHook(hub, inbox, "john", "PreInvocation", { lastUserInput: "Fix the build" });
-    assert(preInvoc.ok, "PreInvocation hook should succeed");
-    assert(hub.status("john")?.state === "working", "Status should be working after PreInvocation");
-    assert(hub.status("john")?.note === "Fix the build", "Status note should match user input");
+      // Test PreToolUse clearing an Asking note
+      hub.setStatus("john", { state: "needs-input", note: "Asking: Approve tool?" });
+      const preTool = handleHook(hub, inbox, "john", "PreToolUse", {
+        toolCall: { name: "run_command", args: { command: "npm test" } },
+      });
+      assert(preTool.ok, "PreToolUse hook should succeed");
+      assert(hub.status("john")?.state === "working", "Status should be working after PreToolUse");
+      assert(hub.status("john")?.note === "Using run_command", "Status note should reflect tool name");
 
-    // Test PreToolUse clearing an Asking note
-    hub.setStatus("john", { state: "needs-input", note: "Asking: Approve tool?" });
-    const preTool = handleHook(hub, inbox, "john", "PreToolUse", {
-      toolCall: { name: "run_command", args: { command: "npm test" } },
-    });
-    assert(preTool.ok, "PreToolUse hook should succeed");
-    assert(hub.status("john")?.state === "working", "Status should be working after PreToolUse");
-    assert(hub.status("john")?.note === "Using run_command", "Status note should reflect tool name");
+      // Test Stop hook
+      const stopRes = handleHook(hub, inbox, "john", "Stop", {});
+      assert(stopRes.ok, "Stop hook should succeed");
+      assert(hub.status("john")?.state === "idle", "Status should be idle after Stop");
+    } finally {
+      inbox.stop();
+    }
 
-    // Test Stop hook
-    const stopRes = handleHook(hub, inbox, "john", "Stop", {});
-    assert(stopRes.ok, "Stop hook should succeed");
-    assert(hub.status("john")?.state === "idle", "Status should be idle after Stop");
+    // 5. Test JSONC parsing with comments and trailing commas
+    const jsoncSample = `{\n  // comment\n  "mcpServers": {\n    "custom": {\n      "command": "test",\n    },\n  },\n}`;
+    writeFileSync(mcpPath, jsoncSample);
+    await adapters.antigravity.writeFiles(tmpDir, mockAgent, mockCfg, "dummy-token-123");
+    const mergedMcp = JSON.parse(readFileSync(mcpPath, "utf8"));
+    assert(!!mergedMcp.mcpServers?.custom, "Custom MCP server from JSONC should be preserved");
+    assert(!!mergedMcp.mcpServers?.hq, "HQ MCP server should be added to merged config");
+
+    // 6. Test that user-authored untracked GEMINI.md is NOT overwritten
+    const userGemini = "# My Custom Instructions\nDo not overwrite.";
+    writeFileSync(geminiPath, userGemini);
+    await adapters.antigravity.writeFiles(tmpDir, mockAgent, mockCfg, "dummy-token-123");
+    assert(readFileSync(geminiPath, "utf8") === userGemini, "User GEMINI.md must be preserved");
+
+    // 7. Test rejecting tracked MCP / Hooks config
+    execFileSync("git", ["add", "-f", AGY_MCP_CONFIG], { cwd: tmpDir });
+    let threwTracked = false;
+    try {
+      await adapters.antigravity.writeFiles(tmpDir, mockAgent, mockCfg, "dummy-token-123");
+    } catch {
+      threwTracked = true;
+    }
+    assert(threwTracked, "Must throw if AGY_MCP_CONFIG is tracked in git");
+    execFileSync("git", ["rm", "-f", AGY_MCP_CONFIG], { cwd: tmpDir });
+
+    // 8. Test screen reconciliation regexes
+    const BUSY = /esc to interrupt|esc.*to cancel/i;
+    assert(!BUSY.test("Finished generating types."), "BUSY must not match finished generating response");
+    assert(!BUSY.test("Thinking about the problem..."), "BUSY must not match conversational thinking");
+    assert(BUSY.test("Press esc to interrupt"), "BUSY must match esc to interrupt");
+    assert(BUSY.test("Press esc to cancel"), "BUSY must match esc to cancel");
+
+    const DIALOG = /Enter to select|↑\/↓ to navigate|Do you want to (proceed|make this edit|create)|Would you like to|^\s*[❯›]\s*1\.\s|\bAllow\?|\bApprove\?|\[y\/n\]/im;
+    assert(!DIALOG.test("Approved the pull request"), "DIALOG must not match 'Approved the pull request'");
+    assert(!DIALOG.test("PR approved by reviewer"), "DIALOG must not match 'PR approved'");
+    assert(DIALOG.test("Approve? [y/n]"), "DIALOG must match active 'Approve? [y/n]' prompt");
+    assert(DIALOG.test("Do you want to proceed"), "DIALOG must match 'Do you want to proceed'");
 
     console.log("All Antigravity adapter tests passed successfully!");
   } finally {

@@ -8,7 +8,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { spawn as spawnPty, type IPty } from "@lydell/node-pty";
 import xtermHeadless from "@xterm/headless";
-import { run } from "../lib/exec";
+import { ensureCliPaths, run } from "../lib/exec";
 import type { ExitInfo, SessionBackend, TermSize } from "./types";
 
 const { Terminal } = xtermHeadless;
@@ -30,16 +30,25 @@ const procs = new Map<string, Proc>();
  * find the program with `where`; `.cmd`/`.bat` files run through cmd.exe.
  */
 export async function resolveCommand(file: string, args: string[]): Promise<{ file: string; args: string[] }> {
-  if (process.platform !== "win32" || /[\\/]/.test(file)) return { file, args };
-  const r = await run("where", [file], { timeoutMs: 5000 });
-  const found = r.stdout.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const exe = found.find((p) => /\.exe$/i.test(p));
-  if (exe) return { file: exe, args };
-  const script = found.find((p) => /\.(cmd|bat)$/i.test(p));
-  if (script) return { file: "cmd.exe", args: ["/d", "/s", "/c", script, ...args] };
-  const userGemini = join(homedir(), ".gemini", "bin", `${file}.exe`);
+  ensureCliPaths();
+  if (process.platform === "win32") {
+    if (/[\\/]/.test(file)) return { file, args };
+    const r = await run("where", [file], { timeoutMs: 5000 });
+    const found = r.stdout.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const exe = found.find((p) => /\.exe$/i.test(p));
+    if (exe) return { file: exe, args };
+    const script = found.find((p) => /\.(cmd|bat)$/i.test(p));
+    if (script) return { file: "cmd.exe", args: ["/d", "/s", "/c", script, ...args] };
+    const userGemini = join(homedir(), ".gemini", "bin", `${file}.exe`);
+    if (existsSync(userGemini)) return { file: userGemini, args };
+    throw new Error(`${file} was not found on PATH.`);
+  }
+  if (/[\\/]/.test(file)) return { file, args };
+  const userGemini = join(homedir(), ".gemini", "bin", file);
   if (existsSync(userGemini)) return { file: userGemini, args };
-  throw new Error(`${file} was not found on PATH.`);
+  const userLocal = join(homedir(), ".local", "bin", file);
+  if (existsSync(userLocal)) return { file: userLocal, args };
+  return { file, args };
 }
 
 export const ptyBackend: SessionBackend = {

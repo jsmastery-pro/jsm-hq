@@ -4,7 +4,7 @@
 
 import { agentRead, agentWrite } from "./lib/agentFs";
 import type { AgentCli, AgentConfig, HqConfig } from "../src/data/types";
-import { adoptRoleFile, excludeFromGit, HOOK_SCRIPT, type RoleExtras, hookCommand, hookScriptFor, hqUrl, MCP_CONFIG, ROLE_FILE, roleMd, writeClaudeFiles, writeHookScript } from "./agentFiles";
+import { adoptRoleFile, excludeFromGit, HOOK_SCRIPT, type RoleExtras, hookCommand, hookScriptFor, hqUrl, isHqRole, MCP_CONFIG, ROLE_FILE, roleMd, writeClaudeFiles, writeHookScript } from "./agentFiles";
 import { run } from "./lib/exec";
 
 export interface Launch {
@@ -114,8 +114,26 @@ export function agyMcpConfig(agent: AgentConfig, cfg: HqConfig, token: string): 
   };
 }
 
+/** Parses JSON with support for comments and trailing commas (JSONC). */
+export function parseJsonc<T = unknown>(text: string): T {
+  const clean = text
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:])\/\/[^\r\n]*/g, "$1")
+    .replace(/,\s*([\]}])/g, "$1");
+  return JSON.parse(clean) as T;
+}
+
 const antigravity: CliAdapter = {
   async writeFiles(dir, agent, cfg, token, extras = {}) {
+    // A repo that commits its own Antigravity config can't take HQ's without changing tracked files or exposing credentials.
+    const trackedMcp = await run("git", ["ls-files", "--error-unmatch", AGY_MCP_CONFIG], { cwd: dir });
+    if (trackedMcp.ok)
+      throw new Error(`This repo commits ${AGY_MCP_CONFIG}, so HQ can't add its MCP configuration without committing credentials to a tracked file. Untrack that file to use Antigravity.`);
+
+    const trackedHooks = await run("git", ["ls-files", "--error-unmatch", AGY_HOOKS_CONFIG], { cwd: dir });
+    if (trackedHooks.ok)
+      throw new Error(`This repo commits ${AGY_HOOKS_CONFIG}, so HQ can't add its lifecycle hooks without changing a tracked file. Untrack that file to use Antigravity.`);
+
     const ownRole = await adoptRoleFile(dir);
     const roleContent = roleMd(agent, cfg, { ...extras, ownRole });
     agentWrite(dir, ROLE_FILE, roleContent);
@@ -123,30 +141,37 @@ const antigravity: CliAdapter = {
     // Workspace rules: .agents/rules/jsmhq-role.md (always active)
     agentWrite(dir, AGY_RULES_ROLE, `---\ntrigger: always_on\n---\n${roleContent}`);
 
-    // If GEMINI.md is not tracked by the repo, write it too for instant rule discovery
+    // If GEMINI.md is absent or verified as HQ-owned, write it for instant discovery; do not overwrite an existing user-authored GEMINI.md
+    const existingGemini = agentRead(dir, "GEMINI.md");
     const trackedGemini = await run("git", ["ls-files", "--error-unmatch", "GEMINI.md"], { cwd: dir });
-    if (!trackedGemini.ok) {
+    let wroteGemini = false;
+    if (!trackedGemini.ok && (existingGemini === null || isHqRole(existingGemini))) {
       agentWrite(dir, "GEMINI.md", roleContent);
+      wroteGemini = true;
     }
 
-    // Merge or write .agents/hooks.json
+    // Merge or write .agents/hooks.json (support JSONC comments and trailing commas)
     let existingHooks: Record<string, unknown> = {};
     const hooksText = agentRead(dir, AGY_HOOKS_CONFIG);
     if (hooksText) {
       try {
-        existingHooks = JSON.parse(hooksText) as Record<string, unknown>;
-      } catch {}
+        existingHooks = parseJsonc<Record<string, unknown>>(hooksText);
+      } catch (err) {
+        throw new Error(`Failed to parse existing ${AGY_HOOKS_CONFIG}: ${err instanceof Error ? err.message : String(err)}. Fix syntax or remove the file so HQ can manage it safely.`);
+      }
     }
     const hqHooks = agyHooksConfig(agent, cfg, token, dir);
     agentWrite(dir, AGY_HOOKS_CONFIG, JSON.stringify({ ...existingHooks, ...hqHooks }, null, 2) + "\n");
 
-    // Merge or write .agents/mcp_config.json
+    // Merge or write .agents/mcp_config.json (support JSONC comments and trailing commas)
     let existingMcp: { mcpServers?: Record<string, unknown> } = {};
     const mcpText = agentRead(dir, AGY_MCP_CONFIG);
     if (mcpText) {
       try {
-        existingMcp = JSON.parse(mcpText) as { mcpServers?: Record<string, unknown> };
-      } catch {}
+        existingMcp = parseJsonc<{ mcpServers?: Record<string, unknown> }>(mcpText);
+      } catch (err) {
+        throw new Error(`Failed to parse existing ${AGY_MCP_CONFIG}: ${err instanceof Error ? err.message : String(err)}. Fix syntax or remove the file so HQ can manage it safely.`);
+      }
     }
     const hqMcp = agyMcpConfig(agent, cfg, token);
     const mcpServers = { ...(existingMcp.mcpServers ?? {}), ...((hqMcp as { mcpServers: Record<string, unknown> }).mcpServers) };
@@ -158,7 +183,7 @@ const antigravity: CliAdapter = {
       AGY_RULES_ROLE,
       AGY_HOOKS_CONFIG,
       AGY_MCP_CONFIG,
-      ...(trackedGemini.ok ? [] : ["GEMINI.md"]),
+      ...(wroteGemini ? ["GEMINI.md"] : []),
       HOOK_SCRIPT,
     ]);
   },

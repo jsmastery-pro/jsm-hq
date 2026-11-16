@@ -35,9 +35,9 @@ const SHELL_ENV = { ...TERM_ENV, FORCE_HYPERLINK: "1" };
 const SANDBOX_BROWSER = "/usr/local/bin/xdg-open";
 
 // What the agents' screens show (Claude Code, Codex, and Antigravity).
-const BUSY = /esc to interrupt|esc.*cancel|thinking|generating/i; // the footer while a turn runs
+const BUSY = /esc to interrupt|esc.*to cancel/i; // the footer while a turn runs
 // A question or permission prompt (Claude Code's wording; the numbered-option line also covers Codex's).
-const DIALOG = /Enter to select|↑\/↓ to navigate|Do you want to (proceed|make this edit|create)|Would you like to|^\s*[❯›]\s*1\.\s|Allow\?|approve/im;
+const DIALOG = /Enter to select|↑\/↓ to navigate|Do you want to (proceed|make this edit|create)|Would you like to|^\s*[❯›]\s*1\.\s|\bAllow\?|\bApprove\?|\[y\/n\]/im;
 const PROMPT_READY = /⏵⏵|\? for shortcuts|\? for help|Ask Codex to do anything|Antigravity|antigravity|^\s*>\s*$/m; // the input prompt is up
 const SCREEN_QUIET_MS = 4000; // only second-guess hooks after this much silence
 const STALE_WORKING_MS = 15_000; // "working" with an idle screen this long = a missed Stop
