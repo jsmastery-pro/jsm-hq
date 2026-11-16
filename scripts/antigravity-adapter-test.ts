@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
@@ -132,17 +132,38 @@ async function main() {
       const stopRes = handleHook(hub, inbox, "john", "Stop", {});
       assert(stopRes.ok, "Stop hook should succeed");
       assert(hub.status("john")?.state === "idle", "Status should be idle after Stop");
+
+      // Test Stop hook with queued message: Antigravity receives 'continue' while Claude receives 'block'
+      inbox.push("john", { fromId: "you", text: "Build the auth module", kind: "notice" });
+      const stopContinue = handleHook(hub, inbox, "john", "Stop", {});
+      assert(stopContinue.ok, "Stop hook with queued message should succeed");
+      assert(stopContinue.response?.decision === "continue", "Antigravity Stop decision must be 'continue'");
+      assert(stopContinue.response?.reason === "[HQ] Build the auth module", "Stop response reason must match queued text");
+      assert(hub.status("john")?.state === "working", "Status should be working when continuing");
+
+      const mockClaudeAgent: AgentConfig = { ...mockAgent, id: "alice", name: "Alice", cli: "claude" };
+      mockCfg.team.push(mockClaudeAgent);
+      hub.snap.agents.push(Hub.freshStatus("alice"));
+      inbox.push("alice", { fromId: "you", text: "Review the PR", kind: "notice" });
+      const stopBlock = handleHook(hub, inbox, "alice", "Stop", {});
+      assert(stopBlock.ok, "Claude Stop hook with queued message should succeed");
+      assert(stopBlock.response?.decision === "block", "Claude Stop decision must be 'block'");
+      assert(stopBlock.response?.reason === "[HQ] Review the PR", "Claude Stop response reason must match queued text");
     } finally {
       inbox.stop();
     }
 
-    // 5. Test JSONC parsing with comments and trailing commas
-    const jsoncSample = `{\n  // comment\n  "mcpServers": {\n    "custom": {\n      "command": "test",\n    },\n  },\n}`;
+    // 5. Test JSONC parsing with comments and trailing commas, and preserving quoted string contents
+    const jsoncSample = `{\n  // comment\n  "mcpServers": {\n    "custom": {\n      "command": "test",\n      "args": ["/*keep*/", "//keep", "x,]"],\n      "obj": { "key": "a,}", },\n    },\n  },\n}`;
     writeFileSync(mcpPath, jsoncSample);
     await adapters.antigravity.writeFiles(tmpDir, mockAgent, mockCfg, "dummy-token-123");
     const mergedMcp = JSON.parse(readFileSync(mcpPath, "utf8"));
     assert(!!mergedMcp.mcpServers?.custom, "Custom MCP server from JSONC should be preserved");
     assert(!!mergedMcp.mcpServers?.hq, "HQ MCP server should be added to merged config");
+    assert(mergedMcp.mcpServers.custom.args[0] === "/*keep*/", "Quoted block comment token must be preserved");
+    assert(mergedMcp.mcpServers.custom.args[1] === "//keep", "Quoted line comment token must be preserved");
+    assert(mergedMcp.mcpServers.custom.args[2] === "x,]", "Quoted comma and bracket must be preserved");
+    assert(mergedMcp.mcpServers.custom.obj.key === "a,}", "Quoted comma and brace must be preserved");
 
     // 6. Test that user-authored untracked GEMINI.md is NOT overwritten
     const userGemini = "# My Custom Instructions\nDo not overwrite.";
@@ -161,7 +182,27 @@ async function main() {
     assert(threwTracked, "Must throw if AGY_MCP_CONFIG is tracked in git");
     execFileSync("git", ["rm", "-f", AGY_MCP_CONFIG], { cwd: tmpDir });
 
-    // 8. Test screen reconciliation regexes
+    // 8. Test malformed configuration validation: fails before writing credentials
+    const malformedDir = mkdtempSync(join(tmpdir(), "jsmhq-agy-malformed-"));
+    try {
+      execFileSync("git", ["init", "-q"], { cwd: malformedDir });
+      const malformedMcpPath = join(malformedDir, AGY_MCP_CONFIG);
+      mkdirSync(join(malformedDir, ".agents"), { recursive: true });
+      writeFileSync(malformedMcpPath, `{\n  "mcpServers": {\n    invalid_syntax: 123\n  }\n}`);
+      let threwMalformed = false;
+      try {
+        await adapters.antigravity.writeFiles(malformedDir, mockAgent, mockCfg, "dummy-token-123");
+      } catch (err) {
+        threwMalformed = true;
+        assert(String(err).includes("Failed to parse existing"), "Error should mention parse failure");
+      }
+      assert(threwMalformed, "Must throw on malformed existing MCP configuration");
+      assert(!existsSync(join(malformedDir, AGY_HOOKS_CONFIG)), "Hooks credential file must not be written if MCP parse fails");
+    } finally {
+      rmSync(malformedDir, { recursive: true, force: true });
+    }
+
+    // 9. Test screen reconciliation regexes
     const BUSY = /esc to interrupt|esc.*to cancel/i;
     assert(!BUSY.test("Finished generating types."), "BUSY must not match finished generating response");
     assert(!BUSY.test("Thinking about the problem..."), "BUSY must not match conversational thinking");

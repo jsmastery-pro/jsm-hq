@@ -70,6 +70,7 @@ export class Sessions {
   private polling: NodeJS.Timeout | null = null;
   /** Consecutive polls that saw a "working" agent's screen sitting idle. */
   private idleScreens = new Map<string, number>();
+  private pendingSetup: Promise<void> | null = null;
 
   constructor(private hub: Hub, private agentToken: string) {}
 
@@ -80,6 +81,7 @@ export class Sessions {
   // ------------------------------------------------------------ lifecycle
 
   async start(id: string) {
+    if (this.pendingSetup) await this.pendingSetup;
     const hub = this.hub;
     const agent = hub.cfg(id);
     const st = hub.status(id);
@@ -498,8 +500,15 @@ export class Sessions {
 
   // ------------------------------------------------------------ setup helper
 
-  async recheckSetup() {
-    this.hub.setSetup(await runSetupChecks(this.hub.repo, this.hub.snap.config.team));
+  async recheckSetup(): Promise<void> {
+    const p = runSetupChecks(this.hub.repo, this.hub.snap.config.team).then((checks) => {
+      this.hub.setSetup(checks);
+    });
+    this.pendingSetup = p;
+    p.finally(() => {
+      if (this.pendingSetup === p) this.pendingSetup = null;
+    });
+    return p;
   }
 
   /** Runs a program in a terminal the browser can watch and type into (id must start with "setup:"). */
