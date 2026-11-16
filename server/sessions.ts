@@ -97,7 +97,8 @@ export class Sessions {
     const check = (cid: string) => setup.checks.find((c) => c.id === cid)?.status;
     if (agent.mode === "local" && agent.cli === "claude" && check("claude") !== "ok") return fail("Claude Code isn't installed. See the setup checklist.");
     if (agent.mode === "local" && agent.cli === "codex" && check("codex") !== "ok") return fail("Codex isn't installed on this machine. See the setup checklist, or run this agent in a sandbox.");
-    if (agent.mode === "local" && agent.cli === "antigravity" && check("antigravity") !== "ok") return fail("Antigravity CLI (agy) isn't installed on this machine. See the setup checklist, or run this agent in a sandbox.");
+    if (agent.mode === "local" && agent.cli === "antigravity" && check("antigravity") !== "ok") return fail("Antigravity CLI (agy) isn't installed on this machine. See the setup checklist.");
+    if (agent.mode === "sandbox" && agent.cli === "antigravity") return fail("Docker Sandboxes does not have a built-in 'agy' agent image. Run Antigravity agents in Local mode.");
     if (agent.mode === "sandbox" && agent.cli === "codex" && check("openai-secret") !== "ok")
       return fail("Codex needs an OpenAI key in sbx. Run `sbx secret set openai --oauth` (Setup checklist → Run in terminal).");
 

@@ -39,6 +39,7 @@ async function checkOs(): Promise<Check> {
 }
 
 async function checkSbx(brew: boolean): Promise<Check> {
+  ensureCliPaths();
   const base = { id: "sbx" as const, label: "Docker Sandboxes (sbx)", neededFor: "sandbox" as const };
   const v = await run("sbx", ["version"], { timeoutMs: 8000 });
   if (v.ok) return { ...base, status: "ok", detail: v.stdout.trim().split(/\s+/)[2] ?? v.stdout.trim(), fix: null };
