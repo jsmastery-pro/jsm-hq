@@ -120,7 +120,7 @@ export function SetupChecklist() {
           )}
           {!setup.sandboxReady && setup.localReady && (
             <p className="mb-2 border-[3px] border-orange bg-[#fff1d6] px-3 py-2 text-[14px]">
-              Sandboxes aren't available here, but Local mode is. Set agents to <b>Local</b> in Settings → Team. They run plain Claude Code in their own folder, with permission prompts on.
+              Sandboxes aren't available here, but Local mode is. Set agents to <b>Local</b> in Settings → Team. They run the chosen agent CLI (Claude Code, Codex or OpenCode) in their own folder, with permission prompts on.
             </p>
           )}
         </div>

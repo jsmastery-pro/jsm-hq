@@ -103,16 +103,16 @@ function AgentRow({ agent, expanded, onToggle, onRemove }: { agent: AgentConfig;
               ))}
             </div>
           </Field>
-          <Field label="Start with model" hint="Optional. Leave empty to use the CLI's default — you can always switch with /model in the terminal. Set it to keep a choice across restarts (e.g. Opus for the lead).">
+          <Field label="Start with model" hint="Optional. Leave empty to use the CLI's default — you can always switch inside the terminal (/model, or /models in OpenCode). Set it to keep a choice across restarts (e.g. Opus for the lead). OpenCode takes provider/model.">
             <CommitInput
               className="field"
               value={agent.model}
-              placeholder={`${CLI_LABEL[agent.cli]} default`}
-              list={agent.cli === "codex" ? "codex-models" : "claude-models"}
+              placeholder={agent.cli === "opencode" ? "provider/model" : `${CLI_LABEL[agent.cli]} default`}
+              list={agent.cli === "codex" ? "codex-models" : agent.cli === "claude" ? "claude-models" : undefined}
               onCommit={(v) => set({ model: v.trim() })}
             />
           </Field>
-          <Field label="Skills" hint="Comma separated. Copied into the agent's .claude/skills.">
+          <Field label="Skills" hint="Comma separated. Copied into the agent's skills folder (.claude/skills, .agents/skills or .opencode/skills).">
             <CommitInput
               className="field"
               value={agent.skills.join(", ")}

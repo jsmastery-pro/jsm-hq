@@ -1,6 +1,7 @@
 // Agent skills for the project's stack (plan 009). Installed once per project
 // into a cache with the skills CLI (`npx skills add`), then copied into each
-// agent's folder: Claude Code reads .claude/skills/, Codex reads .agents/skills/.
+// agent's folder: Claude Code reads .claude/skills/, Codex reads .agents/skills/,
+// OpenCode reads its native .opencode/skills/ (and .agents/skills/ for compatibility).
 // The copies are git-excluded and replaced when the stack changes.
 
 import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -13,7 +14,7 @@ import { run } from "./lib/exec";
 import { log } from "./lib/log";
 import { projectHome } from "./paths";
 
-const AGENT_DIRS = [".claude/skills", ".agents/skills"]; // Claude Code, Codex
+const AGENT_DIRS = [".claude/skills", ".agents/skills", ".opencode/skills"]; // Claude Code, Codex, OpenCode
 
 const cacheDir = (slug: string) => join(projectHome(slug), "skills-cache");
 const key = (specs: SkillSpec[]) => JSON.stringify(specs);
@@ -42,6 +43,10 @@ export function ensureSkillCache(slug: string, specs: SkillSpec[]): Promise<void
       if (!r.ok) failed.push(`${spec.source}: ${(r.stderr || r.stdout).trim().split("\n").pop()}`);
     }
     if (failed.length) throw new Error(`Some skills didn't install. ${failed.join("; ")}`);
+    // The skills CLI has no agent that writes .opencode/skills (its "opencode" agent uses .agents/skills,
+    // same as Codex), so the cache carries OpenCode's native folder too.
+    const shared = join(dir, ".agents/skills");
+    if (existsSync(shared)) cpSync(shared, join(dir, ".opencode/skills"), { recursive: true });
     writeFileSync(stamp, key(specs));
   };
   // One install at a time per HQ; a second caller waits for the first.
@@ -60,8 +65,8 @@ export function ensureSkillCache(slug: string, specs: SkillSpec[]): Promise<void
 
 // Which skill folders HQ put in each agent's folder. Kept in HQ's own home, not in the
 // agent's folder (an agent can edit its .git), and only ever names paths like
-// .claude/skills/<name> — so nothing outside those two folders can be deleted.
-const SAFE = /^\.(claude|agents)\/skills\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
+// .claude/skills/<name> — so nothing outside those three folders can be deleted.
+const SAFE = /^\.(claude|agents|opencode)\/skills\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const ownedFile = (slug: string, workspace: string) =>
   join(projectHome(slug), "skills-owned", `${createHash("sha1").update(resolve(workspace)).digest("hex").slice(0, 16)}.json`);
 

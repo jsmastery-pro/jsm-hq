@@ -1,10 +1,11 @@
 // Per-CLI differences: which files HQ writes into the agent's folder and how
 // the agent is launched. Everything else (hooks → state, Team MCP, delivery)
-// is shared — Codex and Claude Code send the same hook payloads.
+// is shared — Codex and Claude Code send the same hook payloads. OpenCode is
+// configured through its own config file and gets no HQ hooks yet.
 
 import { agentWrite } from "./lib/agentFs";
 import type { AgentCli, AgentConfig, HqConfig } from "../src/data/types";
-import { adoptRoleFile, excludeFromGit, HOOK_SCRIPT, type RoleExtras, hookCommand, hookScriptFor, hqUrl, MCP_CONFIG, roleMd, writeClaudeFiles, writeHookScript } from "./agentFiles";
+import { adoptRoleFile, excludeFromGit, HOOK_SCRIPT, type RoleExtras, hookCommand, hookScriptFor, hqUrl, MCP_CONFIG, roleMd, ROLE_FILE, writeClaudeFiles, writeHookScript } from "./agentFiles";
 import { run } from "./lib/exec";
 
 export interface Launch {
@@ -79,7 +80,43 @@ const codex: CliAdapter = {
   },
 };
 
-export const adapters: Record<AgentCli, CliAdapter> = { claude, codex };
+// ---------------------------------------------------------------- OpenCode
+
+export const OPENCODE_CONFIG = ".opencode/opencode.json";
+
+export function opencodeConfig(agent: AgentConfig, cfg: HqConfig, token: string): string {
+  const model = agent.model.trim() && !/^default$/i.test(agent.model.trim()) ? agent.model.trim() : null;
+  const config = {
+    $schema: "https://opencode.ai/config.json",
+    instructions: [ROLE_FILE],
+    ...(model ? { model } : {}),
+    mcp: {
+      servers: {
+        hq: { type: "remote", url: `${hqUrl(agent, cfg.project.hqPort)}/mcp`, oauth: false, headers: { Authorization: `Bearer ${token}`, "X-HQ-Agent": agent.id } },
+      },
+    },
+  };
+  return JSON.stringify(config, null, 2) + "\n";
+}
+
+const opencode: CliAdapter = {
+  async writeFiles(dir, agent, cfg, token, extras = {}) {
+    // A repo that commits its own OpenCode config can't take HQ's without changing a tracked file.
+    const tracked = await run("git", ["ls-files", "--error-unmatch", OPENCODE_CONFIG], { cwd: dir });
+    if (tracked.ok) throw new Error(`This repo commits ${OPENCODE_CONFIG}, so HQ can't add its OpenCode settings without changing a tracked file. Use Claude Code for this agent, or remove that file from the repo.`);
+    // The role is loaded through `instructions`; the folder's own ROLE.md is included, never overwritten.
+    const ownRole = await adoptRoleFile(dir);
+    agentWrite(dir, ROLE_FILE, roleMd(agent, cfg, { ...extras, ownRole }));
+    agentWrite(dir, OPENCODE_CONFIG, opencodeConfig(agent, cfg, token), { mode: 0o600 });
+    excludeFromGit(dir, [OPENCODE_CONFIG, ROLE_FILE]);
+  },
+  launch() {
+    // No model argument: OpenCode takes its start model from the config file.
+    return { sbxAgent: "opencode", args: [] };
+  },
+};
+
+export const adapters: Record<AgentCli, CliAdapter> = { claude, codex, opencode };
 
 /** The command a Local-mode agent runs on the host. */
-export const localBinary: Record<AgentCli, string> = { claude: "claude", codex: "codex" };
+export const localBinary: Record<AgentCli, string> = { claude: "claude", codex: "codex", opencode: "opencode" };

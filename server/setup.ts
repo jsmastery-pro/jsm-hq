@@ -180,6 +180,15 @@ async function checkCodex(): Promise<Check> {
   return { ...base, status: "missing", detail: "Not installed. Only needed for Codex agents in Local mode (sandboxes have it).", fix: fix("npm install -g @openai/codex", false, "https://developers.openai.com/codex/cli") };
 }
 
+async function checkOpencode(): Promise<Check> {
+  const base = { id: "opencode" as const, label: "OpenCode (for OpenCode agents in Local mode)", neededFor: "local" as const };
+  const v = await run("opencode", ["--version"], { timeoutMs: 8000 });
+  if (v.ok) return { ...base, status: "ok", detail: v.stdout.trim(), fix: null };
+  // On Windows the binary is an npm .cmd shim, which `run` can't execute: being on PATH is the evidence.
+  if (await has("opencode")) return { ...base, status: "ok", detail: "Installed", fix: null };
+  return { ...base, status: "missing", detail: "Not installed. Only needed for OpenCode agents in Local mode (sandboxes have it).", fix: fix("npm install -g @opencode/cli", false, "https://opencode.ai/docs/") };
+}
+
 async function checkOpenAiSecret(sbxOk: boolean): Promise<Check> {
   const base = { id: "openai-secret" as const, label: "OpenAI sign-in for Codex agents", neededFor: "sandbox" as const };
   if (!sbxOk) return { ...base, status: "missing", detail: "Waiting for sbx.", fix: null };
@@ -194,7 +203,7 @@ async function checkOpenAiSecret(sbxOk: boolean): Promise<Check> {
   return { ...base, status: "missing", detail: "Codex agents can't sign in until this is set. Opens your browser to sign in with ChatGPT.", fix: fix("sbx secret set openai --oauth", true, "https://docs.docker.com/ai/sandboxes/") };
 }
 
-/** `team` adds the Codex checks only when the team has Codex agents. */
+/** `team` adds the Codex checks only when the team has Codex agents, and the OpenCode check the same way. */
 export async function runSetupChecks(repo: RepoInfo, team: AgentConfig[] = []): Promise<SetupState> {
   const brew = os === "darwin" && (await has("brew"));
   const [osCheck, sbx, tmux, claude, gh] = await Promise.all([checkOs(), checkSbx(brew), checkTmux(brew), checkClaude(), checkGh(brew)]);
@@ -205,6 +214,7 @@ export async function runSetupChecks(repo: RepoInfo, team: AgentConfig[] = []): 
   const codexAgents = team.filter((a) => a.cli === "codex");
   if (codexAgents.some((a) => a.mode === "sandbox")) checks.splice(5, 0, await checkOpenAiSecret(sbxOk));
   if (codexAgents.some((a) => a.mode === "local")) checks.push(await checkCodex());
+  if (team.some((a) => a.cli === "opencode" && a.mode === "local")) checks.push(await checkOpencode());
   const ok = (c: SetupCheck) => c.status === "ok";
   return {
     machine: { cpus: cpus().length, memoryGb: Math.round(totalmem() / 1024 ** 3), persistentAgents: usesTmux() },

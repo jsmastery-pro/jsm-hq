@@ -251,6 +251,11 @@ function NotRunning({ agent, status }: { agent: AgentConfig; status: AgentStatus
                 First start only: Codex asks you to trust this folder and HQ's hooks. Choose <b>Yes</b>, then <b>Trust all and continue</b>, in the terminal.
               </p>
             )}
+            {agent.cli === "opencode" && (
+              <p className="mb-4 text-[12px] text-[#ffc14d]">
+                First start only: OpenCode needs a model provider. In its terminal run <b>/connect</b> (or <b>opencode auth login</b> in the Shell tab), then pick a model with <b>/models</b>.
+              </p>
+            )}
             <p className="hidden">
             </p>
             <div className="flex justify-center gap-2">
