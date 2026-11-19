@@ -1,6 +1,7 @@
 // The files HQ writes into each agent's folder. All of them are listed in the
 // clone's .git/info/exclude, so they are never committed.
 
+import { kindOf } from "../src/data/roles";
 import { lstatSync } from "node:fs";
 import { agentRead, agentRemove, agentWrite } from "./lib/agentFs";
 import { run } from "./lib/exec";
@@ -103,8 +104,12 @@ export function hqUrl(agent: AgentConfig, port: number): string {
 }
 
 export function roleMd(agent: AgentConfig, cfg: HqConfig, extras: RoleExtras = {}): string {
-  const team = cfg.team.map((a) => `- ${a.name} — ${a.role}${a.isLead ? " (lead)" : ""}${a.id === agent.id ? " ← you" : ""}`).join("\n");
-  const rules = agent.isLead
+  const team = cfg.team
+    .map((a) => `- ${a.name} — ${a.role}${a.isLead ? " (lead)" : kindOf(a) === "reviewer" ? " (reviewer)" : ""}${a.id === agent.id ? " ← you" : ""}`)
+    .join("\n");
+  const kind = kindOf(agent);
+  const hasReviewers = cfg.team.some((a) => kindOf(a) === "reviewer");
+  const rules = kind === "lead"
     ? [
         "You plan the work and assign it to the team. You never write app code.",
         "Keep tasks small: one task = one branch = one PR. Give each task the files it may edit and a clear done-when.",
@@ -113,14 +118,34 @@ export function roleMd(agent: AgentConfig, cfg: HqConfig, extras: RoleExtras = {
           ? "You merge PRs once they pass review (`gh pr merge <number> --squash --delete-branch`), one at a time, in an order that avoids conflicts. HQ tells you when each one passes."
           : "The user merges PRs; never merge one yourself. Decide the order they should land in, and tell the user if one blocks another.",
         "If the user changes who merges, HQ tells you. Follow the latest message.",
+        ...(hasReviewers
+          ? [
+              "Builders take build tasks; reviewers (marked \"reviewer\" in the team list) only review. When a builder opens a PR, HQ creates a review task for each reviewer role and assigns it; don't create review tasks unless you want an extra review. A PR is ready only when the review tool and every reviewer approve.",
+            ]
+          : []),
       ]
-    : [
+    : kind === "reviewer"
+      ? [
+          "You review pull requests. You never write, edit or commit code, never push, and never open a PR. Fixes are the author's job.",
+          "HQ assigns you a review task when a builder opens a PR. Call get_my_task: it names the PR and the build task it belongs to (its description and done-when are what you check).",
+          "Check out the PR read-only with `gh pr checkout <number>`, then review it as your role says. Don't commit anything on that branch.",
+          "Write your findings on the PR with `gh pr comment <number> --body-file <file>` so they're on record. GitHub won't let you approve or request changes (you share the author's account), so don't try.",
+          "Then give HQ your verdict: set_my_status done with verdict approve or changes and a short summary. On changes, HQ sends your summary to the author; when they push a fix, HQ gives you the review again.",
+          "When you're done, `git checkout main` so your folder is clean for the next review.",
+          "If you are blocked (the app won't start, a key is missing), call set_my_status blocked with the reason.",
+        ]
+      : [
         "Work only on the task you were given. One task = one branch = one PR.",
         "When HQ tells you to start a task, call get_my_task first, then `git pull origin main` and create a branch.",
         "Edit only the files the task lists. Need another file? Ask the lead with send_message.",
         "Title PRs `[TASK-ID] Short title` and open them with `gh pr create`, then call set_my_status in-review with the PR number.",
         "set_my_status tells the lead automatically. Don't also send_message the same news.",
         "If you are blocked or need a decision, call set_my_status blocked with the reason.",
+        ...(hasReviewers
+          ? [
+              "Reviewers (QA, Code Reviewer, Security…) check your PR too. If one asks for changes, HQ sends you their findings: fix them on the same branch, push, then call set_my_status in-review with the PR number again so they re-check.",
+            ]
+          : []),
       ];
   rules.push(
     "When you need the user to do something outside your sandbox (create an account, database or API key, change a setting in a dashboard, put a value in your env file), call ask_user with a short title and clear steps, then keep working on what you can. Never put secret values in it; name the variable instead. Variables reach you through HQ: ask the user to add NAME to your App variables in HQ (Settings → Sandbox → App variables) and restart you; there is no env file inside your sandbox to edit.",
@@ -130,7 +155,7 @@ export function roleMd(agent: AgentConfig, cfg: HqConfig, extras: RoleExtras = {
     rules.push(
       "Your sandbox blocks most websites and APIs. If a request you need is blocked (a docs page or an API: usually a 403 saying 'Approval required for <host>'), call request_access with the domain and why, then continue with other work until HQ tells you it was answered. Never work around the block.",
     );
-  const tools = agent.isLead
+  const tools = kind === "lead"
     ? "list_workers, get_status, list_tasks, create_board, create_task, update_task, assign_task, send_message, ask_user, request_access"
     : "get_my_task, set_my_status, list_workers, get_status, list_tasks, send_message, ask_user, request_access";
   return [

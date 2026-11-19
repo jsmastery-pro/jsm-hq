@@ -28,6 +28,20 @@ export function PrDrawer() {
             {!pr.merged && <> · {pr.openComments} open comment{pr.openComments === 1 ? "" : "s"}{pr.conflict ? " · merge conflict" : ""}</>}
           </div>
           {pr.reviewNote && !pr.merged && <div className="text-[12px] text-[#a35d00]">{pr.reviewNote}</div>}
+          {!pr.merged && pr.agentReviews && pr.agentReviews.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {pr.agentReviews.map((r) => {
+                const who = snap.config.team.find((a) => a.id === r.agentId);
+                const text = r.verdict === "approve" ? "approved" : r.verdict === "changes" ? "changes requested" : who ? "reviewing" : "waiting for a reviewer";
+                return (
+                  <span key={r.taskId} className="chip text-[11px]" style={{ ["--c" as string]: r.verdict === "approve" ? "#00e436" : r.verdict === "changes" ? "#ff77a8" : "#f0dfc2" }}>
+                    {r.role}
+                    {who ? ` (${who.name})` : ""}: {text}
+                  </span>
+                );
+              })}
+            </div>
+          )}
         </div>
         <div className="flex flex-col items-end gap-1">
           <ReviewChip review={pr.review} merged={pr.merged} />

@@ -9,7 +9,7 @@ import { run } from "./lib/exec";
 // GitHub charges GraphQL by how many nested items a query *could* return, from a
 // 5,000-point hourly budget shared with the agents' own `gh` commands. Keep the
 // nested lists small, and fetch only the basics for merged PRs.
-const BASE_FIELDS = "number title url headRefName createdAt mergedAt state mergeable isDraft reviewDecision";
+const BASE_FIELDS = "number title url headRefName headRefOid createdAt mergedAt state mergeable isDraft reviewDecision";
 const REVIEW_FIELDS = `
   reviews(last: 10) { nodes { author { login } state submittedAt } }
   reviewThreads(first: 30) { nodes { isResolved isOutdated comments(first: 1) { nodes { author { login } } } } }
@@ -61,6 +61,7 @@ export interface GhPr {
   title: string;
   url: string;
   headRefName: string;
+  headRefOid: string;
   createdAt: string;
   mergedAt: string | null;
   state: "OPEN" | "MERGED" | "CLOSED";
@@ -190,6 +191,7 @@ export function toPullRequest(pr: GhPr, tool: ReviewTool, reviewEnabled: boolean
     openedAt: pr.createdAt,
     url: pr.url,
     branch: pr.headRefName,
+    headSha: pr.headRefOid,
     closed: pr.state === "CLOSED",
     conflict: pr.mergeable === "CONFLICTING",
     reviewNote: pr.isDraft ? "Draft" : r.note,

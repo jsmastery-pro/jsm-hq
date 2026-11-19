@@ -2,6 +2,7 @@
 // identified by the agent token + X-HQ-Agent header that HQ writes into their
 // .mcp.json. The lead manages the plan; everyone can message everyone.
 
+import { kindOf } from "../src/data/roles";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -39,13 +40,13 @@ function buildServer(hub: Hub, planner: Planner, me: string): McpServer {
 
   server.registerTool(
     "list_workers",
-    { description: "The team: each agent's id, name, role, whether they are running, and what they are doing now." },
+    { description: "The team: each agent's id, name, role, kind (lead, builder or reviewer), whether they are running, and what they are doing now. Builders take build tasks; reviewers only take review tasks." },
     guard(() =>
       ok(
         hub.snap.config.team.map((a) => {
           const st = hub.status(a.id);
           return {
-            id: a.id, name: a.name, role: a.role, lead: a.isLead, you: a.id === me,
+            id: a.id, name: a.name, role: a.role, kind: kindOf(a), lead: a.isLead, you: a.id === me,
             running: st?.session.state === "running", state: st?.state, task: st?.currentTaskId ?? null,
             free: st?.session.state === "running" && !a.isLead && !planner.currentTask(a.id),
           };
@@ -98,7 +99,8 @@ function buildServer(hub: Hub, planner: Planner, me: string): McpServer {
   server.registerTool(
     "create_task",
     {
-      description: "Lead only. Add a task. Keep tasks small: one task = one branch = one PR.",
+      description:
+        "Lead only. Add a task. Keep tasks small: one task = one branch = one PR. Build tasks go to builders. HQ creates review tasks for reviewers by itself when a PR opens; make one by hand (kind review, reviewOf, reviewFor, reviewRole) only for an extra review.",
       inputSchema: {
         title: z.string(),
         boardId: z.string().optional().describe("Defaults to the first active board"),
@@ -106,10 +108,15 @@ function buildServer(hub: Hub, planner: Planner, me: string): McpServer {
         files: z.array(z.string()).optional().describe("The only files/folders this task may edit"),
         doneWhen: z.string().optional().describe("Acceptance criteria"),
         needs: z.array(z.string()).optional().describe("Task ids that must be done first"),
+        kind: z.enum(["build", "review"]).optional().describe("build (default) or review"),
+        reviewOf: z.number().int().optional().describe("Review tasks: the PR number to review"),
+        reviewFor: z.string().optional().describe("Review tasks: the build task id the PR belongs to"),
+        reviewRole: z.string().optional().describe('Review tasks: the reviewer role, e.g. "QA"'),
       },
     },
-    guard((args: { title: string; boardId?: string; description?: string; files?: string[]; doneWhen?: string; needs?: string[] }) => {
+    guard((args: { title: string; boardId?: string; description?: string; files?: string[]; doneWhen?: string; needs?: string[]; kind?: "build" | "review"; reviewOf?: number; reviewFor?: string; reviewRole?: string }) => {
       leadOnly();
+      if (args.kind === "review" && !args.reviewOf) throw new Error("A review task needs reviewOf: the PR number.");
       return ok(planner.createTask(args, me));
     }),
   );
@@ -155,6 +162,18 @@ function buildServer(hub: Hub, planner: Planner, me: string): McpServer {
       if (!t) return ok("You have no task right now. Wait for the lead, or ask with send_message.");
       if (t.status === "todo") planner.setStatus(me, "in-progress");
       const blockedBy = t.needs.filter((n) => planner.task(n)?.status !== "done");
+      if (t.kind === "review") {
+        const build = t.reviewFor ? taskView(t.reviewFor) : null;
+        return ok({
+          ...taskView(t.id),
+          pr: t.reviewOf,
+          buildTask: build ? { id: build.id, title: build.title, description: build.description, doneWhen: build.doneWhen, author: build.owner } : null,
+          rules:
+            `Review PR #${t.reviewOf} as your role says. Don't change code. Steps: \`gh pr checkout ${t.reviewOf}\`; review it against the build task's description and done-when; ` +
+            `write your findings on the PR with \`gh pr comment ${t.reviewOf} --body-file <file>\`; then call set_my_status done with verdict approve or changes, a short summary in note, ` +
+            `and commit set to the commit you reviewed (\`git rev-parse HEAD\` on the checked-out PR, before you switch back); then \`git checkout main\`.`,
+        });
+      }
       return ok({ ...taskView(t.id), waitingOn: blockedBy, rules: "Work only on this task, on its own branch. Edit only the listed files. Title the PR `[" + t.id + "] " + t.title + "`. When the PR is open, call set_my_status with in-review and the PR number." });
     }),
   );
@@ -162,16 +181,23 @@ function buildServer(hub: Hub, planner: Planner, me: string): McpServer {
   server.registerTool(
     "set_my_status",
     {
-      description: "Update your current task: in-progress, blocked (say why), in-review (PR opened), or done. The lead is told automatically.",
+      description:
+        "Update your current task: in-progress, blocked (say why), in-review (PR opened), or done. The lead is told automatically. Reviewers finish a review task with done plus a verdict (approve or changes) and a summary in note.",
       inputSchema: {
         status: z.enum(["in-progress", "blocked", "in-review", "done"]),
-        note: z.string().optional().describe("Why you are blocked, or a short summary"),
+        note: z.string().optional().describe("Why you are blocked, or a short summary (reviewers: your findings)"),
         prNumber: z.number().int().optional(),
+        verdict: z.enum(["approve", "changes"]).optional().describe("Review tasks only: your verdict"),
+        commit: z
+          .string()
+          .regex(/^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$/)
+          .optional()
+          .describe("Review tasks only: the full commit SHA you reviewed (`git rev-parse HEAD` on the PR checkout). Required to approve."),
       },
     },
-    guard(({ status, note, prNumber }: { status: "in-progress" | "blocked" | "in-review" | "done"; note?: string; prNumber?: number }) => {
-      const t = planner.setStatus(me, status, note, prNumber);
-      return ok(`${t.id} is now ${t.status}.`);
+    guard(({ status, note, prNumber, verdict, commit }: { status: "in-progress" | "blocked" | "in-review" | "done"; note?: string; prNumber?: number; verdict?: "approve" | "changes"; commit?: string }) => {
+      const t = planner.setStatus(me, status, note, prNumber, verdict, commit);
+      return ok(t.kind === "review" && t.status === "done" ? `${t.id} is done (${t.verdict}). Run \`git checkout main\`.` : `${t.id} is now ${t.status}.`);
     }),
   );
 

@@ -1,3 +1,4 @@
+import { KIND_LABEL, kindOf, roleById, ROLES } from "../../data/roles";
 import { useState } from "react";
 import { nextAgentName } from "../../data/names";
 import { CLI_LABEL, type AgentCli, type AgentConfig, type AgentMode } from "../../data/types";
@@ -18,7 +19,17 @@ export function CliSelect({ value, onChange }: { value: AgentCli; onChange: (v: 
     </select>
   );
 }
-export const ROLE_SUGGESTIONS = ["Developer", "QA", "Designer", "Docs", "DevOps", "Security"];
+export const ROLE_SUGGESTIONS = ROLES.map((r) => r.label);
+
+/** Builder or reviewer: what this agent does with tasks (plan 012). */
+function KindSelect({ value, onChange }: { value: "builder" | "reviewer"; onChange: (k: "builder" | "reviewer") => void }) {
+  return (
+    <select className="field" value={value} onChange={(e) => onChange(e.target.value === "reviewer" ? "reviewer" : "builder")} aria-label="Kind" title="Builders take build tasks and open PRs. Reviewers review PRs and never write code.">
+      <option value="builder">Builder</option>
+      <option value="reviewer">Reviewer</option>
+    </select>
+  );
+}
 
 export function TeamSettings() {
   const team = useOffice((s) => s.snap?.config.team);
@@ -57,7 +68,10 @@ function AgentRow({ agent, expanded, onToggle, onRemove }: { agent: AgentConfig;
           {agent.isLead ? (
             <div className="field flex h-9 items-center bg-cream-2">Lead</div>
           ) : (
-            <CommitInput className="field" value={agent.role} list="role-suggestions" onCommit={(v) => v.trim() && set({ role: v.trim() })} />
+            <div className="grid grid-cols-[1fr_118px] gap-1.5">
+              <CommitInput className="field" value={agent.role} list="role-suggestions" onCommit={(v) => v.trim() && set({ role: v.trim() })} />
+              <KindSelect value={kindOf(agent) === "reviewer" ? "reviewer" : "builder"} onChange={(kind) => set({ kind })} />
+            </div>
           )}
         </Field>
         <Field label="Agent">
@@ -142,13 +156,17 @@ function AgentRow({ agent, expanded, onToggle, onRemove }: { agent: AgentConfig;
 
 function AddAgent() {
   const [name, setName] = useState("");
-  const [role, setRole] = useState("Developer");
+  const [roleId, setRoleId] = useState("developer");
+  const [customRole, setCustomRole] = useState("");
+  const [customKind, setCustomKind] = useState<"builder" | "reviewer">("builder");
+  const spec = roleById(roleId);
+  const role = spec ? spec.label : customRole.trim() || "Custom";
   const [cli, setCli] = useState<AgentCli>("claude");
   const [mode, setMode] = useState<AgentMode>("sandbox");
   const team = useOffice((s) => s.snap?.config.team) ?? [];
   const suggested = nextAgentName(team.map((a) => a.name));
   const add = () => {
-    officeActions.addAgent({ name: name.trim() || suggested, role, cli, mode });
+    officeActions.addAgent({ name: name.trim() || suggested, role, cli, mode, ...(spec ? {} : { kind: customKind }) });
     setName("");
   };
   return (
@@ -165,7 +183,23 @@ function AddAgent() {
           <input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder={suggested} />
         </Field>
         <Field label="Role">
-          <input className="field" value={role} list="role-suggestions" onChange={(e) => setRole(e.target.value)} />
+          <select className="field" value={roleId} onChange={(e) => setRoleId(e.target.value)}>
+            <optgroup label="Builders: build tasks, open PRs">
+              {ROLES.filter((r) => r.kind === "builder").map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.label}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Reviewers: review PRs, never write code">
+              {ROLES.filter((r) => r.kind === "reviewer").map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.label}
+                </option>
+              ))}
+            </optgroup>
+            <option value="custom">Custom…</option>
+          </select>
         </Field>
         <Field label="Agent">
           <CliSelect value={cli} onChange={setCli} />
@@ -180,6 +214,20 @@ function AddAgent() {
           Add
         </button>
       </form>
+      {spec ? (
+        <p className="mt-2 text-[13px]">
+          <b>{spec.label}</b> · {KIND_LABEL[spec.kind]} · {spec.summary}. Its ROLE.md starts from a preset you can edit.
+        </p>
+      ) : (
+        <div className="mt-2 grid grid-cols-[1fr_140px] items-end gap-2.5">
+          <Field label="Custom role name">
+            <input className="field" value={customRole} onChange={(e) => setCustomRole(e.target.value)} placeholder="e.g. Data Engineer" />
+          </Field>
+          <Field label="Kind">
+            <KindSelect value={customKind} onChange={setCustomKind} />
+          </Field>
+        </div>
+      )}
       <p className="mt-2 text-[12px] text-muted">
         HQ starts a new sandbox with the lead's network policy and allows it to reach HQ at host.docker.internal.
       </p>

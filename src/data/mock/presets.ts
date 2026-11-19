@@ -1,3 +1,4 @@
+import { roleByLabel } from "../roles";
 import type { AgentConfig, Board, HqConfig, SandboxSettings, Task } from "../types";
 
 export interface Preset {
@@ -34,6 +35,7 @@ function agent(
     name,
     role,
     isLead,
+    kind: isLead ? "lead" : (roleByLabel(role)?.kind ?? "builder"),
     cli: "claude",
     model: isLead ? "Opus" : "Sonnet",
     mode: "sandbox",
@@ -145,7 +147,7 @@ const bigTeam: Preset = {
     ...doneTasks("WEB", [["Marketing page", "leo"], ["Sign-in", "dwight"]], 1),
     { id: "WEB-T03", boardId: "WEB", title: "Fleet dashboard", ownerId: "jim", status: "todo", needs: [], prNumber: null },
     { id: "WEB-T04", boardId: "WEB", title: "Vessel detail page", ownerId: "leo", status: "todo", needs: [], prNumber: null },
-    { id: "WEB-T05", boardId: "WEB", title: "E2E: booking flow", ownerId: "priya", status: "todo", needs: [], prNumber: null },
+    { id: "WEB-T05", boardId: "WEB", title: "E2E: booking flow", ownerId: "jim", status: "todo", needs: [], prNumber: null },
     { id: "WEB-T06", boardId: "WEB", title: "Getting started guide", ownerId: "sam", status: "todo", needs: [], prNumber: null },
     { id: "API-T01", boardId: "API", title: "Bookings endpoint", ownerId: "kenji", status: "todo", needs: [], prNumber: null },
     { id: "API-T02", boardId: "API", title: "Webhooks", ownerId: "dwight", status: "todo", needs: [], prNumber: null },

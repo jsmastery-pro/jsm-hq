@@ -3,8 +3,10 @@
 
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentConfig, Board, HqConfig, SandboxSettings, Task } from "../src/data/types";
+import type { AgentConfig, AgentKind, Board, HqConfig, SandboxSettings, Task } from "../src/data/types";
 import { LEAD_NAME, WORKER_NAMES } from "../src/data/names";
+import { roleByLabel } from "../src/data/roles";
+import { presetRoleMd } from "./roles";
 import { slugify } from "./paths";
 import type { RepoInfo } from "./repo";
 
@@ -34,12 +36,28 @@ export const defaultSandbox = (): SandboxSettings => ({
   deny: [],
 });
 
-export function newAgent(id: string, name: string, role: string, color: string, isLead: boolean): AgentConfig {
+/** The short ROLE.md for a role without a preset of this kind. */
+export function basicRoleMd(name: string, role: string, kind: AgentKind): string {
+  return kind === "reviewer"
+    ? `You are ${name}, a ${role.toLowerCase()} on the team. You review the pull requests assigned to you.`
+    : `You are ${name}, a ${role.toLowerCase()} on the team. You build the tasks assigned to you.`;
+}
+
+/**
+ * A new agent. A role from the catalog brings its kind and preset ROLE.md; any other role is a
+ * Custom one, with `customKind` (builder by default) and a short default ROLE.md.
+ */
+export function newAgent(id: string, name: string, role: string, color: string, isLead: boolean, customKind?: Exclude<AgentKind, "lead">): AgentConfig {
+  const match = isLead ? undefined : roleByLabel(role);
+  const kind: AgentKind = isLead ? "lead" : (customKind ?? match?.kind ?? "builder");
+  // A catalog preset only for its own kind: a Custom "QA" builder doesn't get the QA reviewer's rules.
+  const spec = match?.kind === kind ? match : undefined;
   return {
     id,
     name,
     role,
     isLead,
+    kind,
     cli: "claude",
     model: "", // the CLI's default; users can pick with /model or "Start with model"
     mode: "sandbox",
@@ -47,7 +65,7 @@ export function newAgent(id: string, name: string, role: string, color: string, 
     skills: [],
     roleMd: isLead
       ? `You are ${name}, the lead. You plan and assign work. You never write app code.`
-      : `You are ${name}, a ${role.toLowerCase()} on the team. You build the tasks assigned to you.`,
+      : ((spec && presetRoleMd(spec.id, name)) ?? basicRoleMd(name, role, kind)),
     sandbox: defaultSandbox(),
     workspacePath: null,
     mcp: [],
@@ -76,6 +94,8 @@ export function loadConfig(repo: RepoInfo, port: number): { config: HqConfig; is
       a.workspacePath ??= null;
       a.mcp ??= [];
       a.cli ??= "claude";
+      // Plan 012: agents from before role kinds. QA and Security review; everyone else builds.
+      a.kind ??= a.isLead ? "lead" : (roleByLabel(a.role)?.kind ?? "builder");
       a.sandbox.resources ??= { cpus: null, memoryGb: null };
       // Phase D: policy level, proxy and secret names moved to sbx itself.
       const old = a.sandbox as unknown as Record<string, unknown>;

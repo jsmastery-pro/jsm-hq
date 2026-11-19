@@ -20,7 +20,9 @@ What HQ does behind the office: where agents work, how they talk, what reaches G
 ## The team
 
 - **The lead** plans and assigns. It creates boards (for example one per phase), splits the work into tasks and gives each task to a free worker. It never writes app code.
-- **Workers** build. One task means one branch and one pull request. A worker edits only the files its task lists and asks the lead if it needs more.
+- **Builders** build. One task means one branch and one pull request. A builder edits only the files its task lists and asks the lead if it needs more.
+- **Reviewers** review. They test or audit a builder's PR and report a verdict (approve or changes); they never write code. When a builder opens a PR, HQ gives each reviewer role on the team a review task for it.
+- **Roles.** Pick one in Settings → Team: Developer, Frontend Developer, Backend Developer, Designer, Docs and DevOps build; QA, Code Reviewer and Security review. Each starts from a preset ROLE.md (adapted from [agency-agents](https://github.com/msitarzewski/agency-agents)) that you can edit. Custom lets you name a role and choose builder or reviewer.
 - Each agent runs **Claude Code** or **Codex**, in a **Sandbox** (the default) or in **Local** mode. Set this per agent in Settings → Team.
 
 New teams get names from The Office: Michael leads, then Dwight, Jim, Pam and so on. Rename them any time.
@@ -45,7 +47,8 @@ HQ reads your PRs, checks and review comments with your `gh` login, about every 
 
 - It matches a PR to its task by the `[TASK-ID]` at the start of the title.
 - New review comments are sent to the PR's author to fix.
-- When a PR passes review, the lead is told it's ready to merge.
+- With reviewer agents on the team, HQ gives each PR one review task per reviewer role (QA, Security…), handed to a free reviewer of that role. The reviewer writes its findings on the PR and gives HQ its verdict. If it asks for changes, the author gets the findings; when the author sends the PR back, the same reviewer checks it again.
+- When a PR passes review (the review tool **and** an approval of the PR's current commit from each reviewer role's review task), the lead is told it's ready to merge.
 - When a PR is merged, its task is marked done.
 - If a PR has merge conflicts with `main`, the author is told to fix them.
 

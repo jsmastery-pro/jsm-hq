@@ -2,6 +2,7 @@
 // loop (get work → build → PR → review → merge → rest), offset in time, so it
 // scales with the team. The lead assigns work and tops up the active board.
 
+import { kindOf } from "../roles";
 import type { Task } from "../types";
 import * as T from "./terminalScripts";
 import type { World } from "./world";
@@ -159,7 +160,10 @@ export class Simulation {
 
   private needWork(id: string) {
     const w = this.w;
-    if (!w.cfg(id) || this.jobs.has(id)) return;
+    const cfg = w.cfg(id);
+    if (!cfg || this.jobs.has(id)) return;
+    // Reviewers never take build tasks (plan 012). The demo doesn't simulate reviews yet.
+    if (kindOf(cfg) === "reviewer") return;
     const task = this.nextTaskFor(id);
     if (!task) {
       this.topUp();

@@ -30,11 +30,16 @@ export type AgentCli = "claude" | "codex";
 
 export const CLI_LABEL: Record<AgentCli, string> = { claude: "Claude Code", codex: "Codex" };
 
+/** lead plans; builders take build tasks (branch + PR); reviewers take review tasks and never write code. */
+export type AgentKind = "lead" | "builder" | "reviewer";
+
 export interface AgentConfig {
   id: string; // "john"
   name: string; // "John"
   role: string; // "Lead" | "Developer" | "QA" | anything
   isLead: boolean;
+  /** Missing in older configs: see kindOf() in data/roles. */
+  kind?: AgentKind;
   cli: AgentCli;
   model: string; // optional start model ("" = the CLI's default; users can switch with /model)
   mode: AgentMode;
@@ -159,6 +164,28 @@ export interface Task {
   files?: string[]; // the only files this task may edit
   doneWhen?: string; // acceptance criteria
   note?: string | null; // e.g. why it's blocked
+  /** "build" (default: branch + PR) or "review" (a reviewer checks a builder's PR). */
+  kind?: TaskKind;
+  /** Review tasks: the PR under review and the build task it belongs to. */
+  reviewOf?: number | null;
+  reviewFor?: string | null;
+  /** Review tasks: the reviewer's verdict once done. */
+  verdict?: ReviewVerdict | null;
+  /** Review tasks: which reviewer role should take it ("QA", "Security"…). */
+  reviewRole?: string | null;
+  /** Review tasks: the PR head commit the verdict was given on. An approval counts only for that commit. */
+  reviewedSha?: string | null;
+}
+
+export type TaskKind = "build" | "review";
+export type ReviewVerdict = "approve" | "changes";
+
+/** One reviewer agent's review of a PR, shown beside the review tool's. */
+export interface AgentReview {
+  taskId: string;
+  agentId: string | null; // null while queued for a free reviewer
+  role: string;
+  verdict: ReviewVerdict | "pending";
 }
 
 export type ReviewState = "pending" | "reviewing" | "changes-requested" | "passed";
@@ -175,9 +202,17 @@ export interface PullRequest {
   openedAt: string;
   url?: string; // link to GitHub
   branch?: string;
+  /** The PR's head commit, so a reviewer's approval only counts for the commit it reviewed. */
+  headSha?: string;
   closed?: boolean; // closed without merging — hidden from the board
   conflict?: boolean; // has merge conflicts with the base branch
   reviewNote?: string | null; // e.g. "CodeRabbit: review rate limited"
+  /** The review tool's own state; `review` also waits for reviewer agents. */
+  toolReview?: ReviewState;
+  /** The review tool's own note; `reviewNote` may add the reviewer agents' state to it. */
+  toolNote?: string | null;
+  /** Reviewer agents' reviews of this PR (plan 012). */
+  agentReviews?: AgentReview[];
 }
 
 export type EnvironmentStatus = "live" | "deploying" | "sleeping";
@@ -364,6 +399,8 @@ export interface ActionItem {
 export interface NewAgentInput {
   name: string;
   role: string;
+  /** For a role that isn't in the catalog (Custom). Catalog roles have their own kind. */
+  kind?: Exclude<AgentKind, "lead">;
   cli?: AgentCli;
   model?: string;
   mode: AgentMode;
@@ -381,7 +418,7 @@ export interface WelcomeInput {
 }
 
 export type AgentPatch = Partial<
-  Pick<AgentConfig, "name" | "role" | "cli" | "model" | "mode" | "color" | "skills" | "roleMd" | "workspacePath">
+  Pick<AgentConfig, "name" | "role" | "kind" | "cli" | "model" | "mode" | "color" | "skills" | "roleMd" | "workspacePath">
 >;
 
 export interface WorkflowPatch {

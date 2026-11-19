@@ -13,7 +13,9 @@ import type { Planner } from "./planner";
 import type { Sbx } from "./sbx";
 import type { SbxMcp } from "./sbxMcp";
 import type { Sessions } from "./sessions";
-import { newAgent } from "./store";
+import { basicRoleMd, newAgent } from "./store";
+import { presetRoleMd } from "./roles";
+import { kindOf, roleByLabel } from "../src/data/roles";
 import { mergeByNotice } from "./githubSync";
 
 /** A stack from the browser, checked against the catalog. Null when nothing is chosen. */
@@ -44,6 +46,27 @@ function cleanStack(raw: unknown): StackConfig | null {
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "agent";
 const str = (v: unknown, max = 2000) => (typeof v === "string" ? v.slice(0, max) : "");
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+
+/**
+ * Builder ↔ reviewer. Only while the agent's session is stopped: its role file is written at start,
+ * so a running session would get tasks of one kind with the rules of the other. A preset ROLE.md of
+ * the old kind that's untouched becomes the new kind's plain one; edited text is kept.
+ */
+function setKind(hub: Hub, agent: AgentConfig, kind: "builder" | "reviewer") {
+  const session = hub.status(agent.id)?.session.state;
+  if (session === "running" || session === "starting") {
+    hub.activity("config", null, `Stop ${agent.name} before switching them to ${kind}: their session runs with the ${kindOf(agent)} rules.`);
+    return;
+  }
+  const spec = roleByLabel(agent.role);
+  const preset = spec ? presetRoleMd(spec.id, agent.name) : null;
+  const untouched = !!preset && agent.roleMd.trim() === preset;
+  agent.kind = kind;
+  if (spec && spec.kind !== kind) {
+    if (untouched) agent.roleMd = basicRoleMd(agent.name, agent.role, kind);
+    else hub.activity("config", null, `${agent.name} is now a ${kind}, but their ROLE.md is edited from the ${spec.label} ${spec.kind} preset. Check it doesn't contradict the new kind.`);
+  }
+}
 
 export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inbox: Inbox, sbx: Sbx, mcp: SbxMcp) {
   /** Runs an sbx change and reports failures in the activity feed. */
@@ -87,7 +110,8 @@ export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inb
       for (let i = 2; team().some((a) => a.id === id); i++) id = `${slug(name)}-${i}`;
       const used = new Set(team().map((a) => a.color));
       const color = agentPalette.find((c) => !used.has(c)) ?? agentPalette[team().length % agentPalette.length];
-      const agent = newAgent(id, name, str(input.role, 40).trim() || "Developer", color, false);
+      const kind = input.kind === "reviewer" ? "reviewer" : input.kind === "builder" ? "builder" : undefined;
+      const agent = newAgent(id, name, str(input.role, 40).trim() || "Developer", color, false, kind);
       agent.cli = input.cli === "codex" ? "codex" : "claude";
       agent.model = str(input.model, 60).trim();
       agent.mode = input.mode === "local" ? "local" : "sandbox";
@@ -109,6 +133,8 @@ export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inb
       const before = `${agent.cli}/${agent.mode}`;
       for (const k of ["name", "role", "model", "color", "roleMd"] as const) if (typeof p[k] === "string") agent[k] = str(p[k], 8000);
       if (p.mode === "sandbox" || p.mode === "local") agent.mode = p.mode;
+      // The lead stays the lead; others switch between building and reviewing.
+      if (!agent.isLead && (p.kind === "builder" || p.kind === "reviewer") && p.kind !== kindOf(agent)) setKind(hub, agent, p.kind);
       if ((p.cli === "claude" || p.cli === "codex") && p.cli !== agent.cli) {
         agent.cli = p.cli;
         // Model names don't carry over between CLIs.
