@@ -215,6 +215,15 @@ function SessionBar({ agent, status }: { agent: AgentConfig; status: AgentStatus
           Open folder
         </button>
       )}
+      {s.state === "running" && (
+        <button
+          className="btn px-2 text-[12px]"
+          onClick={() => officeActions.restartAgent(agent.id)}
+          title={`Restart ${agent.name}'s ${CLI_LABEL[agent.cli]} session${agent.mode === "sandbox" ? ". The sandbox keeps running." : ""} Use it after changing app variables or role settings.`}
+        >
+          Restart
+        </button>
+      )}
       {s.state === "running" || s.state === "starting" ? (
         <button className="btn px-2 text-[12px]" disabled={s.state === "starting"} onClick={() => officeActions.stopAgent(agent.id)}>
           Stop

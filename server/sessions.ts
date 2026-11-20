@@ -241,6 +241,27 @@ export class Sessions {
   }
 
   /** Removes the agent's sandbox and starts a fresh one (applies new CPU/memory). The folder is kept. */
+  /**
+   * Restarts the agent's session (Claude Code or Codex) and keeps its sandbox running, so new app
+   * variables, role and settings apply without a cold start. sbx has no restart command: HQ ends
+   * the session and runs `sbx run` again, which reattaches to the running sandbox. CPU and memory
+   * still need Recreate.
+   */
+  async restart(id: string) {
+    const hub = this.hub;
+    const agent = hub.cfg(id);
+    if (!agent || hub.status(id)?.session.state !== "running") return;
+    this.onSessionDown(id);
+    this.detach(id);
+    await this.backend.kill(this.name(id));
+    // Switched to Local mode since it started: don't leave its old sandbox running.
+    if (agent.mode === "local") void run("sbx", ["stop", this.name(id)], { timeoutMs: 30_000 });
+    hub.setSession(id, { state: "stopped", detail: null });
+    hub.setStatus(id, { state: "idle", note: "Restarting" });
+    hub.activity("session", id, `Restarting ${agent.name}`);
+    await this.start(id);
+  }
+
   async recreate(id: string) {
     const agent = this.hub.cfg(id);
     if (!agent || agent.mode !== "sandbox") return;

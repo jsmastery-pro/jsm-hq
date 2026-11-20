@@ -69,6 +69,7 @@ export function createWsSource(token: string): OfficeDataSource {
     sendMessage: (toId, text) => send("sendMessage", toId, text),
     startAgent: (id) => send("startAgent", id),
     stopAgent: (id) => send("stopAgent", id),
+    restartAgent: (id) => send("restartAgent", id),
     openWorkspace: (id) => send("openWorkspace", id),
     recreateSandbox: (id) => send("recreateSandbox", id),
     recheckSetup: () => send("recheckSetup"),

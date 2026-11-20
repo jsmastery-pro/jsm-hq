@@ -176,6 +176,20 @@ export function createMockSource(): OfficeDataSource {
       world.activity("session", id, `${world.name(id)}'s session stopped`);
     },
 
+    restartAgent(id) {
+      const st = world.status(id);
+      if (!st || st.session.state !== "running") return;
+      sim.stopAgent(id);
+      world.setStatus(id, { state: "idle", note: "Restarting", session: { ...st.session, state: "starting", detail: "Restarting…" } });
+      world.activity("session", id, `Restarting ${world.name(id)}`);
+      world.after(1.5, () => {
+        const now = world.status(id);
+        if (!now) return;
+        world.setStatus(id, { note: null, session: { ...now.session, state: "running", detail: null } });
+        if (!world.cfg(id)?.isLead) sim.startWorker(id, 1.5);
+      });
+    },
+
     recreateSandbox(id) {
       const st = world.status(id);
       const r = world.cfg(id)?.sandbox.resources;

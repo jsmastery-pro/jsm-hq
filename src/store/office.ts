@@ -162,6 +162,7 @@ export const officeActions = {
   resizeTerminal: (agentId: string, cols: number, rows: number) => source.resizeTerminal(agentId, cols, rows),
   startAgent: (id: string) => source.startAgent(id),
   stopAgent: (id: string) => source.stopAgent(id),
+  restartAgent: (id: string) => source.restartAgent(id),
   openWorkspace: (id: string) => source.openWorkspace(id),
   recreateSandbox: (id: string) => source.recreateSandbox(id),
   openShell: (id: string) => source.openShell(id),

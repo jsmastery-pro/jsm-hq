@@ -68,6 +68,7 @@ export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inb
     resizeTerminal: (id, cols, rows) => sessions.resize(str(id, 80), num(cols), num(rows)),
     startAgent: (id) => sessions.start(str(id, 80)),
     stopAgent: (id) => sessions.stop(str(id, 80)),
+    restartAgent: (id) => sessions.restart(str(id, 80)),
     openWorkspace: (id) => sessions.openWorkspace(str(id, 80)),
     recreateSandbox: (id) => sessions.recreate(str(id, 80)),
     recheckSetup: async () => {

@@ -108,7 +108,7 @@ Unticking a server takes effect when that agent's sandbox is recreated, because 
 
 ## App variables and keys
 
-- **App variables** (Settings → Sandbox → App variables) become environment variables in the agent's session and its Shell tab. They're not a `.env` file in the project. Agents are told the names, never the values. Restart the agent after changing them.
+- **App variables** (Settings → Sandbox → App variables) become environment variables in the agent's session and its Shell tab. They're not a `.env` file in the project. Agents are told the names, never the values. Press **Restart** in the agent's drawer after changing them.
 - **Service keys** (Settings → Sandbox) go to Docker Sandboxes' secret store. A sandbox's proxy adds the key to matching requests, so the key itself never enters the VM.
 
 HQ never stores key values and never reads your env files.
@@ -122,7 +122,7 @@ HQ never stores key values and never reads your env files.
 | Font: Pixel, Clean or Mono | Settings → Project | Right away, in this browser only. The office itself stays pixel. |
 | Sound when an agent needs you (on by default; the tab title also shows how many are waiting) | Settings → Project | Right away, in this browser only |
 | Review tool | Settings → Workflow | Right away |
-| Agents, roles, CLI, mode | Settings → Team | Next time the agent starts |
+| Agents, roles, CLI, mode | Settings → Team | Next time the agent starts, or press **Restart** in its drawer |
 | CPU and memory | Settings → Sandbox | After **Recreate sandbox** |
 | MCP servers per agent | Settings → MCP | Right away for new servers |
 
