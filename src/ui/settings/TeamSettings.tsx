@@ -83,9 +83,14 @@ function AgentRow({ agent, expanded, onToggle, onRemove }: { agent: AgentConfig;
           )}
         </div>
       </div>
+      {agent.cli === "antigravity" && agent.mode === "sandbox" && (
+        <div className="border-t-2 border-dashed border-red/40 bg-red/10 px-3 py-1 text-[12px] text-red">
+          Docker Sandboxes does not have a built-in <code>agy</code> image yet. Switch to <strong>Local mode</strong> to run Antigravity in an isolated workspace.
+        </div>
+      )}
       {agent.mode === "local" && (
         <div className="border-t-2 border-dashed border-cream-3 px-3 py-1 text-[12px] text-muted">
-          Local mode runs plain <code>{agent.cli}</code> in the agent's own folder. Permission prompts stay on.
+          Local mode runs plain <code>{agent.cli === "antigravity" ? "agy" : agent.cli}</code> in the agent's own folder. Permission prompts stay on.
         </div>
       )}
       {expanded && (
@@ -108,7 +113,7 @@ function AgentRow({ agent, expanded, onToggle, onRemove }: { agent: AgentConfig;
               className="field"
               value={agent.model}
               placeholder={`${CLI_LABEL[agent.cli]} default`}
-              list={agent.cli === "codex" ? "codex-models" : "claude-models"}
+              list={agent.cli === "codex" ? "codex-models" : agent.cli === "antigravity" ? "antigravity-models" : "claude-models"}
               onCommit={(v) => set({ model: v.trim() })}
             />
           </Field>
@@ -168,7 +173,13 @@ function AddAgent() {
           <input className="field" value={role} list="role-suggestions" onChange={(e) => setRole(e.target.value)} />
         </Field>
         <Field label="Agent">
-          <CliSelect value={cli} onChange={setCli} />
+          <CliSelect
+            value={cli}
+            onChange={(nextCli) => {
+              setCli(nextCli);
+              if (nextCli === "antigravity") setMode("local");
+            }}
+          />
         </Field>
         <Field label="Runs in">
           <select className="field" value={mode} onChange={(e) => setMode(e.target.value as AgentMode)}>
@@ -185,6 +196,13 @@ function AddAgent() {
       </p>
       <datalist id="codex-models">
         <option value="gpt-5.6-sol" />
+      </datalist>
+      <datalist id="antigravity-models">
+        <option value="gemini-3.8-flash-high" />
+        <option value="gemini-3.8-pro" />
+        <option value="gemini-3.8-pro-max" />
+        <option value="gemini-3.8-flash" />
+        <option value="auto" />
       </datalist>
       <datalist id="claude-models">
         <option value="opus" />
