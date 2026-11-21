@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A fictional frontend developer portfolio with a South Florida sunset aesthetic.">
+  <title>Alex Rivera — Frontend Developer</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="portfolio.js" defer></script>
+</head>
+<body id="top">
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="masthead">
+    <div class="wrap nav-bar">
+      <a class="wordmark" href="#top">AR<span>.</span></a>
+      <nav aria-label="Main">
+        <a href="#work">Work</a>
+        <a href="#about">About</a>
+        <a href="#contact">Contact ↗</a>
+      </nav>
+    </div>
+  </header>
+  <main id="main" tabindex="-1">
+    <section class="hero" aria-labelledby="name">
+      <img class="skyline" src="sunset.webp" alt="" fetchpriority="high">
+      <div class="wrap hero-content">
+        <p class="eyebrow"><span class="dot"></span> Frontend developer · Sample portfolio</p>
+        <h1 id="name">Alex<br><em>Rivera.</em></h1>
+        <p>I build websites with character, from the first sketch to the last line of CSS.</p>
+        <a class="button" href="#work">Explore my work <span aria-hidden="true">↓</span></a>
+      </div>
+    </section>
+    <section class="wrap section" id="work" aria-labelledby="work-title">
+      <div class="section-heading">
+        <h2 id="work-title">Selected work<span>.</span></h2>
+        <p class="eyebrow">Sample projects</p>
+      </div>
+      <div class="projects">
+        <article class="project">
+          <div class="cover coast" aria-hidden="true"><span>Coastline</span></div>
+          <div class="project-body">
+            <p class="eyebrow">Travel guide</p>
+            <h3>Coastline</h3>
+            <p>A weekend guide built around walkable routes, local stops, and the last light of the day.</p>
+            <details>
+              <summary>Project notes</summary>
+              <p>The concept uses a mobile-first itinerary with route cards, travel times, and a printable day plan.</p>
+            </details>
+          </div>
+        </article>
+        <article class="project">
+          <div class="cover signal" aria-hidden="true"><span>Night<br>Signal</span></div>
+          <div class="project-body">
+            <p class="eyebrow">Music discovery</p>
+            <h3>Night Signal</h3>
+            <p>A radio directory for finding independent stations and late-night shows.</p>
+            <details>
+              <summary>Project notes</summary>
+              <p>The concept pairs a station browser with a weekly schedule and shows airtimes in the listener’s time zone.</p>
+            </details>
+          </div>
+        </article>
+        <article class="project">
+          <div class="cover studio" aria-hidden="true"><span>Still<br>Form</span></div>
+          <div class="project-body">
+            <p class="eyebrow">Editorial storefront</p>
+            <h3>Still Form</h3>
+            <p>A catalog for a ceramics studio, with room for the materials and makers behind each piece.</p>
+            <details>
+              <summary>Project notes</summary>
+              <p>The concept pairs collection pages with profiles of the makers and includes dimensions and care instructions for each piece.</p>
+            </details>
+          </div>
+        </article>
+      </div>
+    </section>
+    <section class="about" id="about" aria-labelledby="about-title">
+      <div class="wrap section about-grid">
+        <div>
+          <h2 id="about-title">About me<span>.</span></h2>
+          <p>In this sample profile, I’m a frontend developer who enjoys turning art direction into interfaces that feel at home on any screen.</p>
+        </div>
+        <div>
+          <h3>Skills</h3>
+          <ul class="skills">
+            <li>HTML</li><li>CSS</li><li>JavaScript</li><li>Responsive design</li><li>Web accessibility</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+    <section class="wrap section contact" id="contact" aria-labelledby="contact-title">
+      <h2 id="contact-title">Let’s talk<span>.</span></h2>
+      <p id="example-address">Example email address</p>
+      <div class="contact-actions">
+        <a class="button" href="mailto:alex@example.com" aria-describedby="example-address">alex@example.com <span aria-hidden="true">↗</span></a>
+        <button class="secondary" type="button" id="copy-email" hidden>Copy email</button>
+      </div>
+      <p class="copy-status" role="status"></p>
+    </section>
+  </main>
+  <footer class="wrap footer">
+    <p>Fictional portfolio · Independent design study</p>
+    <a href="#top">Back to top ↑</a>
+  </footer>
+</body>
+</html>
