@@ -88,6 +88,8 @@ Mark a request **Done** (with an optional note) or **Dismiss** it, and HQ tells 
 
 Optional. In Settings → Stack (or during the welcome), pick what the project uses: frameworks, plus tools for auth, payments, database, analytics and security. You can also add your own under "Other".
 
+For an existing repo, **Detect from repo** reads `package.json` (and workspace packages in a monorepo) and suggests what it finds, such as Next.js in `apps/web`, Clerk or Stripe. It only fills what you haven't chosen, and saves nothing until you press Add.
+
 - Agents see the stack in their instructions.
 - Each tool's official agent skills are installed into the agents' folders (`.claude/skills`, `.agents/skills`), kept out of git.
 - One click allows every tool's docs and API websites for all sandboxes.

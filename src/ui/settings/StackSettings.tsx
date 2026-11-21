@@ -2,6 +2,8 @@ import { useState } from "react";
 import {
   EMPTY_STACK,
   frameworks,
+  mergeStack,
+  stackAdditions,
   STACK_CATEGORIES,
   stackDomains,
   stackKeys,
@@ -34,6 +36,8 @@ export function StackSettings() {
         Skip it and agents work as before.
       </p>
 
+      <Detect stack={stack} save={save} />
+
       <Frameworks stack={stack} save={save} />
 
       <section>
@@ -62,6 +66,46 @@ export function StackSettings() {
         </>
       )}
     </div>
+  );
+}
+
+/** "Detect from repo": what the package.json files say, added only where nothing is chosen (issue #33). */
+function Detect({ stack, save }: { stack: StackConfig; save: (s: StackConfig) => void }) {
+  const found = useOffice((s) => s.stackDetected);
+  const [asked, setAsked] = useState(false);
+  const adds = found ? stackAdditions(stack, found) : [];
+  return (
+    <section className="flex flex-wrap items-center gap-2 border-[3px] border-line bg-paper px-3 py-2 text-[13px]">
+      <button
+        className="btn px-2 text-[13px]"
+        onClick={() => {
+          setAsked(true);
+          officeActions.detectStack();
+        }}
+      >
+        Detect from repo
+      </button>
+      <span className="min-w-0 flex-1 text-muted">
+        {!asked
+          ? "Reads package.json (and workspace packages) to fill in what's missing. Nothing is saved until you add it."
+          : !found
+            ? "Reading package.json…"
+            : adds.length
+              ? `Found: ${adds.join(", ")}`
+              : "Nothing new found in package.json."}
+      </span>
+      {asked && found && adds.length > 0 && (
+        <button
+          className="btn px-2 text-[13px]"
+          onClick={() => {
+            save(mergeStack(stack, found));
+            setAsked(false);
+          }}
+        >
+          Add
+        </button>
+      )}
+    </section>
   );
 }
 

@@ -77,6 +77,7 @@ export function createWsSource(token: string): OfficeDataSource {
     updateAgent: (id, patch) => send("updateAgent", id, patch),
     removeAgent: (id, opts) => send("removeAgent", id, opts),
     inspectWorkspace: (id) => send("inspectWorkspace", id),
+    detectStack: () => send("detectStack"),
     updateSandbox: (id, patch) => send("updateSandbox", id, patch),
     setSecret: (id, name, value) => send("setSecret", id, name, value),
     removeSecret: (id, name) => send("removeSecret", id, name),

@@ -1,6 +1,6 @@
 import { agentPalette } from "../../theme/tokens";
 import type { OfficeDataSource, OfficeEvent, SimSpeed } from "../source";
-import { stackDomains } from "../stack";
+import { detectStack, stackDomains } from "../stack";
 import { HOST_TERMINAL, type AccessRequest, AgentConfig, AgentPatch, Board, NewAgentInput, ProjectConfig, SandboxSettings, WorkflowPatch } from "../types";
 import { defaultPresetId, presets, type Preset } from "./presets";
 import { Simulation } from "./simulation";
@@ -245,6 +245,15 @@ export function createMockSource(): OfficeDataSource {
       if (!agent) return;
       Object.assign(agent, patch);
       world.configChanged();
+    },
+
+    detectStack() {
+      // Demo: a monorepo with a Next.js app and a Hono API, Clerk, Stripe and PostHog.
+      const stack = detectStack([
+        { where: "apps/web", deps: ["next", "react", "@clerk/nextjs", "posthog-js"] },
+        { where: "apps/api", deps: ["hono", "stripe"] },
+      ]);
+      listener?.({ type: "stack.detected", stack });
     },
 
     inspectWorkspace(id) {

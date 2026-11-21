@@ -30,6 +30,7 @@ function summary(e: OfficeEvent): string {
   switch (e.type) {
     case "snapshot": return "full snapshot";
     case "workspace.info": return `${e.info.agentId} ${e.info.path}`;
+    case "stack.detected": return `${e.stack.frameworks.length} frameworks, ${Object.keys(e.stack.tools).length} tools`;
     case "sbx.updated": return `base ${e.sbx.basePolicy}, ${Object.keys(e.sbx.agents).length} sandboxes`;
     case "setup.updated": return `sandbox ${e.setup.sandboxReady ? "ready" : "not ready"}`;
     case "config.updated": return `team ${e.config.team.length}`;

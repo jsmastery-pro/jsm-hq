@@ -32,6 +32,8 @@ export type OfficeEvent =
   | { type: "setup.updated"; setup: SetupState }
   | { type: "sbx.updated"; sbx: SbxState }
   | { type: "workspace.info"; info: WorkspaceInfo }
+  /** Answer to detectStack: what the repo's package.json files say (nothing is saved). */
+  | { type: "stack.detected"; stack: StackConfig }
   | { type: "config.updated"; config: HqConfig }
   | { type: "agent.updated"; agent: AgentStatus }
   | { type: "agent.removed"; agentId: string }
@@ -133,6 +135,8 @@ export interface OfficeDataSource {
 
   /** The project's stack (null clears it). */
   updateStack(stack: StackConfig | null): void;
+  /** Reads the repo's package.json files; answered with a `stack.detected` event. Saves nothing. */
+  detectStack(): void;
   /** Answers an agent's request_access: allow for that agent, for every agent, or deny. */
   resolveAccess(requestId: string, decision: AccessDecision): void;
 

@@ -2,7 +2,8 @@
 
 import { SERVICE_KEYS, type AgentCli, type AgentConfig, type AgentPatch, type ReviewTool, type WelcomeInput, type NewMcpServer, type Board, type NewAgentInput, type ProjectConfig, type RemoveAgentOptions, type SandboxSettings, type SetupCheckId, type WorkflowPatch } from "../src/data/types";
 import { LEAD_NAME, OFFICE_NAME_MAX } from "../src/data/names";
-import { STACK_CATEGORIES, stackSkills, stackTool, type StackChoice, type StackConfig } from "../src/data/stack";
+import { detectStack, STACK_CATEGORIES, stackSkills, stackTool, type StackChoice, type StackConfig } from "../src/data/stack";
+import { findPackages } from "./stackDetect";
 import { resolveAccess } from "./access";
 import { ensureSkillCache } from "./skills";
 import { run } from "./lib/exec";
@@ -119,6 +120,11 @@ export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inb
       hub.configChanged();
       // Codex agents add their own setup checks.
       if (`${agent.cli}/${agent.mode}` !== before) void sessions.recheckSetup();
+    },
+
+    /** Settings → Stack "Detect from repo": reads package.json files, saves nothing. */
+    detectStack: () => {
+      hub.emit({ type: "stack.detected", stack: detectStack(findPackages(hub.repo.root)) });
     },
 
     inspectWorkspace: async (id) => {

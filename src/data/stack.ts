@@ -242,3 +242,81 @@ export function stackSkills(stack: StackConfig | undefined): SkillSpec[] {
   for (const t of chosenTools(stack)) for (const spec of t.skills) for (const name of spec.skills) bySource.set(spec.source, (bySource.get(spec.source) ?? new Set()).add(name));
   return [...bySource].map(([source, names]) => ({ source, skills: [...names].sort() })).sort((a, b) => a.source.localeCompare(b.source));
 }
+
+// ---------------------------------------------------------------- detection (issue #33)
+
+/** One package.json in the repo: where it lives ("" for the root) and its dependency names. */
+export interface FoundPackage {
+  where: string;
+  deps: string[];
+}
+
+/**
+ * npm packages that mean a catalog entry is in use. A name ending in "/" matches the whole scope.
+ * Frameworks are tried in this order, so a package with both `next` and `express` (a custom
+ * server) counts as Next.js. Ambiguous ones are left out on purpose: Supabase's client means the
+ * database, not necessarily Supabase Auth.
+ */
+const DETECT: [id: string, packages: string[]][] = [
+  ["nextjs", ["next"]],
+  ["nuxt", ["nuxt"]],
+  ["sveltekit", ["@sveltejs/kit"]],
+  ["astro", ["astro"]],
+  ["react-router", ["@react-router/dev"]],
+  ["nestjs", ["@nestjs/core"]],
+  ["hono", ["hono"]],
+  ["express", ["express"]],
+  ["clerk", ["@clerk/"]],
+  ["better-auth", ["better-auth"]],
+  ["auth0", ["@auth0/"]],
+  ["stripe", ["stripe", "@stripe/"]],
+  ["polar", ["@polar-sh/"]],
+  ["neon", ["@neondatabase/serverless"]],
+  ["supabase", ["@supabase/supabase-js", "@supabase/ssr"]],
+  ["posthog", ["posthog-js", "posthog-node"]],
+  ["plausible", ["next-plausible", "plausible-tracker"]],
+  ["vercel-analytics", ["@vercel/analytics"]],
+  ["arcjet", ["@arcjet/"]],
+  ["upstash-ratelimit", ["@upstash/ratelimit"]],
+];
+
+const uses = (deps: string[], patterns: string[]) => deps.some((d) => patterns.some((p) => (p.endsWith("/") ? d.startsWith(p) : d === p)));
+
+/** The framework one package is built with: the first DETECT match, else React (Vite) for react + vite. */
+function frameworkOf(deps: string[]): string | null {
+  for (const [id, pkgs] of DETECT) if (stackTool(id)?.category === "framework" && uses(deps, pkgs)) return id;
+  return deps.includes("react") && deps.includes("vite") ? "react-vite" : null;
+}
+
+/** What the repo's package.json files say it's built with. No AI, no network: names only. */
+export function detectStack(packages: FoundPackage[]): StackConfig {
+  const frameworks: StackChoice[] = [];
+  for (const p of packages) {
+    const id = frameworkOf(p.deps);
+    if (id && !frameworks.some((f) => f.id === id && (f.where ?? "") === p.where)) frameworks.push(p.where ? { id, where: p.where } : { id });
+  }
+  const all = packages.flatMap((p) => p.deps);
+  const tools: StackConfig["tools"] = {};
+  for (const [id, pkgs] of DETECT) {
+    const tool = stackTool(id);
+    if (!tool || tool.category === "framework" || tools[tool.category] || !uses(all, pkgs)) continue;
+    tools[tool.category] = { id };
+  }
+  return { frameworks, tools };
+}
+
+/** The detected stack added to the current one: new frameworks, and tools only where nothing is chosen yet. */
+export function mergeStack(current: StackConfig, found: StackConfig): StackConfig {
+  const frameworks = [...current.frameworks, ...found.frameworks.filter((f) => !current.frameworks.some((c) => c.id === f.id))];
+  const tools = { ...current.tools };
+  for (const c of STACK_CATEGORIES) if (!tools[c.id] && found.tools[c.id]) tools[c.id] = found.tools[c.id];
+  return { frameworks, tools };
+}
+
+/** Names of what `found` would add to `current`, for "Found: …". */
+export function stackAdditions(current: StackConfig, found: StackConfig): string[] {
+  const merged = mergeStack(current, found);
+  const fw = merged.frameworks.slice(current.frameworks.length).map((f) => `${stackTool(f.id)?.name ?? f.id}${f.where ? ` (${f.where})` : ""}`);
+  const tools = STACK_CATEGORIES.filter((c) => !current.tools[c.id] && merged.tools[c.id]).map((c) => stackTool(merged.tools[c.id]!.id)?.name ?? c.label);
+  return [...fw, ...tools];
+}
