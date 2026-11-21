@@ -2,6 +2,7 @@
 // into its terminal. If it's busy, the message waits and is handed over by the
 // agent's Stop hook when its turn ends (Claude Code then continues with it).
 
+import { CLI_INFO } from "../src/data/types";
 import type { Hub } from "./hub";
 import { log } from "./lib/log";
 
@@ -118,6 +119,13 @@ export class Inbox {
       if (!(await this.keys.type(agentId, this.format(items)))) {
         log.warn(`could not type into ${agentId}; keeping ${items.length} message(s) queued`);
         this.queues.set(agentId, [...items, ...(this.queues.get(agentId) ?? [])]);
+        return;
+      }
+      // CLIs without hooks never send UserPromptSubmit: the agent is busy from here, and the screen
+      // (Sessions.reconcileHookless) says when it's back at its prompt.
+      const cli = this.hub.cfg(agentId)?.cli;
+      if (cli && !CLI_INFO[cli].hooks) {
+        this.hub.setStatus(agentId, { state: "working", note: "Reading new messages" });
         return;
       }
       // If the prompt didn't submit (Enter swallowed), press it once more.

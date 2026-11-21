@@ -10,7 +10,7 @@
 
 One **lead** agent plans the work and hands out tasks. Each **worker** gets its own desk, its own copy of your repo and its own Docker Sandbox, then opens a pull request. You see it all happen: the plan on the wall, agents at their desks, PRs moving through review.
 
-Agents run **Claude Code** or **Codex**. Everything runs on your machine.
+Agents run **Claude Code**, **Codex**, **OpenCode**, **Kilo Code**, **Mistral Vibe**, **Cline** or **Freebuff**: pick one per agent. Everything runs on your machine.
 
 ## Why use it
 
@@ -64,9 +64,9 @@ Use it often? `npm install -g @therealjsmastery/jsm-hq`, then run `jsm-hq` in an
 | GitHub CLI (`gh`) | Reads PRs and reviews |
 | Docker Sandboxes (`sbx`) | Each agent runs in its own VM |
 | tmux (macOS, Linux) | Agents keep running if you close HQ |
-| A Claude or ChatGPT account | For the agents themselves |
+| An account for your coding agent | Claude or ChatGPT for Claude Code and Codex; a provider or sign-in for the others (see [Coding agents](docs/how-it-works.md#coding-agents)) |
 
-Sandboxes need **macOS 14+ on Apple silicon, Windows 11, or Ubuntu 24.04+**. On other machines, set agents to **Local** in Settings → Team: they run Claude Code or Codex directly on your machine, with permission prompts on.
+Sandboxes need **macOS 14+ on Apple silicon, Windows 11, or Ubuntu 24.04+**. On other machines, set agents to **Local** in Settings → Team: they run their coding agent directly on your machine, with permission prompts on.
 
 You don't need to install these by hand first. HQ checks for each one and shows the exact command. The [getting-started guide](docs/getting-started.md) has every step.
 

@@ -2,7 +2,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { arch, cpus, platform, release, totalmem } from "node:os";
-import type { AgentConfig, SetupCheck, SetupFix, SetupState } from "../src/data/types";
+import { CLI_INFO, type AgentCli, type AgentConfig, type SetupCheck, type SetupFix, type SetupState } from "../src/data/types";
 import { usesTmux } from "./backends";
 import { parseCliJson, sandboxList } from "./lib/json";
 import { has, run } from "./lib/exec";
@@ -173,28 +173,45 @@ async function checkGithubSecret(sbxOk: boolean): Promise<Check> {
   };
 }
 
-async function checkCodex(): Promise<Check> {
-  const base = { id: "codex" as const, label: "Codex (for Codex agents in Local mode)", neededFor: "local" as const };
-  const v = await run("codex", ["--version"], { timeoutMs: 8000 });
-  if (v.ok) return { ...base, status: "ok", detail: v.stdout.trim(), fix: null };
-  return { ...base, status: "missing", detail: "Not installed. Only needed for Codex agents in Local mode (sandboxes have it).", fix: fix("npm install -g @openai/codex", false, "https://developers.openai.com/codex/cli") };
+/** A coding agent CLI other than Claude Code, for agents in Local mode (sandboxes install or have their own). */
+async function checkCli(cli: Exclude<AgentCli, "claude">): Promise<Check> {
+  const { label, binary, install, docs } = CLI_INFO[cli];
+  const base = { id: cli, label: `${label} (for ${label} agents in Local mode)`, neededFor: "local" as const };
+  const v = await run(binary, ["--version"], { timeoutMs: 8000 });
+  if (v.ok) return { ...base, status: "ok", detail: v.stdout.trim().split("\n").pop() ?? "Installed", fix: null };
+  return { ...base, status: "missing", detail: `Not installed. Only needed for ${label} agents in Local mode (in a sandbox HQ takes care of it).`, fix: fix(install, false, docs) };
+}
+
+async function hasGlobalSecret(service: string): Promise<boolean> {
+  const r = await run("sbx", ["secret", "ls", "--json"], { timeoutMs: 10_000 });
+  try {
+    return (parseCliJson<{ secrets?: { name: string; scope: string }[] }>(r.stdout)?.secrets ?? []).some((s) => s.name === service && s.scope === "global");
+  } catch {
+    return false; // sbx down
+  }
 }
 
 async function checkOpenAiSecret(sbxOk: boolean): Promise<Check> {
   const base = { id: "openai-secret" as const, label: "OpenAI sign-in for Codex agents", neededFor: "sandbox" as const };
   if (!sbxOk) return { ...base, status: "missing", detail: "Waiting for sbx.", fix: null };
-  const r = await run("sbx", ["secret", "ls", "--json"], { timeoutMs: 10_000 });
-  let has = false;
-  try {
-    has = (parseCliJson<{ secrets?: { name: string; scope: string }[] }>(r.stdout)?.secrets ?? []).some((s) => s.name === "openai" && s.scope === "global");
-  } catch {
-    /* sbx down */
-  }
-  if (has) return { ...base, status: "ok", detail: "Stored in Docker's secret store.", fix: null };
+  if (await hasGlobalSecret("openai")) return { ...base, status: "ok", detail: "Stored in Docker's secret store.", fix: null };
   return { ...base, status: "missing", detail: "Codex agents can't sign in until this is set. Opens your browser to sign in with ChatGPT.", fix: fix("sbx secret set openai --oauth", true, "https://docs.docker.com/ai/sandboxes/") };
 }
 
-/** `team` adds the Codex checks only when the team has Codex agents. */
+/** Vibe in a sandbox: sbx's proxy adds the stored Mistral key to its API calls. A warning, not a blocker: an App variable works too. */
+async function checkMistralSecret(sbxOk: boolean): Promise<Check> {
+  const base = { id: "mistral-secret" as const, label: "Mistral API key for Mistral Vibe agents", neededFor: "sandbox" as const };
+  if (!sbxOk) return { ...base, status: "missing", detail: "Waiting for sbx.", fix: null };
+  if (await hasGlobalSecret("mistral")) return { ...base, status: "ok", detail: "Stored in Docker's secret store; added to Vibe's API calls by the proxy.", fix: null };
+  return {
+    ...base,
+    status: "warning",
+    detail: "Vibe agents in a sandbox need a Mistral API key. Store it once in sbx (or add MISTRAL_API_KEY to the agent's App variables).",
+    fix: fix("sbx secret set mistral", true, "https://docs.mistral.ai/vibe/code/cli"),
+  };
+}
+
+/** `team` adds the per-CLI checks only for the CLIs (and modes) the team uses. */
 export async function runSetupChecks(repo: RepoInfo, team: AgentConfig[] = []): Promise<SetupState> {
   const brew = os === "darwin" && (await has("brew"));
   const [osCheck, sbx, tmux, claude, gh] = await Promise.all([checkOs(), checkSbx(brew), checkTmux(brew), checkClaude(), checkGh(brew)]);
@@ -202,9 +219,11 @@ export async function runSetupChecks(repo: RepoInfo, team: AgentConfig[] = []): 
   const [login, secret] = await Promise.all([checkSbxLogin(sbxOk), checkGithubSecret(sbxOk)]);
   const policy = await checkSbxPolicy(login.status === "ok");
   const checks: SetupCheck[] = [osCheck, sbx, login, policy, secret, tmux, claude, gh, checkRemote(repo)];
-  const codexAgents = team.filter((a) => a.cli === "codex");
-  if (codexAgents.some((a) => a.mode === "sandbox")) checks.splice(5, 0, await checkOpenAiSecret(sbxOk));
-  if (codexAgents.some((a) => a.mode === "local")) checks.push(await checkCodex());
+  const uses = (cli: AgentCli, mode: AgentConfig["mode"]) => team.some((a) => a.cli === cli && a.mode === mode);
+  if (uses("codex", "sandbox")) checks.splice(5, 0, await checkOpenAiSecret(sbxOk));
+  if (uses("vibe", "sandbox")) checks.splice(5, 0, await checkMistralSecret(sbxOk));
+  const localClis = [...new Set(team.filter((a) => a.mode === "local" && a.cli !== "claude").map((a) => a.cli))] as Exclude<AgentCli, "claude">[];
+  checks.push(...(await Promise.all(localClis.map(checkCli))));
   const ok = (c: SetupCheck) => c.status === "ok";
   return {
     machine: { cpus: cpus().length, memoryGb: Math.round(totalmem() / 1024 ** 3), persistentAgents: usesTmux() },

@@ -8,7 +8,7 @@ import { homedir } from "node:os";
 import { stackSkills } from "../src/data/stack";
 import { hasHqSkills, prepareSkills } from "./skills";
 import { resolve, sep } from "node:path";
-import { HOST_TERMINAL, type AgentCli, type SetupCheckId, type WorkspaceInfo } from "../src/data/types";
+import { CLI_INFO, HOST_TERMINAL, type AgentCli, type SetupCheckId, type WorkspaceInfo } from "../src/data/types";
 import { adapters, localBinary } from "./adapters";
 import type { Hub } from "./hub";
 import { sessionBackend, type LaunchSpec, type TermHandle } from "./backends";
@@ -40,6 +40,15 @@ const BUSY = /esc to interrupt/i; // the footer while a turn runs
 const DIALOG = /Enter to select|↑\/↓ to navigate|Do you want to (proceed|make this edit|create)|Would you like to|^\s*[❯›]\s*1\.\s/im;
 const PROMPT_READY = /⏵⏵|\? for shortcuts|Ask Codex to do anything/; // the input prompt is up
 const SCREEN_QUIET_MS = 4000; // only second-guess hooks after this much silence
+// CLIs without hooks. Busy footers across TUIs ("esc to interrupt", "esc interrupt", "ctrl+c to cancel"…).
+const HOOKLESS_BUSY = /esc to (interrupt|cancel|stop)|\besc interrupt\b|press esc to (stop|cancel)|ctrl\+c to (interrupt|cancel|stop)/i;
+// A menu waiting for a choice, told by its key hints ("↑/↓ navigate, Enter to select"), which the agent's
+// own prose doesn't print. DIALOG's wording ("Would you like to", "› 1.") would also match ordinary output.
+const HOOKLESS_DIALOG = /Enter to select|↑\/↓ (to )?navigate/i;
+// Questions those TUIs ask: folder trust, yes/no and approve prompts.
+const HOOKLESS_ASK = /do you trust|trust this (folder|directory)|\(y\/n\)|\[y\/n\]|\bapprove\b.*\?|allow (once|always)/i;
+const HOOKLESS_SETTLE_MS = 6000; // a screen still this long (two polls) = the agent is at its prompt
+const HOOKLESS_BUSY_STALE_MS = 30_000; // …or this long when it shows a busy footer
 const STALE_WORKING_MS = 15_000; // "working" with an idle screen this long = a missed Stop
 
 /** Starts bash (else sh) in a sandbox, with links and browser opening set up (see SHELL_ENV, SANDBOX_BROWSER). */
@@ -67,6 +76,10 @@ export class Sessions {
   onSessionReattached: (agentId: string) => void = () => {};
   /** When the agent's last hook arrived (from the inbox). */
   lastHookAt: (agentId: string) => number = () => 0;
+  /** Called after Start created a new agent session (not when HQ reattached to a running one). */
+  onSessionCreated: (agentId: string) => void = () => {};
+  /** CLIs without hooks: each agent's last screen and when it last changed. */
+  private screens = new Map<string, { text: string; since: number }>();
   private polling: NodeJS.Timeout | null = null;
   /** Consecutive polls that saw a "working" agent's screen sitting idle. */
   private idleScreens = new Map<string, number>();
@@ -84,6 +97,9 @@ export class Sessions {
     const agent = hub.cfg(id);
     const st = hub.status(id);
     if (!agent || !st || st.session.state === "running" || st.session.state === "starting") return;
+    // Choosing a CLI for Local mode re-runs the setup checks in the background. If its check isn't in
+    // yet, wait for it instead of reporting the CLI as missing.
+    if (agent.mode === "local" && !hub.snap.setup.checks.some((c) => c.id === agent.cli)) await this.recheckSetup();
     const setup = hub.snap.setup;
     const fail = (detail: string) => {
       hub.setSession(id, { state: "failed", detail });
@@ -93,8 +109,9 @@ export class Sessions {
     if (!setup.checks.find((c) => c.id === "tmux" && c.status === "ok")) return fail("tmux is not installed. See the setup checklist.");
     if (agent.mode === "sandbox" && !setup.sandboxReady) return fail("Docker Sandboxes isn't ready on this machine. Finish the setup checklist, or switch this agent to Local mode.");
     const check = (cid: string) => setup.checks.find((c) => c.id === cid)?.status;
-    if (agent.mode === "local" && agent.cli === "claude" && check("claude") !== "ok") return fail("Claude Code isn't installed. See the setup checklist.");
-    if (agent.mode === "local" && agent.cli === "codex" && check("codex") !== "ok") return fail("Codex isn't installed on this machine. See the setup checklist, or run this agent in a sandbox.");
+    const info = CLI_INFO[agent.cli];
+    if (agent.mode === "local" && check(agent.cli) !== "ok")
+      return fail(`${info.label} isn't installed on this machine. See the setup checklist${agent.cli === "claude" ? "" : ", or run this agent in a sandbox"}.`);
     if (agent.mode === "sandbox" && agent.cli === "codex" && check("openai-secret") !== "ok")
       return fail("Codex needs an OpenAI key in sbx. Run `sbx secret set openai --oauth` (Setup checklist → Run in terminal).");
 
@@ -113,11 +130,12 @@ export class Sessions {
         const skills = await prepareSkills(hub.slug, dir, specs);
         if (skills.error) hub.activity("session", id, `${agent.name}: some agent skills didn't install (${skills.error.slice(0, 120)}). Starting anyway.`);
       }
-      if (!(await this.backend.exists(name))) {
-        const launch = adapter.launch(agent);
+      const created = !(await this.backend.exists(name));
+      if (created) {
+        const launch = adapter.launch(agent, dir);
         const envFile = this.envFileFor(id);
         // Local mode: the agent gets the env file's variables (tmux only: there's no shell to load them into otherwise).
-        let spec: LaunchSpec = { file: localBinary[agent.cli], args: launch.args, envFile };
+        let spec: LaunchSpec = { file: localBinary[agent.cli], args: launch.args, envFile, env: launch.env };
         if (agent.mode === "local" && envFile && !this.backend.persistent)
           hub.activity("session", id, `${agent.name}'s env file isn't loaded in Local mode on Windows. Use Sandbox mode for app variables.`);
         if (agent.mode === "sandbox") {
@@ -130,7 +148,8 @@ export class Sessions {
           const isNew = !(await this.sandboxExists(name));
           const size = !isNew ? [] : [...(cpus ? ["--cpus", String(cpus)] : []), ...(memoryGb ? ["--memory", `${Math.round(memoryGb * 1024)}m`] : [])];
           const env = [...(envFile ? ["--env-file", envFile] : []), "-e", `BROWSER=${SANDBOX_BROWSER}`];
-          const args = launch.args.length ? ["--", ...launch.args] : [];
+          // sbx's shell agent runs `bash -l -c <script>`; built-in kits take the CLI's own arguments.
+          const args = launch.sandboxScript ? ["--", "-c", launch.sandboxScript] : launch.args.length ? ["--", ...launch.args] : [];
           spec = { file: "sbx", args: ["run", "--name", name, ...size, ...env, launch.sbxAgent, dir, ...args], envFile: null };
         }
         await this.backend.create(name, dir, spec, { cols: 200, rows: 50 });
@@ -138,7 +157,9 @@ export class Sessions {
       this.attach(id);
       hub.setSession(id, { state: "running", detail: null, workspace: dir });
       hub.setStatus(id, { state: "idle", note: agent.mode === "sandbox" ? "Sandbox running" : "Running locally" });
-      hub.activity("session", id, `${agent.name} started (${agent.cli === "codex" ? "Codex" : "Claude Code"}, ${agent.mode === "sandbox" ? "Docker Sandbox" : "Local mode"})`);
+      hub.activity("session", id, `${agent.name} started (${info.label}, ${agent.mode === "sandbox" ? "Docker Sandbox" : "Local mode"})`);
+      this.screens.delete(id);
+      if (created) this.onSessionCreated(id);
       if (agent.mode === "sandbox") {
         setTimeout(() => void this.refreshSandboxSizes(), 4000);
         void this.whenSandboxExists(id).then((ok) => ok && this.onSandboxReady(id));
@@ -403,7 +424,12 @@ export class Sessions {
           if (st.session.state !== "running") {
             this.hub.setSession(agent.id, { state: "running", detail: null, workspace: workspaceFor(agent, this.hub.slug) });
             this.hub.setStatus(agent.id, { note: "Reattached" });
-            this.onSessionReattached(agent.id);
+            // Without hooks, only a settled screen says the prompt is up (reconcileHookless marks it then).
+            if (CLI_INFO[agent.cli].hooks) this.onSessionReattached(agent.id);
+          }
+          if (!CLI_INFO[agent.cli].hooks) {
+            await this.reconcileHookless(agent.id, name);
+            continue;
           }
           if (agent.cli === "codex") await this.watchCodexScreen(agent.id, name);
           await this.reconcileFromScreen(agent.id, agent.cli, name);
@@ -493,6 +519,53 @@ export class Sessions {
     this.idleScreens.delete(agentId);
     // An idle agent's prompt is on screen, so typed messages will land (e.g. HQ missed SessionStart).
     if (st.state === "idle" && !busy && PROMPT_READY.test(screen)) this.onSessionReattached(agentId);
+  }
+
+  /**
+   * CLIs without hooks (OpenCode, Kilo Code, Vibe, Cline, Freebuff): the screen is the only signal.
+   * A screen that keeps changing (output, spinners, timers) means working; one that has been still for
+   * HOOKLESS_SETTLE_MS with no question on it means the agent is at its prompt, so HQ may type into it.
+   */
+  private async reconcileHookless(agentId: string, name: string) {
+    const st = this.hub.status(agentId);
+    if (!st || st.session.state !== "running") return;
+    const raw = await this.backend.screenText(name, 50);
+    if (!raw) return;
+    const text = raw.replace(/[ \t]+$/gm, "");
+    const now = Date.now();
+    const prev = this.screens.get(agentId);
+    if (prev?.text !== text) this.screens.set(agentId, { text, since: now });
+    const stableMs = prev?.text === text ? now - prev.since : 0;
+    const tail = text.split("\n").slice(-15).join("\n");
+    const set = (state: "idle" | "working" | "needs-input", note: string) => {
+      if (process.env.HQ_DEBUG) log.info(`screen ${agentId}: ${st.state} → ${state} (${note})`);
+      this.hub.setStatus(agentId, { state, note });
+    };
+
+    if (HOOKLESS_DIALOG.test(tail) || HOOKLESS_ASK.test(tail)) {
+      if (st.state !== "needs-input") {
+        set("needs-input", "Asking: answer the question in the terminal");
+        this.hub.activity("agent.needs-input", agentId, `${this.hub.name(agentId)} needs you in the terminal`);
+      }
+      return;
+    }
+    // A busy footer counts until the screen has been still for a long time: a running turn keeps
+    // changing it (spinner, timer, output), so a footer frozen that long is an idle screen's hint.
+    if (HOOKLESS_BUSY.test(tail) && stableMs < HOOKLESS_BUSY_STALE_MS) {
+      if (st.state !== "working") set("working", "Working");
+      return;
+    }
+    if (stableMs < HOOKLESS_SETTLE_MS) {
+      // The first look only records the screen: nothing to compare it with yet.
+      if (prev && st.state !== "working") set("working", "Working");
+      return;
+    }
+    if (st.state !== "idle") {
+      const finished = st.state === "working";
+      set("idle", finished ? "Finished — ready for the next instruction" : "Ready");
+      if (finished) this.hub.activity("agent.answered", agentId, `${this.hub.name(agentId)} finished a turn`);
+    }
+    this.onSessionReattached(agentId); // its prompt is up: queued messages can be typed
   }
 
   // ------------------------------------------------------------ setup helper

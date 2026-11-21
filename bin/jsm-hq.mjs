@@ -22,7 +22,8 @@ Options:
   -v, --version   print the version
   -h, --help      show this help
 
-Needs: Docker Sandboxes (sbx) or Claude Code/Codex, tmux, git, gh.
+Needs: Docker Sandboxes (sbx), or a coding agent CLI for Local mode (Claude Code,
+Codex, OpenCode, Kilo Code, Mistral Vibe, Cline or Freebuff), tmux, git, gh.
 HQ checks all of this on start and shows how to fix anything missing.
 Docs: ${pkg.homepage ?? "https://github.com/jsmastery-pro/jsm-hq"}`);
   process.exit(0);

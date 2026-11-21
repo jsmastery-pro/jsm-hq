@@ -7,6 +7,8 @@ export interface LaunchSpec {
   args: string[];
   /** Local mode only: an env file whose variables the agent gets. HQ never reads it. */
   envFile: string | null;
+  /** Extra variables HQ sets for the agent (e.g. where a CLI finds HQ's MCP config). */
+  env?: Record<string, string>;
 }
 
 export interface TermSize {

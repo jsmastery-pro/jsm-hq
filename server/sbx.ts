@@ -5,6 +5,7 @@
 import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { BasePolicy, SbxAgentState, SbxPort, SbxRule, SbxState } from "../src/data/types";
+import { sandboxHosts } from "./adapters";
 import type { Hub } from "./hub";
 import { parseCliJson, sandboxList } from "./lib/json";
 import { run } from "./lib/exec";
@@ -402,7 +403,10 @@ export class Sbx {
     const agent = this.hub.cfg(agentId);
     if (!agent || agent.mode !== "sandbox" || !(await this.exists(agentId))) return;
     const name = this.name(agentId);
-    const want = new Set([...agent.sandbox.allow.map((r) => key("allow", r)), ...agent.sandbox.deny.map((r) => key("deny", r))]);
+    // Plus the hosts the agent's CLI needs to start (e.g. Freebuff's download host): HQ-owned, so they
+    // go away again if the agent switches to another CLI.
+    const allow = [...agent.sandbox.allow, ...sandboxHosts(agent.cli).filter((h) => !agent.sandbox.deny.includes(h))];
+    const want = new Set([...allow.map((r) => key("allow", r)), ...agent.sandbox.deny.map((r) => key("deny", r))]);
     const owned = new Set(this.owned[name] ?? []);
     const all = await this.rules();
     if (!all) {

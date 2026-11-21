@@ -3,7 +3,7 @@
 
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentConfig, Board, HqConfig, SandboxSettings, Task } from "../src/data/types";
+import { isAgentCli, type AgentConfig, type Board, type HqConfig, type SandboxSettings, type Task } from "../src/data/types";
 import { LEAD_NAME, WORKER_NAMES } from "../src/data/names";
 import { slugify } from "./paths";
 import type { RepoInfo } from "./repo";
@@ -75,7 +75,8 @@ export function loadConfig(repo: RepoInfo, port: number): { config: HqConfig; is
     for (const a of found.team) {
       a.workspacePath ??= null;
       a.mcp ??= [];
-      a.cli ??= "claude";
+      // A CLI this HQ doesn't know (an older HQ reading a newer file): fall back to Claude Code.
+      if (!isAgentCli(a.cli)) a.cli = "claude";
       a.sandbox.resources ??= { cpus: null, memoryGb: null };
       // Phase D: policy level, proxy and secret names moved to sbx itself.
       const old = a.sandbox as unknown as Record<string, unknown>;

@@ -26,9 +26,122 @@ export interface SandboxSettings {
 export type AgentMode = "sandbox" | "local";
 
 /** Which coding agent CLI runs in the sandbox. */
-export type AgentCli = "claude" | "codex";
+export type AgentCli = "claude" | "codex" | "opencode" | "kilo" | "vibe" | "cline" | "freebuff";
 
-export const CLI_LABEL: Record<AgentCli, string> = { claude: "Claude Code", codex: "Codex" };
+export interface CliInfo {
+  label: string;
+  /** The command a Local-mode agent runs on this machine. */
+  binary: string;
+  /** How to install it for Local mode (shown in the setup checklist). */
+  install: string;
+  docs: string;
+  /**
+   * Sends HQ hook events (SessionStart, Stop…), so HQ knows exactly when a turn starts and ends and can
+   * hand over messages at the end of a busy turn. Without hooks, HQ reads the agent's screen instead.
+   */
+  hooks: boolean;
+  /** "builtin": a Docker Sandboxes agent kit. "shell": HQ installs the CLI in sbx's shell sandbox on first start. */
+  sandbox: "builtin" | "shell";
+  /** Team MCP support. Without it the agent calls HQ's tools with a small script HQ writes into its folder. */
+  mcp: boolean;
+  /** Suggestions for "Start with model". */
+  models: string[];
+  /** What the model field takes, or null if the CLI has no model setting HQ can pass. */
+  modelHint: string | null;
+  /** Shown before the agent's first start (sign-in, trust prompts…). */
+  firstStart: string | null;
+}
+
+export const CLI_INFO: Record<AgentCli, CliInfo> = {
+  claude: {
+    label: "Claude Code",
+    binary: "claude",
+    install: "npm install -g @anthropic-ai/claude-code",
+    docs: "https://docs.claude.com/en/docs/claude-code",
+    hooks: true,
+    sandbox: "builtin",
+    mcp: true,
+    models: ["opus", "sonnet", "haiku"],
+    modelHint: "opus, sonnet, haiku or a full model id",
+    firstStart: null,
+  },
+  codex: {
+    label: "Codex",
+    binary: "codex",
+    install: "npm install -g @openai/codex",
+    docs: "https://developers.openai.com/codex/cli",
+    hooks: true,
+    sandbox: "builtin",
+    mcp: true,
+    models: ["gpt-5.6-sol"],
+    modelHint: "a model id",
+    firstStart: "First start only: Codex asks you to trust this folder and HQ's hooks. Choose Yes, then Trust all and continue, in the terminal.",
+  },
+  opencode: {
+    label: "OpenCode",
+    binary: "opencode",
+    install: "npm install -g opencode-ai",
+    docs: "https://opencode.ai/docs",
+    hooks: false,
+    sandbox: "builtin",
+    mcp: true,
+    models: [],
+    modelHint: "provider/model, e.g. anthropic/claude-sonnet-4-5 (see `opencode models`)",
+    firstStart: "First start only: if OpenCode has no provider yet, sign in with /connect in its terminal.",
+  },
+  kilo: {
+    label: "Kilo Code",
+    binary: "kilo",
+    install: "npm install -g @kilocode/cli",
+    docs: "https://kilo.ai/docs/code-with-ai/platforms/cli",
+    hooks: false,
+    sandbox: "shell",
+    mcp: true,
+    models: [],
+    modelHint: "provider/model (see `kilo models`)",
+    firstStart: "First start only: HQ installs Kilo Code in the sandbox, then sign in to a provider in its terminal (/connect).",
+  },
+  vibe: {
+    label: "Mistral Vibe",
+    binary: "vibe",
+    install: "curl -LsSf https://mistral.ai/vibe/install.sh | bash",
+    docs: "https://docs.mistral.ai/vibe/code/cli",
+    hooks: false,
+    sandbox: "shell",
+    mcp: true,
+    models: [],
+    modelHint: "a model alias from your Vibe config",
+    firstStart: "First start only: HQ installs Mistral Vibe in the sandbox. If Vibe asks to trust this folder (it holds HQ's .vibe/config.toml), answer Yes in the terminal. In a sandbox, store your key once with `sbx secret set mistral`.",
+  },
+  cline: {
+    label: "Cline",
+    binary: "cline",
+    install: "npm install -g cline",
+    docs: "https://docs.cline.bot/cline-cli/overview",
+    hooks: false,
+    sandbox: "shell",
+    mcp: true,
+    models: [],
+    modelHint: "a model id for your Cline provider",
+    firstStart: "First start only: HQ installs Cline in the sandbox, then sign in in its terminal if it asks.",
+  },
+  freebuff: {
+    label: "Freebuff",
+    binary: "freebuff",
+    install: "npm install -g freebuff",
+    docs: "https://freebuff.com/cli",
+    hooks: false,
+    sandbox: "shell",
+    mcp: false,
+    models: [],
+    modelHint: null,
+    firstStart: "First start only: HQ installs Freebuff in the sandbox (and allows codebuff.com for it), then sign in in its terminal.",
+  },
+};
+
+export const AGENT_CLIS = Object.keys(CLI_INFO) as AgentCli[];
+export const isAgentCli = (v: unknown): v is AgentCli => typeof v === "string" && (AGENT_CLIS as string[]).includes(v);
+export const CLI_LABEL = Object.fromEntries(AGENT_CLIS.map((c) => [c, CLI_INFO[c].label])) as Record<AgentCli, string>;
 
 export interface AgentConfig {
   id: string; // "john"
@@ -246,7 +359,7 @@ export interface RemoveAgentOptions {
 
 // ---------------------------------------------------------------- Setup
 
-export type SetupCheckId = "os" | "sbx" | "sbx-login" | "sbx-policy" | "tmux" | "gh" | "gh-remote" | "github-secret" | "claude" | "codex" | "openai-secret";
+export type SetupCheckId = "os" | "sbx" | "sbx-login" | "sbx-policy" | "tmux" | "gh" | "gh-remote" | "github-secret" | "openai-secret" | "mistral-secret" | AgentCli;
 export type SetupStatus = "ok" | "missing" | "unsupported" | "warning";
 
 export interface SetupFix {

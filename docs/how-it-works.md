@@ -3,6 +3,7 @@
 What HQ does behind the office: where agents work, how they talk, what reaches GitHub, and what HQ saves. New here? Start with the [getting-started guide](getting-started.md).
 
 - [The team](#the-team)
+- [Coding agents](#coding-agents)
 - [Workspaces and sessions](#workspaces-and-sessions)
 - [Messages between agents](#messages-between-agents)
 - [GitHub and reviews](#github-and-reviews)
@@ -21,9 +22,32 @@ What HQ does behind the office: where agents work, how they talk, what reaches G
 
 - **The lead** plans and assigns. It creates boards (for example one per phase), splits the work into tasks and gives each task to a free worker. It never writes app code.
 - **Workers** build. One task means one branch and one pull request. A worker edits only the files its task lists and asks the lead if it needs more.
-- Each agent runs **Claude Code** or **Codex**, in a **Sandbox** (the default) or in **Local** mode. Set this per agent in Settings → Team.
+- Each agent runs a coding agent of your choice (see [Coding agents](#coding-agents)), in a **Sandbox** (the default) or in **Local** mode. Set this per agent in Settings → Team.
 
 New teams get names from The Office: Michael leads, then Dwight, Jim, Pam and so on. Rename them any time.
+
+## Coding agents
+
+Pick the coding agent for each agent in Settings → Team (or in the welcome screen). Mix them freely: a Claude Code lead with OpenCode and Cline workers works fine.
+
+| Agent | In a sandbox | Talks to HQ through | First start |
+| --- | --- | --- | --- |
+| **Claude Code** | Docker's Claude Code kit | Team MCP + hooks | Nothing to do |
+| **Codex** | Docker's Codex kit | Team MCP + hooks | Trust the folder and HQ's hooks in the terminal; `sbx secret set openai --oauth` once |
+| **OpenCode** | Docker's OpenCode kit | Team MCP (`opencode.json`) | Sign in to a provider with `/connect` if it asks |
+| **Kilo Code** | Installed by HQ on first start | Team MCP (`kilo.json`) | Sign in to a provider if it asks |
+| **Mistral Vibe** | Installed by HQ on first start | Team MCP (`.vibe/config.toml`) | Trust the folder if Vibe asks; `sbx secret set mistral` once (or add `MISTRAL_API_KEY` to App variables) |
+| **Cline** | Installed by HQ on first start | Team MCP (an HQ file passed with `CLINE_MCP_SETTINGS_PATH`) | Sign in in its terminal |
+| **Freebuff** | Installed by HQ on first start; HQ allows `codebuff.com` for it | A small script, `node .jsmhq-hq.mjs <tool>` (Freebuff has no MCP) | Sign in in its terminal |
+
+What's different from Claude Code and Codex:
+
+- **HQ reads their screen.** OpenCode, Kilo Code, Vibe, Cline and Freebuff don't send HQ hook events, so HQ tells their state from the terminal. A screen that keeps changing means working. A still screen means ready. A question on screen means it needs you. This is a little slower to notice (a few seconds), and a message for a busy agent waits until its screen is still, instead of being handed over the moment its turn ends.
+- **Their role comes as a first message.** HQ writes the role to `.jsmhq-role.md` (OpenCode and Kilo Code also load it from their config), and the first thing HQ types into a new session is "[HQ] … Read .jsmhq-role.md".
+- **In a sandbox, HQ installs them** the first time the agent starts, into Docker's plain `shell` sandbox. That takes a minute or two and uses the package registries the sandbox may reach (Node comes from PyPI). Later starts reuse it. Recreating the sandbox installs it again.
+- **Local mode** runs the CLI you installed on this machine. The setup checklist shows the install command for each one the team uses. OpenCode 2 runs with `--standalone`, so each agent has its own OpenCode server instead of sharing your background one.
+- **Models.** "Start with model" takes what the CLI takes: `provider/model` for OpenCode and Kilo Code, a model alias for Vibe, a model id for Cline. Freebuff picks its model in the app.
+- **Config files.** HQ writes each CLI's config into the agent's own folder and keeps it out of git. If your repo commits `opencode.json`, `kilo.json` or `.vibe/config.toml`, HQ won't change it: pick another coding agent for that agent.
 
 ## Workspaces and sessions
 

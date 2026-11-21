@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { CLI_LABEL, HUMAN_ID, type AccessRequest, type AgentConfig, type AgentStatus, type OfficeSnapshot } from "../../data/types";
+import { CLI_INFO, CLI_LABEL, HUMAN_ID, type AccessRequest, type AgentConfig, type AgentStatus, type OfficeSnapshot } from "../../data/types";
 import { officeActions, useOffice } from "../../store/office";
 import { ui, type AgentTab } from "../../store/ui";
 import { ago, Dot, Portrait, ReviewChip, SectionTitle, StateChip, Tabs, useNow } from "../kit";
@@ -246,11 +246,7 @@ function NotRunning({ agent, status }: { agent: AgentConfig; status: AgentStatus
                 ? `Start runs ${CLI_LABEL[agent.cli]} in a Docker Sandbox on this agent's own copy of the repo.`
                 : `Start runs ${CLI_LABEL[agent.cli]} locally in this agent's own copy of the repo, with permission prompts on.`}
             </p>
-            {agent.cli === "codex" && (
-              <p className="mb-4 text-[12px] text-[#ffc14d]">
-                First start only: Codex asks you to trust this folder and HQ's hooks. Choose <b>Yes</b>, then <b>Trust all and continue</b>, in the terminal.
-              </p>
-            )}
+            {CLI_INFO[agent.cli].firstStart && <p className="mb-4 text-[12px] text-[#ffc14d]">{CLI_INFO[agent.cli].firstStart}</p>}
             <p className="hidden">
             </p>
             <div className="flex justify-center gap-2">

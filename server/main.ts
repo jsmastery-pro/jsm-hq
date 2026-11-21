@@ -24,6 +24,8 @@ import { detectRepo } from "./repo";
 import { Sessions } from "./sessions";
 import { runSetupChecks } from "./setup";
 import { loadConfig, loadPlan } from "./store";
+import { ROLE_FILE } from "./agentFiles";
+import { CLI_INFO } from "../src/data/types";
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
@@ -54,6 +56,16 @@ async function main() {
   sessions.onSessionDown = (id) => inbox.sessionDown(id);
   sessions.onSessionReattached = (id) => inbox.sessionReattached(id);
   sessions.lastHookAt = (id) => inbox.lastHookAt(id);
+  // CLIs without hooks have no SessionStart hook to load the role: hand it over as the first message.
+  sessions.onSessionCreated = (id) => {
+    const agent = hub.cfg(id);
+    if (!agent || CLI_INFO[agent.cli].hooks) return;
+    inbox.push(id, {
+      fromId: "you",
+      kind: "notice",
+      text: `You are ${agent.name}, managed by JSM HQ. Read ${ROLE_FILE} in this folder now: it has your role, your team, the rules and your HQ tools. Follow it for this whole session. Then wait for instructions.`,
+    });
+  };
   const sbx = new Sbx(hub);
   sessions.envFileFor = (id) => (existsSync(sbx.envFile(id)) ? sbx.envFile(id) : null);
   const mcp = new SbxMcp(hub, (id, file, args, onExit) => sessions.runTerminal(id, file, args, onExit));

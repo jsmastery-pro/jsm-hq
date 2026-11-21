@@ -20,6 +20,49 @@ export const HQ_FILES = [ROLE_FILE, ".claude/settings.local.json", MCP_CONFIG, H
 export interface RoleExtras {
   ownRole?: string | null;
   hasEnvFile?: boolean;
+  /** How the agent reaches HQ's team tools: the Team MCP (default), or the HQ_TOOL_SCRIPT for CLIs without MCP. */
+  toolsVia?: "mcp" | "script";
+}
+
+/** For agents whose CLI has no MCP support: a node script that calls the Team MCP's tools. */
+export const HQ_TOOL_SCRIPT = ".jsmhq-hq.mjs";
+
+/**
+ * Writes HQ_TOOL_SCRIPT. It speaks the Team MCP's stateless JSON-RPC over HTTP, so the agent gets the
+ * same tools (same names and arguments) as an MCP client. Holds the agent token, so it's 0600.
+ */
+export function writeHqToolScript(dir: string, agent: AgentConfig, port: number, token: string) {
+  const source = `// Written by JSM HQ for this agent (git-excluded). Calls HQ's team tools.
+//   node ${HQ_TOOL_SCRIPT} --list                       list the tools and their arguments
+//   node ${HQ_TOOL_SCRIPT} <tool> '{"arg":"value"}'     call one (arguments as JSON)
+const url = ${JSON.stringify(`${hqUrl(agent, port)}/mcp`)};
+const headers = {
+  Authorization: ${JSON.stringify(`Bearer ${token}`)},
+  "X-HQ-Agent": ${JSON.stringify(agent.id)},
+  "Content-Type": "application/json",
+  Accept: "application/json, text/event-stream",
+};
+const rpc = async (method, params) => {
+  const res = await fetch(url, { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+  const body = await res.json();
+  if (body.error) throw new Error(body.error.message);
+  return body.result;
+};
+const [tool, raw] = process.argv.slice(2);
+try {
+  if (!tool || tool === "--list") {
+    for (const t of (await rpc("tools/list", {})).tools) console.log(\`\${t.name}  \${JSON.stringify(t.inputSchema?.properties ?? {})}\\n  \${t.description ?? ""}\`);
+  } else {
+    const result = await rpc("tools/call", { name: tool, arguments: raw ? JSON.parse(raw) : {} });
+    for (const c of result.content ?? []) if (c.type === "text") console.log(c.text);
+    if (result.isError) process.exitCode = 1;
+  }
+} catch (err) {
+  console.error("HQ tool call failed:", err instanceof Error ? err.message : err);
+  process.exitCode = 1;
+}
+`;
+  agentWrite(dir, HQ_TOOL_SCRIPT, source, { mode: 0o600 });
 }
 
 /** HQ ≤ 0.3 wrote its role to ROLE.md; recognise that so it can be cleaned up. */
@@ -153,10 +196,15 @@ export function roleMd(agent: AgentConfig, cfg: HqConfig, extras: RoleExtras = {
         ]
       : []),
     ...(extras.ownRole?.trim() ? ["## From ROLE.md in this folder", extras.ownRole.trim(), ""] : []),
-    "## Team MCP (server `hq`)",
-    `Your tools: ${tools}.`,
+    ...(extras.toolsVia === "script"
+      ? [
+          "## HQ tools",
+          `Your tools: ${tools}. You reach them with a script in this folder, not MCP: run \`node ${HQ_TOOL_SCRIPT} <tool> '<JSON arguments>'\` in your shell, for example \`node ${HQ_TOOL_SCRIPT} get_my_task\` or \`node ${HQ_TOOL_SCRIPT} send_message '{"to":"<name>","text":"…"}'\`. Run \`node ${HQ_TOOL_SCRIPT} --list\` once to see every tool's arguments.`,
+        ]
+      : ["## Team MCP (server `hq`)", `Your tools: ${tools}.`]),
     "Messages that start with `[HQ]` come from JSM HQ: assignments from the lead, or messages from teammates. Act on them.",
     "Teammates work in their own sandboxes and cannot see your files or terminal. Talk to them only with send_message.",
+    ...(extras.toolsVia === "script" ? ["Where these rules name a tool (get_my_task, ask_user…), call it with the script above."] : []),
     "",
     `Project: ${cfg.project.name} (${cfg.project.repo}). You are managed by JSM HQ.`,
     "",

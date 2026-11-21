@@ -26,7 +26,12 @@ export const loadEnvFile = (quotedPath: string) =>
 /** The shell line tmux runs. Local mode loads the env file into that shell. */
 export function shellCommand(spec: LaunchSpec): string {
   const load = spec.envFile ? `${loadEnvFile(shq(spec.envFile))} && ` : "";
-  return load + [spec.file, ...spec.args].map(q).join(" ");
+  // HQ's own variables go last, so an app variable can't change where the CLI finds HQ's files.
+  const env = Object.entries(spec.env ?? {})
+    .filter(([k]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(k))
+    .map(([k, v]) => `export ${k}=${shq(v)} && `)
+    .join("");
+  return load + env + [spec.file, ...spec.args].map(q).join(" ");
 }
 
 export const tmuxBackend: SessionBackend = {

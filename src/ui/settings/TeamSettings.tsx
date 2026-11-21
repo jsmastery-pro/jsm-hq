@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { nextAgentName } from "../../data/names";
-import { CLI_LABEL, type AgentCli, type AgentConfig, type AgentMode } from "../../data/types";
+import { AGENT_CLIS, CLI_INFO, CLI_LABEL, type AgentCli, type AgentConfig, type AgentMode } from "../../data/types";
 import { officeActions, useOffice } from "../../store/office";
 import { agentPalette } from "../../theme/tokens";
 import { Field, Portrait, SectionTitle } from "../kit";
@@ -10,7 +10,7 @@ import { RemoveAgentDialog } from "./RemoveAgentDialog";
 export function CliSelect({ value, onChange }: { value: AgentCli; onChange: (v: AgentCli) => void }) {
   return (
     <select className="field" value={value} onChange={(e) => onChange(e.target.value as AgentCli)} aria-label="Coding agent">
-      {(Object.keys(CLI_LABEL) as AgentCli[]).map((c) => (
+      {AGENT_CLIS.map((c) => (
         <option key={c} value={c}>
           {CLI_LABEL[c]}
         </option>
@@ -85,7 +85,7 @@ function AgentRow({ agent, expanded, onToggle, onRemove }: { agent: AgentConfig;
       </div>
       {agent.mode === "local" && (
         <div className="border-t-2 border-dashed border-cream-3 px-3 py-1 text-[12px] text-muted">
-          Local mode runs plain <code>{agent.cli}</code> in the agent's own folder. Permission prompts stay on.
+          Local mode runs plain <code>{CLI_INFO[agent.cli].binary}</code> in the agent's own folder. Permission prompts stay on.
         </div>
       )}
       {expanded && (
@@ -103,15 +103,24 @@ function AgentRow({ agent, expanded, onToggle, onRemove }: { agent: AgentConfig;
               ))}
             </div>
           </Field>
-          <Field label="Start with model" hint="Optional. Leave empty to use the CLI's default — you can always switch with /model in the terminal. Set it to keep a choice across restarts (e.g. Opus for the lead).">
-            <CommitInput
-              className="field"
-              value={agent.model}
-              placeholder={`${CLI_LABEL[agent.cli]} default`}
-              list={agent.cli === "codex" ? "codex-models" : "claude-models"}
-              onCommit={(v) => set({ model: v.trim() })}
-            />
-          </Field>
+          {CLI_INFO[agent.cli].modelHint ? (
+            <Field
+              label="Start with model"
+              hint={`Optional: ${CLI_INFO[agent.cli].modelHint}. Leave empty to use the CLI's default — you can always switch models in the terminal. Set it to keep a choice across restarts (e.g. a stronger model for the lead).`}
+            >
+              <CommitInput
+                className="field"
+                value={agent.model}
+                placeholder={`${CLI_LABEL[agent.cli]} default`}
+                list={`${agent.cli}-models`}
+                onCommit={(v) => set({ model: v.trim() })}
+              />
+            </Field>
+          ) : (
+            <Field label="Start with model" hint={`${CLI_LABEL[agent.cli]} picks its model in the app.`}>
+              <div className="field flex h-9 items-center bg-cream-2 text-muted">Chosen in {CLI_LABEL[agent.cli]}</div>
+            </Field>
+          )}
           <Field label="Skills" hint="Comma separated. Copied into the agent's .claude/skills.">
             <CommitInput
               className="field"
@@ -183,14 +192,13 @@ function AddAgent() {
       <p className="mt-2 text-[12px] text-muted">
         HQ starts a new sandbox with the lead's network policy and allows it to reach HQ at host.docker.internal.
       </p>
-      <datalist id="codex-models">
-        <option value="gpt-5.6-sol" />
-      </datalist>
-      <datalist id="claude-models">
-        <option value="opus" />
-        <option value="sonnet" />
-        <option value="haiku" />
-      </datalist>
+      {AGENT_CLIS.map((c) => (
+        <datalist key={c} id={`${c}-models`}>
+          {CLI_INFO[c].models.map((m) => (
+            <option key={m} value={m} />
+          ))}
+        </datalist>
+      ))}
       <datalist id="role-suggestions">
         {ROLE_SUGGESTIONS.map((r) => (
           <option key={r} value={r} />
