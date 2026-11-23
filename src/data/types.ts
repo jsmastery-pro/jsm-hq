@@ -26,9 +26,17 @@ export interface SandboxSettings {
 export type AgentMode = "sandbox" | "local";
 
 /** Which coding agent CLI runs in the sandbox. */
-export type AgentCli = "claude" | "codex";
+export type AgentCli = "claude" | "codex" | "opencode";
 
-export const CLI_LABEL: Record<AgentCli, string> = { claude: "Claude Code", codex: "Codex" };
+export const CLI_LABEL: Record<AgentCli, string> = { claude: "Claude Code", codex: "Codex", opencode: "OpenCode (experimental)" };
+
+/** CLIs that run only in a Docker Sandbox for now (Local mode isn't supported yet). */
+export const SANDBOX_ONLY_CLI: readonly AgentCli[] = ["opencode"];
+
+/** Parses an untrusted CLI name, falling back to Claude Code. */
+export function parseCli(v: unknown): AgentCli {
+  return v === "codex" || v === "opencode" ? v : "claude";
+}
 
 export interface AgentConfig {
   id: string; // "john"

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { nextAgentName } from "../../data/names";
-import { CLI_LABEL, type AgentCli, type AgentConfig, type AgentMode } from "../../data/types";
+import { CLI_LABEL, SANDBOX_ONLY_CLI, type AgentCli, type AgentConfig, type AgentMode } from "../../data/types";
 import { officeActions, useOffice } from "../../store/office";
 import { agentPalette } from "../../theme/tokens";
 import { Field, Portrait, SectionTitle } from "../kit";
@@ -66,7 +66,9 @@ function AgentRow({ agent, expanded, onToggle, onRemove }: { agent: AgentConfig;
         <Field label="Runs in">
           <select className="field" value={agent.mode} onChange={(e) => set({ mode: e.target.value as AgentMode })}>
             <option value="sandbox">Sandbox</option>
-            <option value="local">Local</option>
+            <option value="local" disabled={SANDBOX_ONLY_CLI.includes(agent.cli)}>
+              Local{SANDBOX_ONLY_CLI.includes(agent.cli) ? " (not yet)" : ""}
+            </option>
           </select>
         </Field>
         <div className="flex gap-1.5">
@@ -86,6 +88,11 @@ function AgentRow({ agent, expanded, onToggle, onRemove }: { agent: AgentConfig;
       {agent.mode === "local" && (
         <div className="border-t-2 border-dashed border-cream-3 px-3 py-1 text-[12px] text-muted">
           Local mode runs plain <code>{agent.cli}</code> in the agent's own folder. Permission prompts stay on.
+        </div>
+      )}
+      {agent.cli === "opencode" && (
+        <div className="border-t-2 border-dashed border-cream-3 px-3 py-1 text-[12px] text-muted">
+          OpenCode support is experimental and runs in a Docker Sandbox only. Pick its model under More (e.g. a free <code>opencode/…-free</code> model, or <code>anthropic/claude-sonnet-5-5</code> with your key).
         </div>
       )}
       {expanded && (
@@ -108,7 +115,7 @@ function AgentRow({ agent, expanded, onToggle, onRemove }: { agent: AgentConfig;
               className="field"
               value={agent.model}
               placeholder={`${CLI_LABEL[agent.cli]} default`}
-              list={agent.cli === "codex" ? "codex-models" : "claude-models"}
+              list={`${agent.cli}-models`}
               onCommit={(v) => set({ model: v.trim() })}
             />
           </Field>
@@ -148,7 +155,7 @@ function AddAgent() {
   const team = useOffice((s) => s.snap?.config.team) ?? [];
   const suggested = nextAgentName(team.map((a) => a.name));
   const add = () => {
-    officeActions.addAgent({ name: name.trim() || suggested, role, cli, mode });
+    officeActions.addAgent({ name: name.trim() || suggested, role, cli, mode: SANDBOX_ONLY_CLI.includes(cli) ? "sandbox" : mode });
     setName("");
   };
   return (
@@ -171,9 +178,11 @@ function AddAgent() {
           <CliSelect value={cli} onChange={setCli} />
         </Field>
         <Field label="Runs in">
-          <select className="field" value={mode} onChange={(e) => setMode(e.target.value as AgentMode)}>
+          <select className="field" value={SANDBOX_ONLY_CLI.includes(cli) ? "sandbox" : mode} onChange={(e) => setMode(e.target.value as AgentMode)}>
             <option value="sandbox">Sandbox</option>
-            <option value="local">Local</option>
+            <option value="local" disabled={SANDBOX_ONLY_CLI.includes(cli)}>
+              Local{SANDBOX_ONLY_CLI.includes(cli) ? " (not yet)" : ""}
+            </option>
           </select>
         </Field>
         <button className="btn" type="submit">
@@ -185,6 +194,12 @@ function AddAgent() {
       </p>
       <datalist id="codex-models">
         <option value="gpt-5.6-sol" />
+      </datalist>
+      <datalist id="opencode-models">
+        <option value="opencode/deepseek-v4.1-flash-free" />
+        <option value="anthropic/claude-sonnet-5-5" />
+        <option value="anthropic/claude-opus-5-5" />
+        <option value="openai/gpt-5.6-sol" />
       </datalist>
       <datalist id="claude-models">
         <option value="opus" />

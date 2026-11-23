@@ -1,4 +1,4 @@
-// Claude Code / Codex hooks → agent state. Each agent's hooks POST to
+// Claude Code / Codex hooks (and OpenCode's HQ plugin) → agent state. Each agent's hooks POST to
 // /hook/<agentId>/<Event> with the hook's JSON payload.
 
 import type { Hub } from "./hub";
@@ -9,6 +9,8 @@ interface HookPayload {
   tool_name?: string;
   message?: string;
   notification_type?: string;
+  /** The agent can't continue with a Stop reply (OpenCode); queued messages are typed instead. */
+  no_reply?: boolean;
 }
 
 const clip = (s: string, n = 80) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
@@ -74,7 +76,8 @@ export function handleHook(hub: Hub, inbox: Inbox, agentId: string, event: strin
     case "Stop": {
       // Messages that arrived while the agent was busy: hand them over now,
       // and Claude Code continues with them instead of stopping.
-      const queued = inbox.takeForStop(agentId);
+      // OpenCode's plugin can't act on the reply (no_reply): HQ types queued messages once it's idle.
+      const queued = body.no_reply ? null : inbox.takeForStop(agentId);
       if (queued) {
         turnOpen.set(agentId, true); // Claude continues: same turn
         hub.setStatus(agentId, { state: "working", note: "Reading new messages" });

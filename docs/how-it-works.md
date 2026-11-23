@@ -22,6 +22,7 @@ What HQ does behind the office: where agents work, how they talk, what reaches G
 - **The lead** plans and assigns. It creates boards (for example one per phase), splits the work into tasks and gives each task to a free worker. It never writes app code.
 - **Workers** build. One task means one branch and one pull request. A worker edits only the files its task lists and asks the lead if it needs more.
 - Each agent runs **Claude Code** or **Codex**, in a **Sandbox** (the default) or in **Local** mode. Set this per agent in Settings → Team.
+- **OpenCode (experimental)** runs in a Sandbox only. Pick its model in Settings → Team → More: a free `opencode/…-free` model to try it out, or a provider model like `anthropic/claude-sonnet-5-5` with that provider's key in Settings → Sandbox. HQ follows its state through a small plugin it writes into the agent's folder (`.opencode/plugins/jsmhq.js`, kept out of git).
 
 New teams get names from The Office: Michael leads, then Dwight, Jim, Pam and so on. Rename them any time.
 

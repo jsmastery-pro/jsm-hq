@@ -1,6 +1,6 @@
 // Browser commands → server actions. Names match OfficeDataSource methods.
 
-import { SERVICE_KEYS, type AgentCli, type AgentConfig, type AgentPatch, type ReviewTool, type WelcomeInput, type NewMcpServer, type Board, type NewAgentInput, type ProjectConfig, type RemoveAgentOptions, type SandboxSettings, type SetupCheckId, type WorkflowPatch } from "../src/data/types";
+import { parseCli, SANDBOX_ONLY_CLI, SERVICE_KEYS, type AgentCli, type AgentConfig, type AgentPatch, type ReviewTool, type WelcomeInput, type NewMcpServer, type Board, type NewAgentInput, type ProjectConfig, type RemoveAgentOptions, type SandboxSettings, type SetupCheckId, type WorkflowPatch } from "../src/data/types";
 import { LEAD_NAME, OFFICE_NAME_MAX } from "../src/data/names";
 import { detectStack, STACK_CATEGORIES, stackSkills, stackTool, type StackChoice, type StackConfig } from "../src/data/stack";
 import { findPackages } from "./stackDetect";
@@ -90,9 +90,9 @@ export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inb
       const used = new Set(team().map((a) => a.color));
       const color = agentPalette.find((c) => !used.has(c)) ?? agentPalette[team().length % agentPalette.length];
       const agent = newAgent(id, name, str(input.role, 40).trim() || "Developer", color, false);
-      agent.cli = input.cli === "codex" ? "codex" : "claude";
+      agent.cli = parseCli(input.cli);
       agent.model = str(input.model, 60).trim();
-      agent.mode = input.mode === "local" ? "local" : "sandbox";
+      agent.mode = input.mode === "local" && !SANDBOX_ONLY_CLI.includes(agent.cli) ? "local" : "sandbox";
       const lead = team().find((a) => a.isLead);
       if (lead) agent.sandbox = structuredClone(lead.sandbox);
       team().push(agent);
@@ -111,11 +111,13 @@ export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inb
       const before = `${agent.cli}/${agent.mode}`;
       for (const k of ["name", "role", "model", "color", "roleMd"] as const) if (typeof p[k] === "string") agent[k] = str(p[k], 8000);
       if (p.mode === "sandbox" || p.mode === "local") agent.mode = p.mode;
-      if ((p.cli === "claude" || p.cli === "codex") && p.cli !== agent.cli) {
+      if ((p.cli === "claude" || p.cli === "codex" || p.cli === "opencode") && p.cli !== agent.cli) {
         agent.cli = p.cli;
         // Model names don't carry over between CLIs.
         if (typeof p.model !== "string") agent.model = "";
       }
+      // OpenCode runs only in a sandbox for now.
+      if (SANDBOX_ONLY_CLI.includes(agent.cli)) agent.mode = "sandbox";
       if (Array.isArray(p.skills)) agent.skills = p.skills.map((s) => str(s, 60)).filter(Boolean);
       if (p.workspacePath !== undefined) agent.workspacePath = p.workspacePath ? str(p.workspacePath, 500).trim() || null : null;
       hub.configChanged();
@@ -251,7 +253,7 @@ export function makeCommands(hub: Hub, sessions: Sessions, planner: Planner, inb
     completeWelcome: async (raw) => {
       if (!hub.snap.welcome) return;
       const input = (raw ?? {}) as Partial<WelcomeInput>;
-      const cli = (c: unknown): AgentCli => (c === "codex" ? "codex" : "claude");
+      const cli = parseCli;
       const used = new Set<string>();
       const make = (name: string, role: string, agentCli: AgentCli, isLead: boolean): AgentConfig => {
         const clean = str(name, 40).trim() || (isLead ? "Lead" : "Agent");

@@ -6,6 +6,7 @@ import { agentWrite } from "./lib/agentFs";
 import type { AgentCli, AgentConfig, HqConfig } from "../src/data/types";
 import { adoptRoleFile, excludeFromGit, HOOK_SCRIPT, type RoleExtras, hookCommand, hookScriptFor, hqUrl, MCP_CONFIG, roleMd, writeClaudeFiles, writeHookScript } from "./agentFiles";
 import { run } from "./lib/exec";
+import { writeOpencodeFiles } from "./opencode";
 
 export interface Launch {
   sbxAgent: string; // agent name for `sbx run`
@@ -79,7 +80,15 @@ const codex: CliAdapter = {
   },
 };
 
-export const adapters: Record<AgentCli, CliAdapter> = { claude, codex };
+// ---------------------------------------------------------------- OpenCode (experimental)
+
+const opencode: CliAdapter = {
+  // The model, Team MCP and role go in its project config; a plugin reports its state (see opencode.ts).
+  writeFiles: (dir, agent, cfg, token, extras = {}) => writeOpencodeFiles(dir, agent, cfg, token, extras),
+  launch: () => ({ sbxAgent: "opencode", args: [] }),
+};
+
+export const adapters: Record<AgentCli, CliAdapter> = { claude, codex, opencode };
 
 /** The command a Local-mode agent runs on the host. */
-export const localBinary: Record<AgentCli, string> = { claude: "claude", codex: "codex" };
+export const localBinary: Record<AgentCli, string> = { claude: "claude", codex: "codex", opencode: "opencode" };

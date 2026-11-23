@@ -8,7 +8,7 @@ import { homedir } from "node:os";
 import { stackSkills } from "../src/data/stack";
 import { hasHqSkills, prepareSkills } from "./skills";
 import { resolve, sep } from "node:path";
-import { HOST_TERMINAL, type AgentCli, type SetupCheckId, type WorkspaceInfo } from "../src/data/types";
+import { CLI_LABEL, HOST_TERMINAL, SANDBOX_ONLY_CLI, type AgentCli, type SetupCheckId, type WorkspaceInfo } from "../src/data/types";
 import { adapters, localBinary } from "./adapters";
 import type { Hub } from "./hub";
 import { sessionBackend, type LaunchSpec, type TermHandle } from "./backends";
@@ -35,10 +35,10 @@ const SHELL_ENV = { ...TERM_ENV, FORCE_HYPERLINK: "1" };
 const SANDBOX_BROWSER = "/usr/local/bin/xdg-open";
 
 // What the agents' screens show (Claude Code and Codex).
-const BUSY = /esc to interrupt/i; // the footer while a turn runs
+const BUSY = /esc (to )?interrupt/i; // the footer while a turn runs (OpenCode: "esc interrupt")
 // A question or permission prompt (Claude Code's wording; the numbered-option line also covers Codex's).
 const DIALOG = /Enter to select|↑\/↓ to navigate|Do you want to (proceed|make this edit|create)|Would you like to|^\s*[❯›]\s*1\.\s/im;
-const PROMPT_READY = /⏵⏵|\? for shortcuts|Ask Codex to do anything/; // the input prompt is up
+const PROMPT_READY = /⏵⏵|\? for shortcuts|Ask Codex to do anything|Ask anything…/; // the input prompt is up (Claude Code, Codex, OpenCode)
 const SCREEN_QUIET_MS = 4000; // only second-guess hooks after this much silence
 const STALE_WORKING_MS = 15_000; // "working" with an idle screen this long = a missed Stop
 
@@ -95,6 +95,7 @@ export class Sessions {
     const check = (cid: string) => setup.checks.find((c) => c.id === cid)?.status;
     if (agent.mode === "local" && agent.cli === "claude" && check("claude") !== "ok") return fail("Claude Code isn't installed. See the setup checklist.");
     if (agent.mode === "local" && agent.cli === "codex" && check("codex") !== "ok") return fail("Codex isn't installed on this machine. See the setup checklist, or run this agent in a sandbox.");
+    if (agent.mode === "local" && SANDBOX_ONLY_CLI.includes(agent.cli)) return fail(`${CLI_LABEL[agent.cli]} runs only in a Docker Sandbox for now. Switch this agent to Sandbox mode in Settings → Team.`);
     if (agent.mode === "sandbox" && agent.cli === "codex" && check("openai-secret") !== "ok")
       return fail("Codex needs an OpenAI key in sbx. Run `sbx secret set openai --oauth` (Setup checklist → Run in terminal).");
 
@@ -138,7 +139,7 @@ export class Sessions {
       this.attach(id);
       hub.setSession(id, { state: "running", detail: null, workspace: dir });
       hub.setStatus(id, { state: "idle", note: agent.mode === "sandbox" ? "Sandbox running" : "Running locally" });
-      hub.activity("session", id, `${agent.name} started (${agent.cli === "codex" ? "Codex" : "Claude Code"}, ${agent.mode === "sandbox" ? "Docker Sandbox" : "Local mode"})`);
+      hub.activity("session", id, `${agent.name} started (${CLI_LABEL[agent.cli]}, ${agent.mode === "sandbox" ? "Docker Sandbox" : "Local mode"})`);
       if (agent.mode === "sandbox") {
         setTimeout(() => void this.refreshSandboxSizes(), 4000);
         void this.whenSandboxExists(id).then((ok) => ok && this.onSandboxReady(id));
@@ -503,15 +504,15 @@ export class Sessions {
       if (dialog || st.note?.includes("Codex's folder")) return; // still waiting (Codex trust is watched separately)
       this.idleScreens.delete(agentId);
       if (busy) return set("working", "Continuing after your answer");
-      // Idle only on a positive sign: Claude Code's normal input footer is back. An unfamiliar
+      // Idle only on a positive sign: Claude Code's (or OpenCode's) input prompt is back. An unfamiliar
       // prompt keeps "needs you", so queued messages aren't typed into it. Codex: wait for "busy".
-      if (cli === "claude" && PROMPT_READY.test(screen)) set("idle", "Waiting for you");
+      if (cli !== "codex" && PROMPT_READY.test(screen)) set("idle", "Waiting for you");
       return;
     }
     if (dialog) return set("needs-input", "Asking: answer the question in the terminal");
     // A missed UserPromptSubmit: the agent is busy, so don't type into it.
     if (st.state === "idle" && busy) return set("working", "Working");
-    if (st.state === "working" && !busy && cli === "claude") {
+    if (st.state === "working" && !busy && cli !== "codex") {
       // Twice in a row, so a gap between two steps isn't mistaken for the end of the turn.
       const n = (this.idleScreens.get(agentId) ?? 0) + 1;
       this.idleScreens.set(agentId, n);
